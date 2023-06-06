@@ -1,10 +1,11 @@
 [package]
-name = "tradingview-rs"
-version = "0.1.0"
+authors = ["BitByteLab Developers <dev.team@bitbytelab.io>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+name = "tradingview-rs"
+version = "0.0.1"
+license = "MIT"
+repository = "https://github.com/bitbytelabio/tradingview-rs"
+readme = "README.md"
+description = "Tradingview datafeed `tradingview-rs` project."
 
 [dependencies]
-rust_socketio = { version = "0.4.1-alpha.1", features = ["async"] }
-rand = "0.8.5"
