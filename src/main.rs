@@ -1,19 +1,10 @@
-use reqwest::{Client, IntoUrl, Response, Version};
-
-async fn get<T: IntoUrl + Clone>(url: T) -> reqwest::Result<Response> {
-    Client::builder()
-        .http2_prior_knowledge()
-        .build()?
-        .get(url)
-        .version(Version::HTTP_2)
-        .send()
-        .await
-}
+use reqwest::{get, Client, IntoUrl, Response, Version};
+use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let res = get("https://httpbin.org/ip").await?;
-    let body = res.json().await?;
-    println!("body = {:?}", body);
+    let url = "https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/FPT/overview";
+    let res = get(url).await?.json::<HashMap<String, String>>().await?;
+    println!("body = {:?}", res);
     Ok(())
 }
