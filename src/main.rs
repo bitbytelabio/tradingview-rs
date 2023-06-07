@@ -1,14 +1,19 @@
-use reqwest::header::USER_AGENT;
+use reqwest::{Client, IntoUrl, Response, Version};
+
+async fn get<T: IntoUrl + Clone>(url: T) -> reqwest::Result<Response> {
+    Client::builder()
+        .http2_prior_knowledge()
+        .build()?
+        .get(url)
+        .version(Version::HTTP_2)
+        .send()
+        .await
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = reqwest::Client::new();
-    let res = client
-        .get("https://http3.is")
-        .version(reqwest::Version::HTTP_3)
-        .header(USER_AGENT, "reqwest")
-        .send()
-        .await?;
-    println!("{:#?}", res);
+    let res = get("https://httpbin.org/ip").await?;
+    let body = res.json().await?;
+    println!("body = {:?}", body);
     Ok(())
 }
