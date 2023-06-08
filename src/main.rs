@@ -1,3 +1,4 @@
+use reqwest::header::HeaderMap;
 use tracing::info;
 
 use serde::Deserialize;
@@ -34,8 +35,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "https://pine-facade.tradingview.com//pine-facade/list/?filter={}",
             indicator_type
         );
+        let default_headers = vec![
+            ("Accept", "application/json, text/plain, */*"),
+            ("Accept-Encoding", "gzip, deflate, br"),
+            ("Accept-Language", "en-US,en;q=0.9"),
+            ("Connection", "keep-alive"),
+            ("Origin", "https://www.tradingview.com"),
+            ("Referer", "https://www.tradingview.com/"),
+            ("Sec-Fetch-Dest", "empty"),
+            ("Sec-Fetch-Mode", "cors"),
+            ("Sec-Fetch-Site", "same-site"),
+            ("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq"),
+        ];
+        let mut headers = HeaderMap::new();
+        for (key, value) in default_headers {
+            headers.insert(key, value.parse().unwrap());
+        }
+        // let test = reqwest::ClientBuilder::new()
+        //     .default_headers(headers)
+        //     .build()?;
         let mut data = client
             .get(url)
+            .headers(headers)
             .send()
             .await?
             .json::<Vec<Indicator>>()
