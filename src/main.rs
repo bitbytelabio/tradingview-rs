@@ -1,49 +1,70 @@
+use reqwest::header::HeaderMap;
 use tracing::info;
 
 use serde::Deserialize;
 
-pub type Root = Vec<Root2>;
-
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Root2 {
-    pub user_id: i64,
-    pub script_name: String,
-    pub script_source: String,
-    pub script_access: String,
-    pub script_id_part: String,
+pub struct Indicator {
+    #[serde(rename = "scriptName")]
+    pub name: String,
+    #[serde(rename = "scriptIdPart")]
+    pub id: String,
     pub version: String,
-    pub extra: Extra,
+    #[serde(rename = "extra")]
+    pub description: Extra,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Extra {
-    pub financial_period: Option<String>,
-    #[serde(rename = "fund_id")]
-    pub fund_id: String,
-    pub fundamental_category: String,
-    pub is_fundamental_study: bool,
-    #[serde(rename = "is_hidden_study")]
-    pub is_hidden_study: bool,
     pub kind: String,
     pub short_description: String,
-    pub source_inputs_count: i64,
-    pub tags: Vec<String>,
 }
 
 #[tracing::instrument]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting up");
-    let url = "https://pine-facade.tradingview.com//pine-facade/list/?filter=fundamental";
+    let indicator_types = vec!["standard", "candlestick", "fundamental"];
+    let mut indicators: Vec<Indicator> = vec![];
+    for indicator_type in indicator_types {
+        info!("Fetching indicators for type: {}", indicator_type);
+        let client = reqwest::Client::new();
+        let url = format!(
+            "https://pine-facade.tradingview.com//pine-facade/list/?filter={}",
+            indicator_type
+        );
+        let default_headers = vec![
+            ("Accept", "application/json, text/plain, */*"),
+            ("Accept-Encoding", "gzip, deflate, br"),
+            ("Accept-Language", "en-US,en;q=0.9"),
+            ("Connection", "keep-alive"),
+            ("Origin", "https://www.tradingview.com"),
+            ("Referer", "https://www.tradingview.com/"),
+            ("Sec-Fetch-Dest", "empty"),
+            ("Sec-Fetch-Mode", "cors"),
+            ("Sec-Fetch-Site", "same-site"),
+            ("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq"),
+        ];
+        let mut headers = HeaderMap::new();
+        for (key, value) in default_headers {
+            headers.insert(key, value.parse().unwrap());
+        }
+        // let test = reqwest::ClientBuilder::new()
+        //     .default_headers(headers)
+        //     .build()?;
+        let mut data = client
+            .get(url)
+            .headers(headers)
+            .send()
+            .await?
+            .json::<Vec<Indicator>>()
+            .await?;
 
-    let client = reqwest::Client::new();
+        indicators.append(&mut data);
+    }
 
-    let res = client.get(url).send().await?.json::<Root>().await?;
-
-    // let res = get(url).await.unwrap();
-    // let data: serde_json::Value = res.json().await.unwrap();
-    dbg!(res);
+    dbg!(indicators);
     Ok(())
 }
