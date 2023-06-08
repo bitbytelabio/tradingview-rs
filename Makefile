@@ -27,3 +27,6 @@ pipeline: build test-all clippy format
 	@echo "### Don't forget to add untracked files! ###"
 	@git status
 	@echo "### Awesome work! 😍 ###"""
+
+run:
+	@cargo run
