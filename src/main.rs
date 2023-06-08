@@ -1,4 +1,5 @@
-use reqwest::header::HeaderMap;
+pub mod utils;
+
 use tracing::info;
 
 use serde::Deserialize;
@@ -30,41 +31,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut indicators: Vec<Indicator> = vec![];
     for indicator_type in indicator_types {
         info!("Fetching indicators for type: {}", indicator_type);
-        let client = reqwest::Client::new();
         let url = format!(
             "https://pine-facade.tradingview.com//pine-facade/list/?filter={}",
             indicator_type
         );
-        let default_headers = vec![
-            ("Accept", "application/json, text/plain, */*"),
-            ("Accept-Encoding", "gzip, deflate, br"),
-            ("Accept-Language", "en-US,en;q=0.9"),
-            ("Connection", "keep-alive"),
-            ("Origin", "https://www.tradingview.com"),
-            ("Referer", "https://www.tradingview.com/"),
-            ("Sec-Fetch-Dest", "empty"),
-            ("Sec-Fetch-Mode", "cors"),
-            ("Sec-Fetch-Site", "same-site"),
-            ("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq"),
-        ];
-        let mut headers = HeaderMap::new();
-        for (key, value) in default_headers {
-            headers.insert(key, value.parse().unwrap());
-        }
-        // let test = reqwest::ClientBuilder::new()
-        //     .default_headers(headers)
-        //     .build()?;
-        let mut data = client
-            .get(url)
-            .headers(headers)
-            .send()
-            .await?
+
+        let mut data = utils::http_client::get(&url)
+            .await
             .json::<Vec<Indicator>>()
             .await?;
 
         indicators.append(&mut data);
     }
 
-    dbg!(indicators);
+    dbg!(indicators.len());
     Ok(())
 }

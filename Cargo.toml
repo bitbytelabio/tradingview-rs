@@ -1,8 +1,8 @@
 [package]
-authors = ["BitByteLab Developers <dev.team@bitbytelab.io>"]
-edition = "2021"
 name = "tradingview-rs"
-version = "0.0.1"
+authors = ["BitByteLab Developers <dev.team@bitbytelab.io>"]
+version = "0.1.0"
+edition = "2021"
 license = "MIT"
 repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
