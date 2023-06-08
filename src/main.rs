@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         let mut data = utils::http_client::get(&url)
-            .await
+            .await?
             .json::<Vec<Indicator>>()
             .await?;
 
