@@ -1,4 +1,4 @@
 {
   "rust-analyzer.linkedProjects": ["./Cargo.toml"],
-  "cSpell.words": ["Referer"]
+  "cSpell.words": ["KHTML", "Referer", "uacq"]
 }

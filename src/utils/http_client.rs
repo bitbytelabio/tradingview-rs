@@ -14,11 +14,15 @@ const HTTP_HEADERS: vec![] = vec![
 ];
 
 mod http_client {
-    use reqwest::Error;
-
     pub async fn get(url: &str) -> Result<serde_json::Value, Error> {
-        let res = reqwest::get(url).await?;
-        let data: serde_json::Value = res.json().await?;
+        let client = reqwest::Client::new();
+        client
+            .get(url)
+            .headers(HTTP_HEADERS)
+            .send()
+            .await?
+            .json()
+            .await;
         Ok(data)
     }
 }
