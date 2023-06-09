@@ -1,15 +1,11 @@
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
-  dastardly-scan:
-    name: dastasdly-scan
+  dastardly:
+    name: dastasdly
     runs-on: self-hosted
     steps:
       - name: Run Dastardly Action Step
