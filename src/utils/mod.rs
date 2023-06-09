@@ -1,11 +1,14 @@
-pub mod http_client {
+pub mod client {
     use reqwest::header::{
         HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CONNECTION, ORIGIN,
         REFERER, USER_AGENT,
     };
+    use reqwest::{Client, Error, Response};
+    use tracing::{debug, info};
 
-    pub async fn get(url: &str) -> reqwest::Response {
-        let client = reqwest::Client::new();
+    #[tracing::instrument]
+    pub async fn get(url: &str) -> Result<Response, Error> {
+        let client = Client::new();
         let mut headers = HeaderMap::new();
         headers.insert(
             ACCEPT,
@@ -27,7 +30,10 @@ pub mod http_client {
         );
         headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq"));
 
-        let res: reqwest::Response = client.get(url).headers(headers).send().await.unwrap();
+        info!("Requesting: {}", url);
+
+        let res = client.get(url).headers(headers).send().await;
+        debug!("Response: {:?}", res);
         res
     }
 }
