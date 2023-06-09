@@ -1,4 +1,4 @@
-pub mod http_client {
+pub mod client {
     use reqwest::header::{
         HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CONNECTION, ORIGIN,
         REFERER, USER_AGENT,
@@ -6,7 +6,7 @@ pub mod http_client {
     use reqwest::{Client, Error, Response};
     use tracing::{debug, info};
 
-    #[tracing::instrument(skip(url))]
+    #[tracing::instrument]
     pub async fn get(url: &str) -> Result<Response, Error> {
         let client = Client::new();
         let mut headers = HeaderMap::new();
