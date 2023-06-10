@@ -26,13 +26,14 @@ pub struct Extra {
 #[tracing::instrument]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
     info!("Starting up");
     let indicator_types = vec!["standard", "candlestick", "fundamental"];
     let mut indicators: Vec<Indicator> = vec![];
     for indicator_type in indicator_types {
         info!("Fetching indicators for type: {}", indicator_type);
         let url = format!(
-            "https://pine-facade.tradingview.com//pine-facade/list/?filter={}",
+            "https://pine-facade.tradingview.com/pine-facade/list/?filter={}",
             indicator_type
         );
 
