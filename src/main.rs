@@ -10,7 +10,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting up");
     let indicators = misc_requests::get_builtin_indicators().await?;
     debug!("Indicators: {:?}", indicators.len());
-
     println!("{}", crate::utils::client::gen_session_id("qs"));
     Ok(())
 }
