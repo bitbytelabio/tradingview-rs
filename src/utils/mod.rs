@@ -42,4 +42,9 @@ pub mod client {
         let response = request.send().await?;
         Ok(response)
     }
+
+    #[tracing::instrument]
+    pub async fn post_request(url: &str) -> Result<(), Error> {
+        Ok(())
+    }
 }
