@@ -123,7 +123,6 @@ pub async fn login_user(username: &str, password: &str) -> Result<UserData, Erro
     });
 
     let response_user_data = response.json::<LoginResponse>().await.unwrap();
-    debug!("Login response: {:#?}", response_user_data);
 
     let user_data = UserData {
         id: response_user_data.user.id,
