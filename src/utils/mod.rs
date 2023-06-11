@@ -25,7 +25,6 @@ pub mod client {
                 );
                 headers
             })
-            .connection_verbose(true)
             .https_only(true)
             .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq")
             .gzip(true)
@@ -43,11 +42,6 @@ pub mod client {
         debug!("Sending request: {:?}", request);
         let response = request.send().await?;
         Ok(response)
-    }
-
-    #[tracing::instrument]
-    pub async fn post_request(url: &str) -> Result<(), Error> {
-        Ok(())
     }
 
     #[tracing::instrument]
