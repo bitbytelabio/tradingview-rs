@@ -114,11 +114,11 @@ pub async fn login_user(username: &str, password: &str) -> Result<UserData, Erro
     let response = client.send().await?;
     let (session, signature) = response
         .cookies()
-        .fold((None, None), |session_cookies, cookies| {
-            if cookies.name() == "sessionid" {
-                (Some(cookies.value().to_string()), session_cookies.1)
-            } else if cookies.name() == "sessionid_sign" {
-                (session_cookies.0, Some(cookies.value().to_string()))
+        .fold((None, None), |session_cookies, cookie| {
+            if cookie.name() == "sessionid" {
+                (Some(cookie.value().to_string()), session_cookies.1)
+            } else if cookie.name() == "sessionid_sign" {
+                (session_cookies.0, Some(cookie.value().to_string()))
             } else {
                 session_cookies
             }
