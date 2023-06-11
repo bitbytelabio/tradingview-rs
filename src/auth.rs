@@ -112,15 +112,17 @@ pub async fn login_user(username: &str, password: &str) -> Result<UserData, Erro
             .text("remember", "true".to_string())
         );
     let response = client.send().await?;
-    let (session, signature) = response.cookies().fold((None, None), |acc, c| {
-        if c.name() == "sessionid" {
-            (Some(c.value().to_string()), acc.1)
-        } else if c.name() == "sessionid_sign" {
-            (acc.0, Some(c.value().to_string()))
-        } else {
-            acc
-        }
-    });
+    let (session, signature) = response
+        .cookies()
+        .fold((None, None), |session_cookies, cookies| {
+            if cookies.name() == "sessionid" {
+                (Some(cookies.value().to_string()), session_cookies.1)
+            } else if cookies.name() == "sessionid_sign" {
+                (session_cookies.0, Some(cookies.value().to_string()))
+            } else {
+                session_cookies
+            }
+        });
 
     let response_user_data = response.json::<LoginResponse>().await.unwrap();
 
