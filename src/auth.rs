@@ -1,12 +1,12 @@
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
-use reqwest::{Client, Error, Response};
+use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER};
+use reqwest::{Client, Error};
 use serde::Deserialize;
 use tracing::{debug, error, info};
 
 #[derive(Debug)]
 pub struct UserData {
-    id: String,
+    id: u32,
     username: String,
     session: String,
     signature: String,
@@ -30,8 +30,11 @@ struct LoginUserData {
     auth_token: String,
 }
 
-#[tracing::instrument]
-pub async fn get_user(session: &str, signature: &str, url: Option<&str>) {
+pub async fn get_user(
+    session: &str,
+    signature: &str,
+    url: Option<&str>,
+) -> Result<UserData, Box<dyn std::error::Error>> {
     let response = crate::utils::client::get_request(
         url.unwrap_or_else(|| "https://www.tradingview.com/"),
         Some(format!(
@@ -48,7 +51,10 @@ pub async fn get_user(session: &str, signature: &str, url: Option<&str>) {
         info!("User is logged in");
         info!("Loading auth token and user info");
         let id_regex = Regex::new(r#""id":([0-9]{1,10}),"#).unwrap();
-        let id = id_regex.captures(&response).unwrap()[1].to_string();
+        let id = id_regex.captures(&response).unwrap()[1]
+            .to_string()
+            .parse()
+            .unwrap();
 
         let username_regex = Regex::new(r#""username":"(.*?)""#).unwrap();
         let username = username_regex.captures(&response).unwrap()[1].to_string();
@@ -74,9 +80,9 @@ pub async fn get_user(session: &str, signature: &str, url: Option<&str>) {
             private_channel,
             auth_token,
         };
-        debug!("User data: {:#?}", user_data);
+        Ok(user_data)
     } else {
-        error!("User is not logged in");
+        Err("Wrong or expired sessionid/signature")?
     }
 }
 
@@ -120,7 +126,7 @@ pub async fn login_user(username: &str, password: &str) -> Result<UserData, Erro
     debug!("Login response: {:#?}", response_user_data);
 
     let user_data = UserData {
-        id: response_user_data.user.id.to_string(),
+        id: response_user_data.user.id,
         username: response_user_data.user.username.to_string(),
         session: session.unwrap().to_string(),
         signature: signature.unwrap().to_string(),
