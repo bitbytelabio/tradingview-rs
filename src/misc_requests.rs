@@ -1,21 +1,19 @@
 use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
+
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Indicator {
     #[serde(rename = "scriptName")]
     pub name: String,
+
     #[serde(rename = "scriptIdPart")]
     pub id: String,
-    pub version: String,
-    #[serde(rename = "extra")]
-    pub info: ExtraIndicatorInfo,
-}
 
-#[derive(Default, Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExtraIndicatorInfo {
-    pub kind: String,
-    pub short_description: String,
+    pub version: String,
+
+    #[serde(flatten, rename = "extra")]
+    pub info: HashMap<String, Value>,
 }
 
 #[tracing::instrument]

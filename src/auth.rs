@@ -1,4 +1,6 @@
 use regex::Regex;
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
+use reqwest::{Client, Error, Response};
 use tracing::{debug, error, info};
 
 #[derive(Debug)]
@@ -60,4 +62,58 @@ pub async fn get_user(session: &str, signature: &str, url: Option<&str>) {
     } else {
         error!("User is not logged in");
     }
+}
+
+#[tracing::instrument]
+pub async fn login_user(username: &str, password: &str) -> Result<(), Error> {
+    let client = Client::builder()
+        .default_headers({
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                ORIGIN,
+                HeaderValue::from_static("https://www.tradingview.com"),
+            );
+            headers.insert(
+                REFERER,
+                HeaderValue::from_static("https://www.tradingview.com/"),
+            );
+            headers
+        })
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq")
+        .https_only(true)
+        .gzip(true)
+        .build()?
+        .post("https://www.tradingview.com/accounts/signin/")
+        .multipart(reqwest::multipart::Form::new()
+            .text("username", username.to_string())
+            .text("password", password.to_string())
+            .text("remember", "true".to_string())
+        );
+    let response = client.send().await?;
+    let mut session: &str;
+    let mut signature: &str;
+    let mut device_id: &str;
+    let cookies = response.cookies();
+    for cookie in cookies {
+        if cookie.name() == "sessionid" {
+            session = cookie.value();
+            debug!("Session: {}", session);
+        } else if cookie.name() == "sessionid_sign" {
+            signature = cookie.value();
+            debug!("Signature: {}", signature);
+        } else if cookie.name() == "device_t" {
+            device_id = cookie.value();
+            debug!("Device ID: {}", device_id);
+        }
+    }
+    let body: serde_json::Value = response.json().await?;
+    debug!("Login response: {:#?}", body);
+
+    // cookies.into_iter().for_each(|cookie| {
+    //     debug!("Cookie: {:#?}", cookie);
+    // });
+    // let response: serde_json::Value = client.send().await?.json().await?;
+    // debug!("Login response: {:#?}", response);
+
+    Ok(())
 }
