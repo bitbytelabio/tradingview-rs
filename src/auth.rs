@@ -4,6 +4,8 @@ use reqwest::{Client, Error};
 use serde::Deserialize;
 use tracing::{debug, error, info};
 
+use crate::UA;
+
 #[derive(Debug)]
 pub struct UserData {
     id: u32,
@@ -101,29 +103,31 @@ pub async fn login_user(username: &str, password: &str) -> Result<UserData, Erro
             );
             headers
         })
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq")
+        .user_agent(UA)
         .https_only(true)
         .gzip(true)
         .build()?
         .post("https://www.tradingview.com/accounts/signin/")
-        .multipart(reqwest::multipart::Form::new()
-            .text("username", username.to_string())
-            .text("password", password.to_string())
-            .text("remember", "true".to_string())
+        .multipart(
+            reqwest::multipart::Form::new()
+                .text("username", username.to_string())
+                .text("password", password.to_string())
+                .text("remember", "true".to_string()),
         );
     let response = client.send().await?;
-    let (session, signature) = response.cookies().fold((None, None), |acc, c| {
-        if c.name() == "sessionid" {
-            (Some(c.value().to_string()), acc.1)
-        } else if c.name() == "sessionid_sign" {
-            (acc.0, Some(c.value().to_string()))
-        } else {
-            acc
-        }
-    });
+    let (session, signature) = response
+        .cookies()
+        .fold((None, None), |session_cookies, cookie| {
+            if cookie.name() == "sessionid" {
+                (Some(cookie.value().to_string()), session_cookies.1)
+            } else if cookie.name() == "sessionid_sign" {
+                (session_cookies.0, Some(cookie.value().to_string()))
+            } else {
+                session_cookies
+            }
+        });
 
     let response_user_data = response.json::<LoginResponse>().await.unwrap();
-    debug!("Login response: {:#?}", response_user_data);
 
     let user_data = UserData {
         id: response_user_data.user.id,
