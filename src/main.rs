@@ -13,14 +13,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // debug!("Indicators: {:?}", indicators);
 
     // println!("{}", crate::utils::client::gen_session_id("qs"));
-    // auth::get_user(
-    //     "wow63q1l614ilkutj8tkc7zwhp87e09b",
-    //     "v1:I6szYEiR40S888deJb6fJ33fnOVLGw1JbhP+7Hw63+U=",
-    //     None,
-    // )
-    // .await;
+    let user = auth::get_user(
+        "wow63q1l614ilkutj8tkc7zwhp87e09b",
+        "v1:I6szYEiR40S888deJb6fJ33fnOVLGw1JbhP+7Hw63+U=",
+        None,
+    )
+    .await
+    .unwrap();
 
-    let user = auth::login_user("batttheyshool0211", "batttheyshool0211").await?;
+    // let user = auth::login_user("batttheyshool0211", "batttheyshool0211").await?;
     info!("User: {:#?}", user);
     Ok(())
 }
