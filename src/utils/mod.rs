@@ -1,4 +1,5 @@
 pub mod client {
+    use rand::Rng;
     use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
     use reqwest::{Client, Error, Response};
     use tracing::{debug, info};
@@ -46,5 +47,19 @@ pub mod client {
     #[tracing::instrument]
     pub async fn post_request(url: &str) -> Result<(), Error> {
         Ok(())
+    }
+
+    #[tracing::instrument]
+    pub fn gen_session_id(session_type: &str) -> String {
+        let mut rng = rand::thread_rng();
+        let characters: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let result: String = (0..12)
+            .map(|_| {
+                let random_index = rng.gen_range(0..characters.len());
+                characters[random_index] as char
+            })
+            .collect();
+
+        format!("{}_{}", session_type, result)
     }
 }
