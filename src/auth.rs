@@ -4,6 +4,8 @@ use reqwest::{Client, Error};
 use serde::Deserialize;
 use tracing::{debug, error, info};
 
+use crate::UA;
+
 #[derive(Debug)]
 pub struct UserData {
     id: u32,
@@ -101,15 +103,16 @@ pub async fn login_user(username: &str, password: &str) -> Result<UserData, Erro
             );
             headers
         })
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 uacq")
+        .user_agent(UA)
         .https_only(true)
         .gzip(true)
         .build()?
         .post("https://www.tradingview.com/accounts/signin/")
-        .multipart(reqwest::multipart::Form::new()
-            .text("username", username.to_string())
-            .text("password", password.to_string())
-            .text("remember", "true".to_string())
+        .multipart(
+            reqwest::multipart::Form::new()
+                .text("username", username.to_string())
+                .text("password", password.to_string())
+                .text("remember", "true".to_string()),
         );
     let response = client.send().await?;
     let (session, signature) = response
