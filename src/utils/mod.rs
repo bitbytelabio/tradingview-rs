@@ -6,7 +6,7 @@ pub mod client {
     use tracing::{debug, info};
 
     #[tracing::instrument]
-    pub async fn get_request(url: &str, cookies: Option<&str>) -> Result<Response, Error> {
+    pub async fn get_request(url: &str, cookies: Option<String>) -> Result<Response, Error> {
         info!("Sending request to: {}", url);
         let client = Client::builder()
             .default_headers({
@@ -35,7 +35,7 @@ pub mod client {
         request = match cookies {
             Some(cookies) => {
                 let mut headers = HeaderMap::new();
-                headers.insert(COOKIE, HeaderValue::from_str(cookies).unwrap());
+                headers.insert(COOKIE, HeaderValue::from_str(&cookies).unwrap());
                 request.headers(headers)
             }
             None => request,
