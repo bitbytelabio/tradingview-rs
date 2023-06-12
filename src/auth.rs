@@ -186,19 +186,24 @@ pub async fn login_user(
             }
         }
         None => {
-            warn!("No OTP secret provided");
-            info!("Trying to login without OTP");
-            let response_user_data = response.json::<LoginResponse>().await.unwrap();
-            let user_data = UserData {
-                id: response_user_data.user.id,
-                username: response_user_data.user.username.to_string(),
-                session: session.unwrap().to_string(),
-                signature: signature.unwrap().to_string(),
-                session_hash: response_user_data.user.session_hash.to_string(),
-                private_channel: response_user_data.user.private_channel.to_string(),
-                auth_token: response_user_data.user.auth_token.to_string(),
-            };
-            Ok(user_data)
+            if response.status().is_success() {
+                warn!("No OTP secret provided");
+                info!("Trying to login without OTP");
+                let response_user_data = response.json::<LoginResponse>().await.unwrap();
+                let user_data = UserData {
+                    id: response_user_data.user.id,
+                    username: response_user_data.user.username.to_string(),
+                    session: session.unwrap().to_string(),
+                    signature: signature.unwrap().to_string(),
+                    session_hash: response_user_data.user.session_hash.to_string(),
+                    private_channel: response_user_data.user.private_channel.to_string(),
+                    auth_token: response_user_data.user.auth_token.to_string(),
+                };
+                Ok(user_data)
+            } else {
+                error!("Wrong username or password");
+                Err("Wrong username or password").unwrap()
+            }
         }
     }
 }
