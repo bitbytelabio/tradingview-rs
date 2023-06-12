@@ -70,6 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // println!("code: {}", code);
 
     // println!("{}", get_code!("PTB2JVFN3YXVGVFX").unwrap());
+    // let user_data = auth::login_user(
+    //     "lite_bitbytelab",
+    //     "dAIuLpdzmEy8HWnIYRGwigRA4XwJT4Ny/WIsD/rXy5qurJwu",
+    //     Some("PTB2JVFN3YXVGVFX".to_string()),
+    // )
+    let user_data = auth::login_user("batttheyshool0211", "batttheyshool0211", None).await?;
 
+    info!("User data: {:#?}", user_data);
     Ok(())
 }
