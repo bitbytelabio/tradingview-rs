@@ -1,3 +1,5 @@
+use totp_rs::{Algorithm, Rfc6238, Secret, TOTP};
+
 use tracing::{debug, info};
 
 mod auth;
@@ -25,11 +27,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let user = auth::login_user("batttheyshool0211", "batttheyshool0211").await?;
     // info!("User: {:#?}", user);
 
-    let data = misc_requests::get_private_indicators(
-        "wow63q1l614ilkutj8tkc7zwhp87e09b",
-        "v1:I6szYEiR40S888deJb6fJ33fnOVLGw1JbhP+7Hw63+U=",
+    // let data = misc_requests::get_private_indicators(
+    //     "wow63q1l614ilkutj8tkc7zwhp87e09b",
+    //     "v1:I6szYEiR40S888deJb6fJ33fnOVLGw1JbhP+7Hw63+U=",
+    // )
+    // .await?;
+    // info!("Data: {:#?}", data);
+    // let totp = TOTP::from_url(
+    //     "otpauth://totp/TradingView:lite_bitbytelab?secret=PTB2JVFN3YXVGVFX&issuer=TradingView",
+    // )
+    // .unwrap();
+    // let code = totp.generate_current().unwrap();
+    // println!("{}", code);
+    // let totp = TOTP::new(
+    //     Algorithm::SHA512,
+    //     6,
+    //     1,
+    //     30,
+    //     Secret::Encoded("KBKEEMSKKZDE4M2ZLBLEOVSGLAFA".to_string())
+    //         .to_bytes()
+    //         .unwrap(),
+    //     Some("TradingView".to_string()),
+    //     "lite_bitbytelab".to_string(),
+    // )
+    // .unwrap();
+    // let token = totp.generate_current().unwrap();
+    // println!("{}", token);
+
+    let mut rfc = Rfc6238::with_defaults(
+        Secret::Encoded("KBKEEMSKKZDE4M2ZLBLEOVSGLAFA".to_string())
+            .to_bytes()
+            .unwrap(),
     )
-    .await?;
-    info!("Data: {:#?}", data);
+    .unwrap();
+
+    // optional, set digits
+    // rfc.digits(8).unwrap();
+
+    // create a TOTP from rfc
+    let totp = TOTP::from_rfc6238(rfc).unwrap();
+    let code = totp.generate_current().unwrap();
+    println!("code: {}", code);
     Ok(())
 }

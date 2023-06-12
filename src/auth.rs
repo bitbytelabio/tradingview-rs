@@ -146,5 +146,70 @@ pub async fn login_user_with_otp(
     password: &str,
     opt_secret: &str,
 ) -> Result<(), Error> {
+    let client = Client::builder()
+        .default_headers({
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                ORIGIN,
+                HeaderValue::from_static("https://www.tradingview.com"),
+            );
+            headers.insert(
+                REFERER,
+                HeaderValue::from_static("https://www.tradingview.com/"),
+            );
+            headers
+        })
+        .user_agent(UA)
+        .https_only(true)
+        .gzip(true)
+        .build()?
+        .post("https://www.tradingview.com/accounts/signin/")
+        .multipart(
+            reqwest::multipart::Form::new()
+                .text("username", username.to_string())
+                .text("password", password.to_string())
+                .text("remember", "true".to_string()),
+        );
+
+    let response = client.send().await?;
+    let (session, signature) = response
+        .cookies()
+        .fold((None, None), |session_cookies, cookie| {
+            if cookie.name() == "sessionid" {
+                (Some(cookie.value().to_string()), session_cookies.1)
+            } else if cookie.name() == "sessionid_sign" {
+                (session_cookies.0, Some(cookie.value().to_string()))
+            } else {
+                session_cookies
+            }
+        });
+
+    if response.status().is_success() {
+        let client = Client::builder()
+            .default_headers({
+                let mut headers = HeaderMap::new();
+                headers.insert(
+                    ORIGIN,
+                    HeaderValue::from_static("https://www.tradingview.com"),
+                );
+                headers.insert(
+                    REFERER,
+                    HeaderValue::from_static("https://www.tradingview.com/"),
+                );
+                headers
+            })
+            .user_agent(UA)
+            .https_only(true)
+            .gzip(true)
+            .build()?
+            .post("https://www.tradingview.com/accounts/signin/")
+            .multipart(
+                reqwest::multipart::Form::new()
+                    .text("username", username.to_string())
+                    .text("password", password.to_string())
+                    .text("remember", "true".to_string()),
+            );
+    }
+
     Ok(())
 }
