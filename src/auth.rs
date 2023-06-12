@@ -140,3 +140,11 @@ pub async fn login_user(username: &str, password: &str) -> Result<UserData, Erro
     };
     Ok(user_data)
 }
+
+pub async fn login_user_with_otp(
+    username: &str,
+    password: &str,
+    opt_secret: &str,
+) -> Result<(), Error> {
+    Ok(())
+}
