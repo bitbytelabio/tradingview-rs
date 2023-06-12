@@ -35,3 +35,21 @@ pub async fn get_builtin_indicators() -> Result<Vec<Indicator>, Box<dyn std::err
     }
     Ok(indicators)
 }
+
+#[tracing::instrument]
+pub async fn get_private_indicators(
+    session: &str,
+    signature: &str,
+) -> Result<Vec<Indicator>, Box<dyn std::error::Error>> {
+    let data = crate::utils::client::get_request(
+        "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
+        Some(format!(
+            "sessionid={}; sessionid_sign={};",
+            session, signature
+        )),
+    )
+    .await?
+    .json::<Vec<Indicator>>()
+    .await?;
+    Ok(data)
+}
