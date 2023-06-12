@@ -1,10 +1,15 @@
+use google_authenticator::get_code;
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER};
+use reqwest::header::{HeaderMap, HeaderValue, COOKIE, ORIGIN, REFERER};
 use reqwest::{Client, Error};
 use serde::Deserialize;
+use serde::__private::de;
 use tracing::{debug, error, info};
 
 use crate::UA;
+
+#[macro_use]
+use google_authenticator::GA_AUTH;
 
 #[derive(Debug)]
 pub struct UserData {
@@ -146,7 +151,7 @@ pub async fn login_user_with_otp(
     password: &str,
     opt_secret: &str,
 ) -> Result<(), Error> {
-    let client = Client::builder()
+    let response = Client::builder()
         .default_headers({
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -169,9 +174,10 @@ pub async fn login_user_with_otp(
                 .text("username", username.to_string())
                 .text("password", password.to_string())
                 .text("remember", "true".to_string()),
-        );
+        )
+        .send()
+        .await?;
 
-    let response = client.send().await?;
     let (session, signature) = response
         .cookies()
         .fold((None, None), |session_cookies, cookie| {
@@ -185,7 +191,7 @@ pub async fn login_user_with_otp(
         });
 
     if response.status().is_success() {
-        let client = Client::builder()
+        let response = Client::builder()
             .default_headers({
                 let mut headers = HeaderMap::new();
                 headers.insert(
@@ -196,19 +202,27 @@ pub async fn login_user_with_otp(
                     REFERER,
                     HeaderValue::from_static("https://www.tradingview.com/"),
                 );
+                headers.insert(
+                    COOKIE,
+                    format!(
+                        "sessionid={}; sessionid_sign={};",
+                        session.unwrap(),
+                        signature.unwrap()
+                    )
+                    .parse()
+                    .unwrap(),
+                );
                 headers
             })
             .user_agent(UA)
             .https_only(true)
             .gzip(true)
             .build()?
-            .post("https://www.tradingview.com/accounts/signin/")
-            .multipart(
-                reqwest::multipart::Form::new()
-                    .text("username", username.to_string())
-                    .text("password", password.to_string())
-                    .text("remember", "true".to_string()),
-            );
+            .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
+            .multipart(reqwest::multipart::Form::new().text("code", get_code!(opt_secret).unwrap()))
+            .send()
+            .await?;
+        debug!("{:?}", response);
     }
 
     Ok(())

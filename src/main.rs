@@ -1,4 +1,4 @@
-use totp_rs::{Algorithm, Rfc6238, Secret, TOTP};
+extern crate google_authenticator;
 
 use tracing::{debug, info};
 
@@ -54,19 +54,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let token = totp.generate_current().unwrap();
     // println!("{}", token);
 
-    let mut rfc = Rfc6238::with_defaults(
-        Secret::Encoded("KBKEEMSKKZDE4M2ZLBLEOVSGLAFA".to_string())
-            .to_bytes()
-            .unwrap(),
-    )
-    .unwrap();
+    // let mut rfc = Rfc6238::with_defaults(
+    //     Secret::Encoded("KBKEEMSKKZDE4M2ZLBLEOVSGLAFA".to_string())
+    //         .to_bytes()
+    //         .unwrap(),
+    // )
+    // .unwrap();
 
-    // optional, set digits
-    // rfc.digits(8).unwrap();
+    // // optional, set digits
+    // // rfc.digits(8).unwrap();
 
-    // create a TOTP from rfc
-    let totp = TOTP::from_rfc6238(rfc).unwrap();
-    let code = totp.generate_current().unwrap();
-    println!("code: {}", code);
+    // // create a TOTP from rfc
+    // let totp = TOTP::from_rfc6238(rfc).unwrap();
+    // let code = totp.generate_current().unwrap();
+    // println!("code: {}", code);
+
+    // println!("{}", get_code!("PTB2JVFN3YXVGVFX").unwrap());
+
     Ok(())
 }

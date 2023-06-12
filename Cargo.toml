@@ -24,4 +24,4 @@ tokio = { version = "1", features = ["full"] }
 rand = "0.8"
 serde_json = { version = "1.0" }
 regex = "1"
-totp-rs = { version = "5.0.2", features = ["otpauth"] }
+google-authenticator = "0.4"
