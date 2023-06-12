@@ -1,15 +1,11 @@
+use crate::UA;
 use google_authenticator::get_code;
+use google_authenticator::GA_AUTH;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, ORIGIN, REFERER};
 use reqwest::{Client, Error};
 use serde::Deserialize;
-use serde::__private::de;
-use tracing::{debug, error, info};
-
-use crate::UA;
-
-#[macro_use]
-use google_authenticator::GA_AUTH;
+use tracing::{error, info, warn};
 
 #[derive(Debug)]
 pub struct UserData {
@@ -24,7 +20,6 @@ pub struct UserData {
 
 #[derive(Debug, Deserialize)]
 struct LoginResponse {
-    error: String,
     user: LoginUserData,
 }
 
@@ -93,64 +88,11 @@ pub async fn get_user(
     }
 }
 
-#[tracing::instrument]
-pub async fn login_user(username: &str, password: &str) -> Result<UserData, Error> {
-    let client = Client::builder()
-        .default_headers({
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                ORIGIN,
-                HeaderValue::from_static("https://www.tradingview.com"),
-            );
-            headers.insert(
-                REFERER,
-                HeaderValue::from_static("https://www.tradingview.com/"),
-            );
-            headers
-        })
-        .user_agent(UA)
-        .https_only(true)
-        .gzip(true)
-        .build()?
-        .post("https://www.tradingview.com/accounts/signin/")
-        .multipart(
-            reqwest::multipart::Form::new()
-                .text("username", username.to_string())
-                .text("password", password.to_string())
-                .text("remember", "true".to_string()),
-        );
-    let response = client.send().await?;
-    let (session, signature) = response
-        .cookies()
-        .fold((None, None), |session_cookies, cookie| {
-            if cookie.name() == "sessionid" {
-                (Some(cookie.value().to_string()), session_cookies.1)
-            } else if cookie.name() == "sessionid_sign" {
-                (session_cookies.0, Some(cookie.value().to_string()))
-            } else {
-                session_cookies
-            }
-        });
-
-    let response_user_data = response.json::<LoginResponse>().await.unwrap();
-
-    let user_data = UserData {
-        id: response_user_data.user.id,
-        username: response_user_data.user.username.to_string(),
-        session: session.unwrap().to_string(),
-        signature: signature.unwrap().to_string(),
-        session_hash: response_user_data.user.session_hash.to_string(),
-        private_channel: response_user_data.user.private_channel.to_string(),
-        auth_token: response_user_data.user.auth_token.to_string(),
-    };
-    Ok(user_data)
-}
-
-pub async fn login_user_with_otp(
+pub async fn login_user(
     username: &str,
     password: &str,
-    opt_secret: &str,
-) -> Result<(), Error> {
+    opt_secret: Option<String>,
+) -> Result<UserData, Error> {
     let response = Client::builder()
         .default_headers({
             let mut headers = HeaderMap::new();
@@ -176,7 +118,8 @@ pub async fn login_user_with_otp(
                 .text("remember", "true".to_string()),
         )
         .send()
-        .await?;
+        .await
+        .unwrap();
 
     let (session, signature) = response
         .cookies()
@@ -190,40 +133,77 @@ pub async fn login_user_with_otp(
             }
         });
 
-    if response.status().is_success() {
-        let response = Client::builder()
-            .default_headers({
-                let mut headers = HeaderMap::new();
-                headers.insert(
-                    ORIGIN,
-                    HeaderValue::from_static("https://www.tradingview.com"),
-                );
-                headers.insert(
-                    REFERER,
-                    HeaderValue::from_static("https://www.tradingview.com/"),
-                );
-                headers.insert(
-                    COOKIE,
-                    format!(
-                        "sessionid={}; sessionid_sign={};",
-                        session.unwrap(),
-                        signature.unwrap()
+    match opt_secret {
+        Some(opt) => {
+            let session = &session.unwrap();
+            let signature = &signature.unwrap();
+            if response.status().is_success() {
+                let response = Client::builder()
+                    .default_headers({
+                        let mut headers = HeaderMap::new();
+                        headers.insert(
+                            ORIGIN,
+                            HeaderValue::from_static("https://www.tradingview.com"),
+                        );
+                        headers.insert(
+                            REFERER,
+                            HeaderValue::from_static("https://www.tradingview.com/"),
+                        );
+                        headers.insert(
+                            COOKIE,
+                            format!("sessionid={}; sessionid_sign={};", &session, &signature)
+                                .parse()
+                                .unwrap(),
+                        );
+                        headers
+                    })
+                    .user_agent(UA)
+                    .https_only(true)
+                    .gzip(true)
+                    .build()?
+                    .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
+                    .multipart(
+                        reqwest::multipart::Form::new().text("code", get_code!(&opt).unwrap()),
                     )
-                    .parse()
-                    .unwrap(),
-                );
-                headers
-            })
-            .user_agent(UA)
-            .https_only(true)
-            .gzip(true)
-            .build()?
-            .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
-            .multipart(reqwest::multipart::Form::new().text("code", get_code!(opt_secret).unwrap()))
-            .send()
-            .await?;
-        debug!("{:?}", response);
+                    .send()
+                    .await
+                    .unwrap()
+                    .json::<LoginResponse>()
+                    .await
+                    .unwrap();
+                return Ok(UserData {
+                    id: response.user.id,
+                    username: response.user.username.to_string(),
+                    session: session.to_string(),
+                    signature: signature.to_string(),
+                    session_hash: response.user.session_hash.to_string(),
+                    private_channel: response.user.private_channel.to_string(),
+                    auth_token: response.user.auth_token.to_string(),
+                });
+            } else {
+                error!("Wrong username or password");
+                Err("Wrong username or password").unwrap()
+            }
+        }
+        None => {
+            if response.status().is_success() {
+                warn!("No OTP secret provided");
+                info!("Trying to login without OTP");
+                let response_user_data = response.json::<LoginResponse>().await.unwrap();
+                let user_data = UserData {
+                    id: response_user_data.user.id,
+                    username: response_user_data.user.username.to_string(),
+                    session: session.unwrap().to_string(),
+                    signature: signature.unwrap().to_string(),
+                    session_hash: response_user_data.user.session_hash.to_string(),
+                    private_channel: response_user_data.user.private_channel.to_string(),
+                    auth_token: response_user_data.user.auth_token.to_string(),
+                };
+                Ok(user_data)
+            } else {
+                error!("Wrong username or password");
+                Err("Wrong username or password").unwrap()
+            }
+        }
     }
-
-    Ok(())
 }
