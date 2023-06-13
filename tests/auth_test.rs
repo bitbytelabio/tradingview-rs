@@ -108,9 +108,9 @@ mod auth {
     #[tokio::test]
     async fn login_user_with_invalid_totp() {
         // tracing_subscriber::fmt::init();
-        let username = env::var("TV_USERNAME").unwrap();
-        let password = env::var("TV_PASSWORD").unwrap();
-        match login_user(&username, &password, Some("invalid_totp".to_string())).await {
+        let username = env::var("TV_TOTP_USERNAME").unwrap();
+        let password = env::var("TV_TOTP_PASSWORD").unwrap();
+        match login_user(&username, &password, Some("ZTIXV4KTRISK4KK7".to_string())).await {
             Ok(_) => assert!(false, "Wrong totp should not return user"),
             Err(err) => assert!(
                 err.to_string().contains("TOTP Secret is required")
