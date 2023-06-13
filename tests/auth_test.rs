@@ -75,9 +75,9 @@ mod auth {
 
     #[tokio::test]
     async fn login_user_with_valid_totp() {
-        let username = env::var("TV_USERNAME").unwrap();
-        let password = env::var("TV_PASSWORD").unwrap();
-        let totp = env::var("TV_TOTP").unwrap();
+        let username = env::var("TV_TOTP_USERNAME").unwrap();
+        let password = env::var("TV_TOTP_PASSWORD").unwrap();
+        let totp = env::var("TV_TOTP_SECRET").unwrap();
         match login_user(&username, &password, Some(totp)).await {
             Ok(user) => assert!(
                 || -> bool {
