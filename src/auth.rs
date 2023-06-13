@@ -189,32 +189,33 @@ pub async fn login_user(
                 if response.status() != 200 {
                     error!("Invalid TOTP secret");
                     return Err("Invalid TOTP secret".into());
+                } else {
+                    let response_data: Value = response.json().await.unwrap();
+                    info!("User is logged in successfully");
+                    let data = UserData {
+                        id: response_data["user"]["id"].as_u64().unwrap() as u32,
+                        username: response_data["user"]["username"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                        session: session.to_string(),
+                        signature: signature.to_string(),
+                        session_hash: response_data["user"]["session_hash"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                        private_channel: response_data["user"]["private_channel"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                        auth_token: response_data["user"]["auth_token"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                    };
+                    debug!("User data: {:#?}", data);
+                    return Ok(data);
                 }
-                let response_data: Value = response.json().await.unwrap();
-                info!("User is logged in successfully");
-                let data = UserData {
-                    id: response_data["user"]["id"].as_u64().unwrap() as u32,
-                    username: response_data["user"]["username"]
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                    session: session.to_string(),
-                    signature: signature.to_string(),
-                    session_hash: response_data["user"]["session_hash"]
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                    private_channel: response_data["user"]["private_channel"]
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                    auth_token: response_data["user"]["auth_token"]
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                };
-                debug!("User data: {:#?}", data);
-                return Ok(data);
             }
             None => {
                 error!("TOTP Secret is required");
