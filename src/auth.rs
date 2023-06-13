@@ -85,7 +85,7 @@ pub async fn get_user(
         };
         Ok(user_data)
     } else {
-        Err("Wrong or expired sessionid/signature")?
+        Err("Wrong or expired sessionid/signature".into())
     }
 }
 

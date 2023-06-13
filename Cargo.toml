@@ -8,6 +8,9 @@ repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
 description = "Tradingview datafeed `tradingview-rs` project."
 
+[member]
+name = "BitByteLab Developers"
+
 [dependencies]
 tracing = "0.1"
 tracing-subscriber = "0.3"
