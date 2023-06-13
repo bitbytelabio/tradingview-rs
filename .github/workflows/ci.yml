@@ -1,19 +1,26 @@
-name: Example workflow
+name: CI
 
 on:
   push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
-  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  HOME: /home/action
 
 jobs:
-  hello:
+  build_and_test:
     runs-on: self-hosted
     steps:
+      - run: sudo apt install -y pkg-config libssl-dev
       - uses: actions/checkout@v3
-      - name: hello action
-        run: echo "Hello Actions"
-        shell: bash
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose
+        env:
+          TV_SESSION: ${{ secrets.TV_SESSION }}
+          TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}

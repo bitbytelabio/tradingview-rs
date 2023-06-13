@@ -3,7 +3,7 @@ use reqwest::{Client, Error};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{debug, error, info, warn};
+use tracing::{error, warn};
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 pub struct Indicator {
