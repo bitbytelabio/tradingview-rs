@@ -9,16 +9,17 @@ use tracing::{error, info, warn};
 
 #[derive(Debug)]
 pub struct UserData {
-    id: u32,
-    username: String,
-    session: String,
-    signature: String,
-    session_hash: String,
-    private_channel: String,
-    auth_token: String,
+    pub id: u32,
+    pub username: String,
+    pub session: String,
+    pub signature: String,
+    pub session_hash: String,
+    pub private_channel: String,
+    pub auth_token: String,
 }
 
 #[derive(Debug, Deserialize)]
+
 struct LoginResponse {
     user: LoginUserData,
 }
