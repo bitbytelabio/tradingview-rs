@@ -6,17 +6,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  HOME: /home/action
 
 jobs:
   build_and_test:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --verbose
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --all-features
