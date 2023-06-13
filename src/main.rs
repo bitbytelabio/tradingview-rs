@@ -1,5 +1,7 @@
 extern crate google_authenticator;
 
+use std::borrow::Borrow;
+
 use tracing::{debug, info};
 
 mod auth;
@@ -75,8 +77,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     "dAIuLpdzmEy8HWnIYRGwigRA4XwJT4Ny/WIsD/rXy5qurJwu",
     //     Some("PTB2JVFN3YXVGVFX".to_string()),
     // )
-    let user_data = auth::login_user("batttheyshool0211", "batttheyshool0211", None).await?;
-
-    info!("User data: {:#?}", user_data);
+    let user_data = auth::get_user(
+        "wow63q1l614ilkutj8tkc7zwhp87e09b",
+        "v1:I6szYEiR40S888deJb6fJ33fnOVLGw1JbhP+7Hw63+U=",
+        None,
+    )
+    .await?;
+    let token = misc_requests::get_chart_token("FiwrRse6", Some(&user_data))
+        .await
+        .unwrap();
+    info!("Token: {}", token);
     Ok(())
 }

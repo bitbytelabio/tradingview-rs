@@ -1,7 +1,9 @@
+use crate::utils::client::get_request;
 use reqwest::{Client, Error};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use tracing::{debug, error, info, warn};
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 pub struct Indicator {
@@ -134,4 +136,40 @@ pub fn get_screener(exchange: &str) -> String {
         return String::from("vietnam");
     }
     return exchange.to_lowercase();
+}
+
+#[tracing::instrument]
+pub async fn get_chart_token(
+    layout: &str,
+    user_data: Option<&crate::auth::UserData>,
+) -> Result<String, Error> {
+    match user_data {
+        Some(user) => {
+            let res = get_request(
+                format!(
+                    "https://www.tradingview.com/chart-token/?image_url={}&user_id={}",
+                    layout, user.id
+                )
+                .as_str(),
+                Some(
+                    format!(
+                        "sessionid={}; sessionid_sign={};",
+                        user.session, user.signature
+                    )
+                    .to_string(),
+                ),
+            )
+            .await
+            .unwrap();
+            let data: Value = res.json().await.unwrap();
+            match data.get("token") {
+                Some(token) => return Ok(token.to_string()),
+                None => return Err("No token found").unwrap(),
+            }
+        }
+        None => {
+            error!("No user data provided");
+            return Err("No user data provided").unwrap();
+        }
+    }
 }
