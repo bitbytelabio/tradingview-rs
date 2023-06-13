@@ -4,6 +4,7 @@ use google_authenticator::GA_AUTH;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, ORIGIN, REFERER};
 use reqwest::Client;
+use reqwest::Response;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
@@ -35,6 +36,7 @@ pub async fn get_user(
     .text()
     .await
     .unwrap();
+
     if response.contains("auth_token") {
         info!("User is logged in");
         info!("Loading auth token and user info");
@@ -127,21 +129,35 @@ pub async fn login_user(
         debug!("User data: {:#?}", response_data["user"]);
         warn!("2FA is not enabled for this account");
         info!("User is logged in successfully");
-        return Ok(UserData {
+        let data = UserData {
             id: response_data["user"]["id"].as_u64().unwrap() as u32,
-            username: response_data["user"]["username"].to_string(),
+            username: response_data["user"]["username"]
+                .as_str()
+                .unwrap()
+                .to_string(),
             session: session.unwrap(),
             signature: signature.unwrap(),
-            session_hash: response_data["user"]["session_hash"].to_string(),
-            private_channel: response_data["user"]["private_channel"].to_string(),
-            auth_token: response_data["user"]["auth_token"].to_string(),
-        });
+            session_hash: response_data["user"]["session_hash"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+            private_channel: response_data["user"]["private_channel"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+            auth_token: response_data["user"]["auth_token"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        };
+        debug!("User data: {:#?}", data);
+        return Ok(data);
     } else if response_data["error"] == "2FA_required".to_string() {
         match opt_secret {
             Some(opt) => {
                 let session = &session.unwrap();
                 let signature = &signature.unwrap();
-                let response_data: Value = Client::builder()
+                let response = Client::builder()
                     .default_headers({
                         let mut headers = HeaderMap::new();
                         headers.insert(
@@ -170,20 +186,36 @@ pub async fn login_user(
                     )
                     .send()
                     .await
-                    .unwrap()
-                    .json()
-                    .await
                     .unwrap();
+                if !response.status().is_success() {
+                    error!("Invalid TOTP secret");
+                    return Err("Invalid TOTP secret".into());
+                }
+                let response_data: Value = response.json().await.unwrap();
                 info!("User is logged in successfully");
-                return Ok(UserData {
+                let data = UserData {
                     id: response_data["user"]["id"].as_u64().unwrap() as u32,
-                    username: response_data["user"]["username"].to_string(),
+                    username: response_data["user"]["username"]
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
                     session: session.to_string(),
                     signature: signature.to_string(),
-                    session_hash: response_data["user"]["session_hash"].to_string(),
-                    private_channel: response_data["user"]["private_channel"].to_string(),
-                    auth_token: response_data["user"]["auth_token"].to_string(),
-                });
+                    session_hash: response_data["user"]["session_hash"]
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                    private_channel: response_data["user"]["private_channel"]
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                    auth_token: response_data["user"]["auth_token"]
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                };
+                debug!("User data: {:#?}", data);
+                return Ok(data);
             }
             None => {
                 error!("TOTP Secret is required");
