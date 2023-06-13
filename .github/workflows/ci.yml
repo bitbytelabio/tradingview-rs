@@ -3,7 +3,9 @@ name: CI
 on:
   push:
   pull_request:
-  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   build_and_test:
@@ -13,4 +15,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - run: cargo test --verbose --release --all-features
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose
