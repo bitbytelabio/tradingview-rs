@@ -1,4 +1,4 @@
-name: DAST scan
+name: DAST
 
 on:
   push:
@@ -21,5 +21,5 @@ jobs:
         if: always() # Forces this step to always run
         uses: mikepenz/action-junit-report@v3
         with:
-          report_paths: "**/dastardly-report.xml" # You need to update this path if you pass in a different output filename to the Dastardly action
+          report_paths: "tests/reports/dastardly-report.xml" # You need to update this path if you pass in a different output filename to the Dastardly action
           require_tests: true
