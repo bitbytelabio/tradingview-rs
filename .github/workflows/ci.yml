@@ -27,4 +27,4 @@ jobs:
       - name: Install dependencies
         run: apt-get update && apt-get install -y libssl-dev pkg-config
       - name: Unit tests
-        run: cargo test --all
+        run: make test
