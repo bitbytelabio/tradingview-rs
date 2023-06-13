@@ -21,3 +21,6 @@ jobs:
         with:
           command: test
           args: --verbose
+        env:
+          TV_SESSION: ${{ secrets.TV_SESSION }}
+          TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
