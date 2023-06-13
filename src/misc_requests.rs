@@ -142,7 +142,7 @@ pub fn get_screener(exchange: &str) -> String {
 pub async fn get_chart_token(
     layout: &str,
     user_data: Option<&crate::auth::UserData>,
-) -> Result<String, Error> {
+) -> Result<String, Box<dyn std::error::Error>> {
     match user_data {
         Some(user) => {
             let res = get_request(
@@ -169,7 +169,7 @@ pub async fn get_chart_token(
         }
         None => {
             error!("No user data provided");
-            return Err("No user data provided").unwrap();
+            Err("No user data provided".into())
         }
     }
 }

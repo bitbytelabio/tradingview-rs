@@ -12,6 +12,7 @@
     "BIST",
     "ARCA",
     "LSIN",
-    "UPCOM"
+    "UPCOM",
+    "totp"
   ]
 }

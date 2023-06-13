@@ -4,7 +4,7 @@ mod auth {
     use tradingview_rs::auth::*;
 
     #[tokio::test]
-    async fn get_user_test() {
+    async fn get_user_test_with_invalid_session() {
         match get_user("invalid_session", "invalid_signature", None).await {
             Ok(_) => assert!(false, "Wrong session and signature should not return user"),
             Err(err) => assert!(err
@@ -28,10 +28,85 @@ mod auth {
                         && user.private_channel.len() > 0
                         && user.auth_token.len() > 0
                 }(),
-                "Cannot get user with valid session"
+                "Cannot get user data with valid session"
             ),
 
-            Err(_) => assert!(false, "Cannot get user with valid session"),
+            Err(err) => assert!(
+                false,
+                "Cannot get user data with valid session, unwrap data error: {}",
+                err.to_string()
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn login_user_with_valid_credential() {
+        let username = env::var("TV_USERNAME").unwrap();
+        let password = env::var("TV_PASSWORD").unwrap();
+        match login_user(&username, &password, None).await {
+            Ok(user) => assert!(
+                || -> bool {
+                    user.id > 0
+                        && user.username.len() > 0
+                        && user.session.len() > 0
+                        && user.signature.len() > 0
+                        && user.session_hash.len() > 0
+                        && user.private_channel.len() > 0
+                        && user.auth_token.len() > 0
+                }(),
+                "Cannot login user with valid credential"
+            ),
+
+            Err(err) => assert!(
+                false,
+                "Cannot login user with valid credential, unwrap data error: {}",
+                err.to_string()
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn login_user_with_invalid_credential() {
+        match login_user("invalid_username", "invalid_password", None).await {
+            Ok(_) => assert!(false, "Wrong username and password should not return user"),
+            Err(err) => assert!(err.to_string().contains("Invalid username or password")),
+        }
+    }
+
+    #[tokio::test]
+    async fn login_user_with_valid_totp() {
+        let username = env::var("TV_USERNAME").unwrap();
+        let password = env::var("TV_PASSWORD").unwrap();
+        let totp = env::var("TV_TOTP").unwrap();
+        match login_user(&username, &password, Some(totp)).await {
+            Ok(user) => assert!(
+                || -> bool {
+                    user.id > 0
+                        && user.username.len() > 0
+                        && user.session.len() > 0
+                        && user.signature.len() > 0
+                        && user.session_hash.len() > 0
+                        && user.private_channel.len() > 0
+                        && user.auth_token.len() > 0
+                }(),
+                "Cannot login user with valid credential"
+            ),
+
+            Err(err) => assert!(
+                false,
+                "Cannot login user with valid credential, unwrap data error: {}",
+                err.to_string()
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn login_user_with_invalid_totp() {
+        let username = env::var("TV_USERNAME").unwrap();
+        let password = env::var("TV_PASSWORD").unwrap();
+        match login_user(&username, &password, Some("invalid_totp".to_string())).await {
+            Ok(_) => assert!(false, "Wrong totp should not return user"),
+            Err(err) => assert!(err.to_string().contains("Invalid TOTP")),
         }
     }
 }
