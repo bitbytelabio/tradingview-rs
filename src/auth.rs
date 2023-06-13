@@ -4,7 +4,6 @@ use google_authenticator::GA_AUTH;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, ORIGIN, REFERER};
 use reqwest::Client;
-use reqwest::Response;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
@@ -187,7 +186,7 @@ pub async fn login_user(
                     .send()
                     .await
                     .unwrap();
-                if !response.status().is_success() {
+                if response.status() != 200 {
                     error!("Invalid TOTP secret");
                     return Err("Invalid TOTP secret".into());
                 }
