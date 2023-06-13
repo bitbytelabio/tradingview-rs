@@ -3,9 +3,9 @@ use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, ORIGIN, REFERER};
-use reqwest::{Client, Error};
-use serde::Deserialize;
-use tracing::{error, info, warn};
+use reqwest::Client;
+use serde_json::Value;
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug)]
 pub struct UserData {
@@ -16,21 +16,6 @@ pub struct UserData {
     pub session_hash: String,
     pub private_channel: String,
     pub auth_token: String,
-}
-
-#[derive(Debug, Deserialize)]
-
-struct LoginResponse {
-    user: LoginUserData,
-}
-
-#[derive(Debug, Deserialize)]
-struct LoginUserData {
-    id: u32,
-    username: String,
-    session_hash: String,
-    private_channel: String,
-    auth_token: String,
 }
 
 pub async fn get_user(
@@ -50,6 +35,7 @@ pub async fn get_user(
     .text()
     .await
     .unwrap();
+
     if response.contains("auth_token") {
         info!("User is logged in");
         info!("Loading auth token and user info");
@@ -93,7 +79,7 @@ pub async fn login_user(
     username: &str,
     password: &str,
     opt_secret: Option<String>,
-) -> Result<UserData, Error> {
+) -> Result<UserData, Box<dyn std::error::Error>> {
     let response = Client::builder()
         .default_headers({
             let mut headers = HeaderMap::new();
@@ -134,11 +120,42 @@ pub async fn login_user(
             }
         });
 
-    match opt_secret {
-        Some(opt) => {
-            let session = &session.unwrap();
-            let signature = &signature.unwrap();
-            if response.status().is_success() {
+    let response_data: Value = response.json().await.unwrap();
+
+    debug!("Response message: {:#?}", response_data);
+
+    if response_data["error"] == "".to_string() {
+        debug!("User data: {:#?}", response_data["user"]);
+        warn!("2FA is not enabled for this account");
+        info!("User is logged in successfully");
+        let data = UserData {
+            id: response_data["user"]["id"].as_u64().unwrap() as u32,
+            username: response_data["user"]["username"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+            session: session.unwrap(),
+            signature: signature.unwrap(),
+            session_hash: response_data["user"]["session_hash"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+            private_channel: response_data["user"]["private_channel"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+            auth_token: response_data["user"]["auth_token"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        };
+        debug!("User data: {:#?}", data);
+        return Ok(data);
+    } else if response_data["error"] == "2FA_required".to_string() {
+        match opt_secret {
+            Some(opt) => {
+                let session = &session.unwrap();
+                let signature = &signature.unwrap();
                 let response = Client::builder()
                     .default_headers({
                         let mut headers = HeaderMap::new();
@@ -168,43 +185,47 @@ pub async fn login_user(
                     )
                     .send()
                     .await
-                    .unwrap()
-                    .json::<LoginResponse>()
-                    .await
                     .unwrap();
-                return Ok(UserData {
-                    id: response.user.id,
-                    username: response.user.username.to_string(),
-                    session: session.to_string(),
-                    signature: signature.to_string(),
-                    session_hash: response.user.session_hash.to_string(),
-                    private_channel: response.user.private_channel.to_string(),
-                    auth_token: response.user.auth_token.to_string(),
-                });
-            } else {
-                error!("Wrong username or password");
-                Err("Wrong username or password").unwrap()
+                if response.status() != 200 {
+                    error!("Invalid TOTP secret");
+                    return Err("Invalid TOTP secret".into());
+                } else {
+                    let response_data: Value = response.json().await.unwrap();
+                    info!("User is logged in successfully");
+                    let data = UserData {
+                        id: response_data["user"]["id"].as_u64().unwrap() as u32,
+                        username: response_data["user"]["username"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                        session: session.to_string(),
+                        signature: signature.to_string(),
+                        session_hash: response_data["user"]["session_hash"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                        private_channel: response_data["user"]["private_channel"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                        auth_token: response_data["user"]["auth_token"]
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                    };
+                    debug!("User data: {:#?}", data);
+                    return Ok(data);
+                }
+            }
+            None => {
+                error!("TOTP Secret is required");
+                Err("TOTP Secret is required".into())
             }
         }
-        None => {
-            if response.status().is_success() {
-                warn!("No OTP secret provided");
-                info!("Trying to login without OTP");
-                let response_user_data = response.json::<LoginResponse>().await.unwrap();
-                let user_data = UserData {
-                    id: response_user_data.user.id,
-                    username: response_user_data.user.username.to_string(),
-                    session: session.unwrap().to_string(),
-                    signature: signature.unwrap().to_string(),
-                    session_hash: response_user_data.user.session_hash.to_string(),
-                    private_channel: response_user_data.user.private_channel.to_string(),
-                    auth_token: response_user_data.user.auth_token.to_string(),
-                };
-                Ok(user_data)
-            } else {
-                error!("Wrong username or password");
-                Err("Wrong username or password").unwrap()
-            }
-        }
+    } else {
+        return {
+            error!("Wrong username or password");
+            Err("Wrong username or password".into())
+        };
     }
 }
