@@ -6,10 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  unit-test:
+  build_and_test:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
-      - name: Unit test
-        run: make test
-        shell: bash
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo test --verbose --release --all-features
