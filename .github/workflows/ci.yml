@@ -6,26 +6,25 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  HOME: /home/action
+  RUST_BACKTRACE: full
 
 jobs:
   build_and_test:
     runs-on: self-hosted
+    container:
+      image: rust:buster
+      options: --user root
+    env:
+      TV_SESSION: ${{ secrets.TV_SESSION }}
+      TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
+      TV_USERNAME: ${{ secrets.TV_USERNAME }}
+      TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
+      TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
+      TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
+      TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
     steps:
-      - run: sudo apt install -y pkg-config libssl-dev
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          # args: --verbose
-        env:
-          TV_SESSION: ${{ secrets.TV_SESSION }}
-          TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
-          TV_USERNAME: ${{ secrets.TV_USERNAME }}
-          TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
-          TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
-          TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
-          TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
+      - name: Install dependencies
+        run: apt-get update && apt-get install -y libssl-dev pkg-config
+      - name: Unit tests
+        run: make test

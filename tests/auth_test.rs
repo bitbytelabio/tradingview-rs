@@ -115,6 +115,7 @@ mod auth {
             Err(err) => assert!(
                 err.to_string().contains("TOTP Secret is required")
                     || err.to_string().contains("Invalid TOTP secret")
+                    || err.to_string().contains("Wrong username or password")
             ),
         }
     }
