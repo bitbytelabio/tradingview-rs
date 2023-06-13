@@ -14,17 +14,17 @@ jobs:
     container:
       image: rust:buster
       options: --user root
+    env:
+      TV_SESSION: ${{ secrets.TV_SESSION }}
+      TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
+      TV_USERNAME: ${{ secrets.TV_USERNAME }}
+      TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
+      TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
+      TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
+      TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
     steps:
       - uses: actions/checkout@v3
       - name: Install dependencies
         run: apt-get update && apt-get install -y libssl-dev pkg-config
       - name: Unit tests
         run: cargo test --all
-        env:
-          TV_SESSION: ${{ secrets.TV_SESSION }}
-          TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
-          TV_USERNAME: ${{ secrets.TV_USERNAME }}
-          TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
-          TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
-          TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
-          TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
