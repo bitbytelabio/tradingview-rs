@@ -1,0 +1,182 @@
+{
+  "success": true,
+  "reason2": {
+    "warnings": [
+      {
+        "end": { "column": 94, "line": 4 },
+        "message": "More than one 'defval' arguments are supplied. Only the first one will be used.",
+        "start": { "column": 14, "line": 4 }
+      }
+    ]
+  },
+  "result": {
+    "IL": "bmI9Ks46_n8KjGEnBI8SjsVR70NOsHA==_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",
+    "ilTemplate": "bmI9Ks46_c60Qq+QniJl0xxGxfJj1Pg==_MzrKUWqQXQAteNZBYGs1Iq2DDR2Dd/jC3128lFInX5hSEYKeRk8rJceE6tOhowoLQiGScmFmpNRIjbl8amXWXRY9moY/469fHOVSABdDmBvZaAtNNUQnI4nA42eXssha00vD+dxvPq1D3yFjNOwfmDjsD/liBSgcyPK32NrUfvn9lJwJ1tLQr9WH6qD7sYXDTKEtRZcuTPBxCjGNX/TQUF/X6D2fMEj/MQP6oyJTz+DMT0Ztp5VbYYN3lV6Dmun9NuZS8K7VHfH9zaelmKpOXtLSODOUCrSdgUIsHRJLeW9M0dpM/P6VBI19XZvSgo2cvPFIV8wbHvOTWzOGJGIczBaTWJKY5KIm/1Er32++H0MH92M5l6uv1ltC2F7rkkQvrxQ1VWDKxWYIMLJ6hS23qyruFBtHKqwtwNyedJC2jBJe/0LEN4C83F3hdqQPKyHh+wgg+eiYCBDR4rcJwQ5nndH8wWyauvzy+Of6D5n8AEIV99VFpXiqyNTStZwjJoX6QqyhWVnRZ55+7rx9/CLudu0ilzBFLvzGO0fJCv6ztfGdU3EQrRvLodfHpQcIMw852MzSZkLrEqOaeUQsVIF4622iDkblr3RAu3ZGmm5ZCr+C9sRwybi4Tu/HCz3tKJUq9Ynt0dsAj8cdSuyY5sa8o0Dtl3xrupXDYoV+NyunqQVR0zPTuVXyDdvkf1mpHJWaVo47yJyuyrTiP/jE9gf7Y5gglJoUYxwUubo54a8JA3CJU1BtvEGTLgd6FAo2Jz9zS4nQcTVJdlOxQ4Sp9PUxgbFNFtB2AHpbOqYI9CjJo71twzfUllWgfv9cjsj3SF8bce0zVq4Id9AKwPTi2NeHxLT7nOqf4gHA1BDDmnedFOUydIS66JE67qDlSqZ8Agkzcz3khcLeYG42RNavRboo36i2Np0QyuTNL/lTUJ1/m++Q2YFimngxVjCxkZvwR+NH0XQELn5p5JCH93U2G0XVP7+Gy78HE1YMzcz6ugZMbAjxrRa8Dj+4lWpQmrNf8pT3OAhma7vPP8svfpKAFGv2PWX1+YtYpBODLdherIkg0MwcIjYwOtZF8WqI4AmBvbyc1pXm6WFgBgs75w46A8JOCh4iXnMCQpG+Wf7CDbaobirORQPcohQXvKb20p0S8jAEQ9Di9vvxr/0NGB6bEr55ojiWjKEfh6r1p1t6ecXgDVKvofZU8R4enR6q35TH9SOs1YiYFcvobpFQm0/HO7RbeVtCKRq41Ful8hpkduF/CeTvgBuok32tHmGzGIbNon8Sg0VBZZi5Mf8hSBjyc1jhu7lEIZ4rnClqZuVTBZ9ZshtHr5GMllxXlp/MbSfkFNIdjvKbc2tzonGrxSrS8MiAP8jBm28HwI60kQJolK5r2cgC1VzB1sY8STiNBB+ae4vNb4IAntkk0LGYL4k3WLnSJw9BMl0NTXskLGjZbNx+Qy+WPdwLn0rnUhofxiF9Qp2eM0oODDku0LP4gLI6QrjRQHtUWvj/GVU8Q8CnXxqFjGD1VIfUcSttswuHJ6RCN/aXbWMAuOh+Hm0csWSZ/K6Tdr825ezpekDsyThfzCHfXLMQPuZ2d8UZdPMXkkYPNLIrilNDasGB1HoS5qyVbsjdrgl2g71E0nijCYIHRa9G4XjurPmV4G/L1FYN7ZwpO7OrMy/+BbsP/m2Kx4Ye+xPQDpPBQZjF8B6raXmsroawP9ESuMylbkQm8D4W3CpuWltI/MfugyqLE9VQqX6VZTDDqxgwThKn6uQLeNrcuzFEIajmo2iqzdQzSkfsXbjCd+HbiGLmspOtGK8U5DsVeR0+37PI5+1/EqdG7DiDsb4N/JgTnZ5x1G3+7rmsyGQ0UF9pQXzCrfKEmeNjWn3VVtCG1xTYAP3pQ/YKkc+YEGBxpBbSVUn1fGQASWbzOH7ijD1imnXcJgQKoIFNeW1KZ5hgih2KmkJO7opSbJdFUDCY7KPEzGrbzrGadC0gmyy+XTKVh2zfmbzJIHdTF/7mK8+ceKvwq2fs2gew4BRspjDKSQAPsoYOxgEn+g+w5FG/du7DKYU7JwSnLzk4ejJFcUpUHjKa6B2CBG+r2o/rUZRBd2Y=",
+    "metaInfo": {
+      "TVScriptMetaInfoExprs": {
+        "patchMap": {
+          "defaults.palettes.palette_common.colors.0.color": "rm_ic_0",
+          "defaults.palettes.palette_common.colors.1.color": "rm_ic_1"
+        },
+        "tree": "//@version=5\n##var_3=##input(defval=#00000000,type='INPUT_COLOR',##id='__chart_fgcolor')\n##var_4=##input(defval=#00000000,type='INPUT_COLOR',##id='__chart_bgcolor')\n##root(root_metainfo,rm_ic_0,##var_3,input__color)\n##root(root_metainfo,rm_ic_1,##var_4,input__color)\n"
+      },
+      "_metainfoVersion": 53,
+      "defaults": {
+        "graphics": { "dwglabels": { "labels": { "visible": true } } },
+        "inputs": {
+          "__chart_bgcolor": "rgba(0,0,0,0)",
+          "__chart_fgcolor": "rgba(0,0,0,0)",
+          "__user_pro_plan": "",
+          "in_0": "",
+          "in_1": "Default",
+          "pineFeatures": "{\"indicator\":1,\"plot\":1,\"str\":1,\"math\":1,\"label\":1,\"request.security\":1}",
+          "pineId": "",
+          "pineVersion": "",
+          "text": "bmI9Ks46_c60Qq+QniJl0xxGxfJj1Pg==_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"
+        },
+        "palettes": {
+          "palette_common": {
+            "colors": {
+              "0": { "color": "rgba(0,0,0,0)" },
+              "1": { "color": "rgba(0,0,0,0)" }
+            }
+          }
+        },
+        "styles": {
+          "plot_0": {
+            "color": "#2962ff",
+            "display": 15,
+            "linestyle": 0,
+            "linewidth": 2,
+            "plottype": 10,
+            "trackPrice": false,
+            "transparency": 0
+          }
+        }
+      },
+      "description": "Accounts payable",
+      "docs": "",
+      "financialPeriod": "FY",
+      "format": { "precision": 0, "type": "volume" },
+      "fundamentalCategory": "Balance sheet",
+      "graphics": {
+        "dwglabels": { "labels": { "name": "labels", "title": "Labels" } }
+      },
+      "groupingKey": "Accounts payableFY",
+      "historyCalculationMayChange": true,
+      "id": "Internal$STD;Fund_accounts_payable_fy@tv-scripting-101",
+      "inputs": [
+        {
+          "defval": "bmI9Ks46_c60Qq+QniJl0xxGxfJj1Pg==_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",
+          "id": "text",
+          "isHidden": true,
+          "name": "ILScript",
+          "type": "text"
+        },
+        {
+          "defval": "",
+          "id": "pineId",
+          "isHidden": true,
+          "name": "pineId",
+          "type": "text"
+        },
+        {
+          "defval": "",
+          "id": "pineVersion",
+          "isHidden": true,
+          "name": "pineVersion",
+          "type": "text"
+        },
+        {
+          "defval": "{\"indicator\":1,\"plot\":1,\"str\":1,\"math\":1,\"label\":1,\"request.security\":1}",
+          "id": "pineFeatures",
+          "isFake": true,
+          "isHidden": true,
+          "name": "pineFeatures",
+          "type": "text"
+        },
+        {
+          "defval": "",
+          "display": 15,
+          "id": "in_0",
+          "isFake": true,
+          "name": "Symbol",
+          "optional": true,
+          "type": "symbol"
+        },
+        {
+          "defval": "Default",
+          "display": 15,
+          "id": "in_1",
+          "isFake": true,
+          "name": "Currency",
+          "options": [
+            "Default",
+            "USD",
+            "EUR",
+            "CAD",
+            "JPY",
+            "GBP",
+            "HKD",
+            "CNY"
+          ],
+          "type": "text"
+        },
+        {
+          "defval": "rgba(0,0,0,0)",
+          "id": "__chart_fgcolor",
+          "isFake": true,
+          "isHidden": true,
+          "name": "chart.fgcolor",
+          "type": "color"
+        },
+        {
+          "defval": "rgba(0,0,0,0)",
+          "id": "__chart_bgcolor",
+          "isFake": true,
+          "isHidden": true,
+          "name": "chart.bgcolor",
+          "type": "color"
+        },
+        {
+          "defval": "",
+          "id": "__user_pro_plan",
+          "isFake": true,
+          "isHidden": true,
+          "name": "",
+          "type": "usertype"
+        }
+      ],
+      "isFundamentalStudy": true,
+      "isTVScript": true,
+      "isTVScriptStub": false,
+      "is_hidden_study": false,
+      "is_price_study": false,
+      "palettes": {
+        "palette_common": {
+          "colors": { "0": { "name": "Color 0" }, "1": { "name": "Color 1" } },
+          "valToIndex": { "0": 0, "1": 1 }
+        }
+      },
+      "pine": {
+        "digest": "f8ca71cb53786b7b27fdea052d87248e80474539",
+        "version": "52.0"
+      },
+      "plots": [{ "id": "plot_0", "type": "line" }],
+      "scriptIdPart": "STD;Fund_accounts_payable_fy",
+      "shortDescription": "Accounts payable",
+      "styles": {
+        "plot_0": {
+          "histogramBase": 0,
+          "isHidden": false,
+          "joinPoints": false,
+          "title": "Accounts payable"
+        }
+      },
+      "usesPrivateLib": false,
+      "warnings": [
+        "line 4: More than one 'defval' arguments are supplied. Only the first one will be used."
+      ]
+    }
+  }
+}

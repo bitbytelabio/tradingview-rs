@@ -3,7 +3,7 @@ use reqwest::{Client, Error};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{error, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 pub struct Indicator {
@@ -50,6 +50,24 @@ async fn fetch_scan_data(
     let parsed_data = serde_json::from_str(&data).unwrap();
 
     Ok(parsed_data)
+}
+
+#[tracing::instrument]
+pub async fn get_indicator_data(indicator: &Indicator) {
+    let data: Value = crate::utils::client::get_request(
+        format!(
+            "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
+            indicator.id, indicator.version
+        )
+        .as_str(),
+        None,
+    )
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    debug!("{:?}", data);
 }
 
 #[tracing::instrument]

@@ -1,6 +1,6 @@
 [package]
 name = "tradingview-rs"
-authors = ["BitByteLab Developers <dev.team@bitbytelab.io>"]
+authors = ["Bit Byte Lab Developers <dev.team@bitbytelab.io>"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
@@ -9,6 +9,7 @@ readme = "README.md"
 description = "Tradingview datafeed `tradingview-rs` project."
 
 [dependencies]
+rust_socketio = "0.4.1-alpha.2"
 reqwest = { version = "0.11", features = [
     "rustls-tls",
     "json",
