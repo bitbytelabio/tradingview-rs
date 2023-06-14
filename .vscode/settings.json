@@ -1,19 +1,20 @@
 {
   "cSpell.words": [
+    "ARCA",
+    "BIST",
     "KHTML",
+    "LSIN",
     "LUXSE",
-    "Referer",
-    "sessionid",
-    "TSXV",
-    "uacq",
-    "XETR",
     "MILSEDEX",
     "NEWCONNECT",
-    "BIST",
-    "ARCA",
-    "LSIN",
+    "Referer",
+    "rustls",
+    "sessionid",
+    "totp",
+    "TSXV",
+    "uacq",
     "UPCOM",
-    "totp"
+    "XETR"
   ],
   "sonarlint.connectedMode.project": {
     "connectionId": "BitByteLabSonarQube",

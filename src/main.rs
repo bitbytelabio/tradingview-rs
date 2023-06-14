@@ -1,8 +1,6 @@
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // tracing_subscriber::fmt::init();
-    // let user =
-    //     tradingview_rs::auth::login_user("batttheyshool0211", "batttheyshool0211", None).await?;
-    // println!("{:#?}", user);
+    tracing_subscriber::fmt::init();
+    tradingview_rs::misc_requests::get_builtin_indicators().await?;
     Ok(())
 }
