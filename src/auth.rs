@@ -81,6 +81,7 @@ pub async fn login_user(
     opt_secret: Option<String>,
 ) -> Result<UserData, Box<dyn std::error::Error>> {
     let response = Client::builder()
+        .use_rustls_tls()
         .default_headers({
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -157,6 +158,7 @@ pub async fn login_user(
                 let session = &session.unwrap();
                 let signature = &signature.unwrap();
                 let response = Client::builder()
+                    .use_rustls_tls()
                     .default_headers({
                         let mut headers = HeaderMap::new();
                         headers.insert(

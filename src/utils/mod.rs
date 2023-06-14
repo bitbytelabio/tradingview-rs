@@ -9,6 +9,7 @@ pub mod client {
     pub async fn get_request(url: &str, cookies: Option<String>) -> Result<Response, Error> {
         info!("Sending request to: {}", url);
         let client = Client::builder()
+            .use_rustls_tls()
             .default_headers({
                 let mut headers = HeaderMap::new();
                 headers.insert(
