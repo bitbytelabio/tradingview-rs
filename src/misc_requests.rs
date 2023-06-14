@@ -68,6 +68,7 @@ pub async fn get_indicator_data(indicator: &Indicator) {
     .await
     .unwrap();
     debug!("{:?}", data);
+    // !TODO: add parsing for indicator data
 }
 
 #[tracing::instrument]
@@ -156,9 +157,9 @@ pub fn get_screener(exchange: &str) -> String {
     return exchange.to_lowercase();
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(user_data))]
 pub async fn get_chart_token(
-    layout: &str,
+    layout_id: &str,
     user_data: Option<&crate::auth::UserData>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     match user_data {
@@ -166,7 +167,7 @@ pub async fn get_chart_token(
             let res = get_request(
                 format!(
                     "https://www.tradingview.com/chart-token/?image_url={}&user_id={}",
-                    layout, user.id
+                    layout_id, user.id
                 )
                 .as_str(),
                 Some(
@@ -181,7 +182,7 @@ pub async fn get_chart_token(
             .unwrap();
             let data: Value = res.json().await.unwrap();
             match data.get("token") {
-                Some(token) => return Ok(token.to_string()),
+                Some(token) => return Ok(token.as_str().unwrap().to_string()),
                 None => return Err("No token found").unwrap(),
             }
         }
@@ -190,4 +191,32 @@ pub async fn get_chart_token(
             Err("No user data provided".into())
         }
     }
+}
+
+#[tracing::instrument(skip(user_data))]
+pub async fn get_drawing<T>(
+    layout_id: &str,
+    symbol: &str,
+    user_data: &crate::auth::UserData,
+    chart_id: T,
+) where
+    T: std::fmt::Display + std::fmt::Debug,
+{
+    let token = get_chart_token(layout_id, Some(user_data)).await.unwrap();
+    let url = format!(
+        "https://charts-storage.tradingview.com/charts-storage/layout/{layout_id}/sources?chart_id={chart_id}&jwt={token}&symbol={symbol}"  
+    );
+    let res = get_request(
+        url.as_str(),
+        Some(format!(
+            "sessionid={}; sessionid_sign={};",
+            user_data.session, user_data.signature
+        )),
+    )
+    .await
+    .unwrap();
+    let data: Value = res.json().await.unwrap();
+    info!("{:?}", data);
+    // !TODO: add parsing for chart drawing data
+    // info!("{}", token);
 }

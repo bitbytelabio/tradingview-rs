@@ -1,10 +1,10 @@
-.PHONY: build test-fast test-all clippy format checks pipeline
+.PHONY: build test clippy format checks pipeline
 
 build: 
 	@cargo build --verbose --all-features
 
 test:
-	@cargo test --verbose 
+	@cargo test --verbose --all-features
 
 clippy:
 	@cargo clippy --verbose --all-features
