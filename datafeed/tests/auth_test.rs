@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod auth {
     use std::env;
-    use tradingview_rs::auth::*;
+    use datafeed::auth::*;
 
     #[tokio::test]
     async fn get_user_test_with_invalid_session() {
