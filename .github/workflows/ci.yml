@@ -2,26 +2,25 @@ name: CI
 
 on:
   push:
-  pull_request:
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: full
+  TV_SESSION: ${{ secrets.TV_SESSION }}
+  TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
+  TV_USERNAME: ${{ secrets.TV_USERNAME }}
+  TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
+  TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
+  TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
+  TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
 
 jobs:
   build_and_test:
+    name: Build and test
     runs-on: self-hosted
     container:
       image: rust:buster
       options: --user root
-    env:
-      TV_SESSION: ${{ secrets.TV_SESSION }}
-      TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
-      TV_USERNAME: ${{ secrets.TV_USERNAME }}
-      TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
-      TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
-      TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
-      TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
     steps:
       - uses: actions/checkout@v3
       - name: Install dependencies
