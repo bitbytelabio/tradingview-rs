@@ -14,7 +14,8 @@
     "TSXV",
     "uacq",
     "UPCOM",
-    "XETR"
+    "XETR",
+    "socketio"
   ],
   "sonarlint.connectedMode.project": {
     "connectionId": "BitByteLabSonarQube",

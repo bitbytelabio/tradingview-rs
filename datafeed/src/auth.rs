@@ -23,7 +23,7 @@ pub async fn get_user(
     signature: &str,
     url: Option<&str>,
 ) -> Result<UserData, Box<dyn std::error::Error>> {
-    let response = crate::utils::client::get_request(
+    let response = crate::utils::get_request(
         url.unwrap_or_else(|| "https://www.tradingview.com/"),
         Some(format!(
             "sessionid={}; sessionid_sign={};",
