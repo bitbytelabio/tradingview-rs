@@ -1,4 +1,4 @@
-use crate::utils::client::get_request;
+use crate::utils::get_request;
 use reqwest::{Client, Error};
 use serde::Deserialize;
 use serde_json::Value;
@@ -54,7 +54,7 @@ async fn fetch_scan_data(
 
 #[tracing::instrument]
 pub async fn get_indicator_data(indicator: &Indicator) {
-    let data: Value = crate::utils::client::get_request(
+    let data: Value = get_request(
         format!(
             "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
             indicator.id, indicator.version
@@ -81,7 +81,7 @@ pub async fn get_builtin_indicators() -> Result<Vec<Indicator>, Box<dyn std::err
             indicator_type
         );
 
-        let mut data = crate::utils::client::get_request(&url, None)
+        let mut data = get_request(&url, None)
             .await?
             .json::<Vec<Indicator>>()
             .await?;
@@ -96,7 +96,7 @@ pub async fn get_private_indicators(
     session: &str,
     signature: &str,
 ) -> Result<Vec<Indicator>, Box<dyn std::error::Error>> {
-    let data = crate::utils::client::get_request(
+    let data = get_request(
         "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
         Some(format!(
             "sessionid={}; sessionid_sign={};",

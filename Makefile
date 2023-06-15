@@ -1,3 +1,7 @@
+#!make
+include .env
+export $(shell sed 's/=.*//' .env)
+
 .PHONY: build test clippy format checks pipeline
 
 build: 
@@ -22,5 +26,5 @@ pipeline: build test clippy format
 	@git status
 	@echo "### Awesome work! 😍 ###"""
 
-run:
-	@cargo run
+lib:
+	@cargo run --bin datafeed
