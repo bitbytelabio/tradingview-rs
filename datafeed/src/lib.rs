@@ -1,4 +1,5 @@
 pub mod auth;
+mod config;
 pub mod misc_requests;
 mod utils;
 
