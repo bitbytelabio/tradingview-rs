@@ -71,7 +71,6 @@ pub async fn get_indicator_data(indicator: &Indicator) {
     // !TODO: add parsing for indicator data
 }
 
-#[tracing::instrument]
 pub async fn get_builtin_indicators() -> Result<Vec<Indicator>, Box<dyn std::error::Error>> {
     let indicator_types = vec!["standard", "candlestick", "fundamental"];
     let mut indicators: Vec<Indicator> = vec![];

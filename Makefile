@@ -28,3 +28,7 @@ pipeline: build test clippy format
 
 lib:
 	@cargo run --bin datafeed
+
+keygen:
+	@tests/socketio-server/keygen.sh node-engine-io-secure 127.0.0.1
+	

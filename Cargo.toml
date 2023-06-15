@@ -1,2 +1,2 @@
 [workspace]
-members = ["datafeed", "server"]
+members = ["datafeed", "server", "tests"]
