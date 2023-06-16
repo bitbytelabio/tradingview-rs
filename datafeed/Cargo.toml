@@ -29,6 +29,7 @@ google-authenticator = "0.4"
 lazy_static = "1.4"
 zip = "0.5"
 tokio-tungstenite = "*"
+base64 = "0.12.3"
 
 [[example]]
 name = "auth"

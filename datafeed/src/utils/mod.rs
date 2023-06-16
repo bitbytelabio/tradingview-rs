@@ -3,6 +3,8 @@ use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use reqwest::{Client, Error, Response};
 use tracing::{debug, info};
 
+pub mod protocol;
+
 #[tracing::instrument]
 pub async fn get_request(url: &str, cookies: Option<String>) -> Result<Response, Error> {
     info!("Sending request to: {}", url);
