@@ -1,8 +1,22 @@
 [package]
 name = "server"
-version = "0.1.0"
+authors = ["Bit Byte Lab Developers <dev.team@bitbytelab.io>"]
+version = "0.0.1"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/bitbytelabio/tradingview-rs"
+readme = "../README.md"
+description = "Tradingview datafeed server `tradingview-rs` project."
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+datafeed = { path = "../datafeed" }
+kafka = "0.9"
+polars = { git = "https://github.com/pola-rs/polars" }
+vaultrs = "0.7.0"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+surrealdb = "1.0.0-beta.9"
+
+[dependencies.redis]
+version = "*"
