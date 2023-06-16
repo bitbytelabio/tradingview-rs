@@ -1,12 +1,12 @@
 [package]
 name = "datafeed"
 authors = ["Bit Byte Lab Developers <dev.team@bitbytelab.io>"]
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "../README.md"
-description = "Tradingview datafeed `tradingview-rs` project."
+description = "Tradingview datafeed api `tradingview-rs` project."
 
 [dependencies]
 reqwest = { version = "0.11", features = [
@@ -26,4 +26,10 @@ rand = "0.8"
 serde_json = { version = "1.0" }
 regex = "1"
 google-authenticator = "0.4"
-rust_socketio = "0.4.1"
+lazy_static = "1.4"
+zip = "0.5"
+tokio-tungstenite = "*"
+base64 = "0.12.3"
+
+[[example]]
+name = "auth"
