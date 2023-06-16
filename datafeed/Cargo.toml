@@ -26,4 +26,5 @@ rand = "0.8"
 serde_json = { version = "1.0" }
 regex = "1"
 google-authenticator = "0.4"
-rust_socketio = "0.4.1"
+lazy_static = "1.4"
+zip = "0.5"

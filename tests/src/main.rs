@@ -1,43 +1,28 @@
 use rust_socketio::{ClientBuilder, Payload, RawClient};
 use serde_json::json;
-use std::time::Duration;
+use tracing::{error, info};
+use tracing_subscriber::fmt::init as tracing_init;
 
 fn main() {
-    let callback = |payload: Payload, socket: RawClient| {
+    tracing_init();
+
+    let callback = |payload: Payload, _: RawClient| {
+        info!("Received payload: {:#?}", &payload);
         match payload {
             Payload::String(str) => println!("Received: {}", str),
             Payload::Binary(bin_data) => println!("Received bytes: {:#?}", bin_data),
-        }
-        socket
-            .emit("test", json!({"got ack": true}))
-            .expect("Server unreachable")
+        };
     };
 
-    // get a socket that is connected to the admin namespace
-    let socket = ClientBuilder::new("http://localhost:4200")
-        .namespace("/admin")
-        .on("test", callback)
+    let socket = ClientBuilder::new("https://data.tradingview.com/")
+        .namespace("/websocket")
+        .opening_header("origin", "https://data.tradingview.com")
+        .on("connect", callback)
         .on("error", |err, _| eprintln!("Error: {:#?}", err))
-        .connect()
-        .expect("Connection failed");
+        .connect();
 
-    // emit to the "foo" event
-    let json_payload = json!({"token": 123});
-    socket
-        .emit("foo", json_payload)
-        .expect("Server unreachable");
-
-    // define a callback, that's executed when the ack got acked
-    let ack_callback = |message: Payload, _| {
-        println!("Yehaa! My ack got acked?");
-        println!("Ack data: {:#?}", message);
-    };
-
-    let json_payload = json!({"myAckData": 123});
-    // emit with an ack
-    socket
-        .emit_with_ack("test", json_payload, Duration::from_secs(2), ack_callback)
-        .expect("Server unreachable");
-
-    socket.disconnect().expect("Disconnect failed")
+    match socket {
+        Ok(raw_client) => info!("Connected to the server"),
+        Err(err) => error!("Connection error: {:#?}", err),
+    }
 }
