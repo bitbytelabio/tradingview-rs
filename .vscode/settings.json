@@ -10,12 +10,13 @@
     "Referer",
     "rustls",
     "sessionid",
+    "socketio",
     "totp",
     "TSXV",
+    "tungstenite",
     "uacq",
     "UPCOM",
-    "XETR",
-    "socketio"
+    "XETR"
   ],
   "sonarlint.connectedMode.project": {
     "connectionId": "BitByteLabSonarQube",
