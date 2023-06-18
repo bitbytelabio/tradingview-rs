@@ -12,7 +12,6 @@ This is a datafeed server for algorithmic trading written in Rust. It is designe
 - [ ] Get TradingView's technical analysis
 - [ ] Replay mode + Fake Replay mode (for free plan)
 - [ ] Get values from a specific date range
-- [ ] TradingView socket server emulation
 - [ ] Interact with public chats
 - [ ] Get Screener top values
 - [ ] Get Calendar
