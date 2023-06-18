@@ -15,3 +15,6 @@ This is a datafeed server for algorithmic trading written in Rust. It is designe
 - [_] Extend security support
 - [_] Webhooks for alerts
 - [_] Telegram bot for alerts
+
+## Getting Started
+### Prerequisites
