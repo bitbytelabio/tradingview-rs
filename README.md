@@ -11,3 +11,4 @@ This is a datafeed server for algorithmic trading written in Rust. It is designe
 - [_] Kafka Integration
 - [_] Redis Integration
 - [_] SurrealDB Integration
+- [_] Kubernetes Operator
