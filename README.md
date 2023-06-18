@@ -17,6 +17,7 @@ This is a datafeed server for algorithmic trading written in Rust. It is designe
 - [ ] Get Calendar
 - [ ] Kafka support
 - [ ] Webhook support
+- [ ] Telegram support
 - [ ] Rest API
 
 ## Getting Started
