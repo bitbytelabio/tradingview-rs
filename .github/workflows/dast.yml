@@ -15,11 +15,11 @@ jobs:
         uses: PortSwigger/dastardly-github-action@main
         with:
           target-url: "https://vault.bitbytelab.io"
-          output-filename: "tests/reports/dastardly-report.xml"
+          output-filename: "dastardly-report.xml"
       # You can replace this next step with any JUnit XML parser of your choosing
       - name: Publish Test Report
         if: always() # Forces this step to always run
         uses: mikepenz/action-junit-report@v3
         with:
-          report_paths: "tests/reports/dastardly-report.xml" # You need to update this path if you pass in a different output filename to the Dastardly action
+          report_paths: "**/dastardly-report.xml" # You need to update this path if you pass in a different output filename to the Dastardly action
           require_tests: true
