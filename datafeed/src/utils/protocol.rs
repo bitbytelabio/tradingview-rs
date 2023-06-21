@@ -24,10 +24,19 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
         .filter(|x| !x.is_empty())
         .map(|x| {
             let cleaned = CLEANER_RGX.replace_all(x, "");
-            let packet: Packet =
-                serde_json::from_str(&cleaned).expect("Failed to parse packet from message");
+            let packet: Packet = match serde_json::from_str(&cleaned) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Error parsing packet: {}", e);
+                    Packet {
+                        p: Value::Null,
+                        m: Value::Null,
+                    }
+                }
+            };
             packet
         })
+        .filter(|x| x.p != Value::Null || x.m != Value::Null)
         .collect();
     Ok(packets)
 }
