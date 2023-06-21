@@ -45,3 +45,6 @@ name = "auth"
 
 [[example]]
 name = "websocket"
+
+[[example]]
+name = "utils"

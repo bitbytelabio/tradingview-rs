@@ -1,7 +1,4 @@
-use tokio_tungstenite::{
-    connect_async,
-    tungstenite::{client::IntoClientRequest, connect, Message},
-};
+use tungstenite::{client::IntoClientRequest, connect, Message};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +19,7 @@ async fn main() {
     tracing::debug!("response: {:?}", res);
     println!("WebSocket handshake has been successfully completed");
 
-    socket.write_message(Message::Text(
+    let _ = socket.write_message(Message::Text(
         r#"{
     "action": "authenticate",
     "data": {
@@ -33,7 +30,7 @@ async fn main() {
         .into(),
     ));
 
-    socket.write_message(Message::Text(
+    let _ = socket.write_message(Message::Text(
         r#"{
     "action": "listen",
     "data": {
@@ -44,7 +41,13 @@ async fn main() {
     ));
 
     loop {
-        let msg = socket.read_message().expect("Error reading message");
-        println!("Received: {}", msg);
+        let result = socket.read_message();
+        match result {
+            Ok(msg) => println!("Received: {}", msg),
+            Err(e) => {
+                println!("Error reading message: {:?}", e);
+                break;
+            }
+        }
     }
 }
