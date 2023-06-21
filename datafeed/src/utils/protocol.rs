@@ -1,14 +1,14 @@
+use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use tracing::error;
+use serde_json::{Number, Value};
+use std::{collections::HashMap, error::Error};
+use tracing::{debug, error, info, warn};
 
-pub type DeserializedPacket = (Option<String>, Option<(String, serde_json::Value)>);
-
-#[derive(Serialize, Debug, Clone, PartialEq)]
-pub struct SerializedPacket<T: Serialize> {
-    pub p: String,
-    pub m: Vec<T>,
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub struct Packet {
+    pub p: Value,
+    pub m: Value,
 }
 
 lazy_static! {
@@ -16,38 +16,22 @@ lazy_static! {
     static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
-pub fn parse_ws_packet(data: &str) -> Result<Vec<DeserializedPacket>, Box<dyn Error>> {
-    let packets: Vec<DeserializedPacket> = data
-        .split(SPLITTER_RGX.as_str())
-        .filter_map(|p| {
-            if p.is_empty() {
-                return None;
-            }
-            match serde_json::from_str::<serde_json::Value>(p) {
-                Ok(json) => Some((
-                    json["m"].as_str().map(|s| s.to_owned()),
-                    json["p"].as_array().and_then(|arr| {
-                        let session = arr.get(0)?.as_str()?.to_owned();
-                        let data = arr.get(1)?.clone();
-                        Some((session, data))
-                    }),
-                )),
-                Err(json_error) => {
-                    error!("Cant parse: {}", p);
-                    error!("Error: {}", json_error);
-                    None
-                }
-            }
+#[tracing::instrument(skip(message))]
+pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
+    let packets: Vec<Packet> = SPLITTER_RGX
+        .split(message)
+        .filter(|x| !x.is_empty())
+        .map(|x| {
+            let cleaned = CLEANER_RGX.replace_all(x, "");
+            let packet: Packet = serde_json::from_str(&cleaned).unwrap();
+            packet
         })
         .collect();
 
     Ok(packets)
 }
 
-pub fn format_ws_packet<T>(packet: SerializedPacket<T>) -> String
-where
-    T: Serialize,
-{
-    let msg = serde_json::to_string(&packet).unwrap();
-    format!("~m~{}~m~{}", msg.len(), msg)
+pub fn format_packet(packet: Packet) -> Result<String, Box<dyn Error>> {
+    let msg = serde_json::to_string(&packet)?;
+    Ok(format!("~m~{}~m~{}", msg.len(), msg))
 }
