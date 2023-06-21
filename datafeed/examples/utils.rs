@@ -23,7 +23,7 @@ fn main() {
         m: serde_json::Value::from(vec![1, 2, 3, 4, 5]),
     };
     // println!("{}", test.);
-    let test1 = format_packet(test).unwrap();
+    let test1 = format_packet(&test).unwrap();
     debug!("test1: {}", test1);
 }
 
