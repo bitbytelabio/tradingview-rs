@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, __private::de};
 use serde_json::{Number, Value};
 use std::{collections::HashMap, error::Error};
 use tracing::{debug, error, info, warn};
@@ -33,5 +33,6 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
 
 pub fn format_packet(packet: Packet) -> Result<String, Box<dyn Error>> {
     let msg = serde_json::to_string(&packet)?;
+    debug!("Formatted packet: {}", msg);
     Ok(format!("~m~{}~m~{}", msg.len(), msg))
 }

@@ -1,5 +1,7 @@
 use datafeed::utils::protocol::{format_packet, parse_packet, Packet};
+use serde::__private::de;
 use std::any::type_name;
+use tracing::{debug, error, info, warn};
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -22,7 +24,7 @@ fn main() {
     };
     // println!("{}", test.);
     let test1 = format_packet(test).unwrap();
-    dbg!(test1);
+    debug!("test1: {}", test1);
 }
 
 fn print_type<T>(_: T) {
