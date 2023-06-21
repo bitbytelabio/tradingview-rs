@@ -1,9 +1,9 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{Deserialize, Serialize, __private::de};
-use serde_json::{Number, Value};
-use std::{collections::HashMap, error::Error};
-use tracing::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::error::Error;
+use tracing::debug;
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Packet {
@@ -27,7 +27,6 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
             packet
         })
         .collect();
-
     Ok(packets)
 }
 
