@@ -1,16 +1,23 @@
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use tracing::error;
 
-pub type TWPacket = (Option<String>, Option<(String, serde_json::Value)>);
+pub type DeserializedPacket = (Option<String>, Option<(String, serde_json::Value)>);
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct SerializedPacket<T: Serialize> {
+    pub p: String,
+    pub m: Vec<T>,
+}
 
 lazy_static! {
     static ref CLEANER_RGX: Regex = Regex::new(r"~h~").unwrap();
     static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
-pub fn parse_ws_packet(data: &str) -> Result<Vec<TWPacket>, Box<dyn Error>> {
-    let packets: Vec<TWPacket> = data
+pub fn parse_ws_packet(data: &str) -> Result<Vec<DeserializedPacket>, Box<dyn Error>> {
+    let packets: Vec<DeserializedPacket> = data
         .split(SPLITTER_RGX.as_str())
         .filter_map(|p| {
             if p.is_empty() {
@@ -37,6 +44,10 @@ pub fn parse_ws_packet(data: &str) -> Result<Vec<TWPacket>, Box<dyn Error>> {
     Ok(packets)
 }
 
-pub fn format_ws_packet(packet: &str) -> String {
-    format!("~m~{}~m~{}", packet.len(), packet)
+pub fn format_ws_packet<T>(packet: SerializedPacket<T>) -> String
+where
+    T: Serialize,
+{
+    let msg = serde_json::to_string(&packet).unwrap();
+    format!("~m~{}~m~{}", msg.len(), msg)
 }
