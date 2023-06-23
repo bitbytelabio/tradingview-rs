@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,7 +9,7 @@ pub struct Packet {
     pub m: Value,
 }
 // Define two regular expressions for cleaning and splitting the message
-lazy_static! {
+lazy_static::lazy_static! {
     static ref CLEANER_RGX: Regex = Regex::new(r"~h~").unwrap();
     static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
@@ -24,6 +23,7 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
         .filter(|x| !x.is_empty())
         .map(|x| {
             let cleaned = CLEANER_RGX.replace_all(x, "");
+            tracing::debug!("Receive packet: {}", cleaned);
             let packet: Packet = match serde_json::from_str(&cleaned) {
                 Ok(p) => p,
                 Err(e) => {
