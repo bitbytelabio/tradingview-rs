@@ -18,13 +18,15 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
     if message.is_empty() {
         return Err("Empty message".into());
     }
+    let cleaned_message = CLEANER_RGX.replace_all(message, "");
     let packets: Vec<Packet> = SPLITTER_RGX
-        .split(message)
-        .filter(|x| !x.is_empty())
+        .split(&cleaned_message)
+        .filter(|x| {
+            !x.is_empty() && !(x.contains("studies_metadata_hash") && x.contains("javastudies"))
+        })
         .map(|x| {
-            let cleaned = CLEANER_RGX.replace_all(x, "");
-            tracing::debug!("Receive packet: {}", cleaned);
-            let packet: Packet = match serde_json::from_str(&cleaned) {
+            tracing::debug!("Receive packet: {}", x);
+            let packet: Packet = match serde_json::from_str(&x) {
                 Ok(p) => p,
                 Err(e) => {
                     tracing::error!("Error parsing packet: {}", e);
@@ -40,6 +42,7 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
         .collect();
     Ok(packets)
 }
+
 // Format the packet into a message
 pub fn format_packet(packet: &Packet) -> Result<String, Box<dyn Error>> {
     let msg = serde_json::to_string(&packet)?;
