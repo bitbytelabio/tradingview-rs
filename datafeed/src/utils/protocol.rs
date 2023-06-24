@@ -25,7 +25,6 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
             !x.is_empty() && !(x.contains("studies_metadata_hash") && x.contains("javastudies"))
         })
         .map(|x| {
-            tracing::debug!("Receive packet: {}", x);
             let packet: Packet = match serde_json::from_str(&x) {
                 Ok(p) => p,
                 Err(e) => {

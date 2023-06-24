@@ -10,6 +10,3 @@ pub mod utils;
 
 extern crate google_authenticator;
 extern crate regex;
-
-#[macro_use]
-extern crate lazy_static;
