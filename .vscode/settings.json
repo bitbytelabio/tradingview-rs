@@ -19,8 +19,5 @@
     "UPCOM",
     "XETR"
   ],
-  "sonarlint.connectedMode.project": {
-    "connectionId": "BitByteLabSonarQube",
-    "projectKey": "bitbytelabio_tradingview-rs_AYiaQY3r8L7_0ktngd-_"
-  }
+  "githubPullRequests.ignoredPullRequestBranches": ["main"]
 }
