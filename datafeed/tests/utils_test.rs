@@ -1,5 +1,4 @@
 #[cfg(test)]
-
 mod utils {
     use datafeed::utils::*;
     #[test]
