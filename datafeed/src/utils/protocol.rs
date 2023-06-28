@@ -27,7 +27,7 @@ pub fn parse_packet(message: &str) -> Vec<Value> {
             };
             packet
         })
-        // .filter(|x| x != &Value::Null)
+        .filter(|x| x != &Value::Null)
         .collect();
     packets
 }
