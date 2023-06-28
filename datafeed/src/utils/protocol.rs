@@ -1,7 +1,10 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{de, Value};
 use std::error::Error;
+use tracing::debug;
+use tracing_subscriber::fmt::format;
+use tungstenite::protocol::Message;
 // Define the structure of a Packet
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Packet {
@@ -43,7 +46,24 @@ pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
 }
 
 // Format the packet into a message
-pub fn format_packet(packet: &Packet) -> Result<String, Box<dyn Error>> {
-    let msg = serde_json::to_string(&packet)?;
-    Ok(format!("~m~{}~m~{}", msg.len(), msg))
+pub fn format_packet<T>(packet: T) -> Message
+where
+    T: Serialize,
+{
+    let msg = match serde_json::to_value(&packet) {
+        Ok(msg) => match serde_json::to_string(&msg) {
+            Ok(msg) => msg,
+            Err(e) => {
+                debug!("Error formatting packet: {}", e);
+                String::from("")
+            }
+        },
+        Err(e) => {
+            debug!("Error formatting packet: {}", e);
+            String::from("")
+        }
+    };
+    let formatted_msg = format!("~m~{}~m~{}", msg.len(), msg.as_str());
+    debug!("Formatted packet: {}", formatted_msg);
+    Message::Text(formatted_msg)
 }

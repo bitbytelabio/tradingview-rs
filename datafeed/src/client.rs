@@ -8,11 +8,11 @@ use tungstenite::{client::IntoClientRequest, connect, stream::MaybeTlsStream, Me
 use url::Url;
 
 pub struct Socket {
-    socket: WebSocket<MaybeTlsStream<TcpStream>>,
+    pub socket: WebSocket<MaybeTlsStream<TcpStream>>,
 }
 
 impl Socket {
-    pub fn new(pro: bool, user_data: UserData) -> Self {
+    pub fn new(pro: bool) -> Self {
         let server = if pro { "prodata" } else { "data" };
         let url = Url::parse(&format!(
             "wss://{}.tradingview.com/socket.io/websocket",
@@ -28,27 +28,25 @@ impl Socket {
         };
         info!("WebSocket handshake has been successfully completed");
 
-        let result = socket.write_message(Message::Text(
-            format_packet(&Packet {
-                p: Value::String("set_auth_token".to_string()),
-                m: Value::Array(vec![Value::String("unauthorized_user_token".to_string())]),
-            })
-            .unwrap(),
-        ));
-
-        dbg!(result);
-
         Socket { socket }
     }
     pub fn send(&mut self, packet: &Packet) -> Result<(), Box<dyn Error>> {
-        let msg = match format_packet(packet) {
-            Ok(msg) => msg,
-            Err(e) => {
-                error!("Error formatting packet: {}", e);
-                Err("Error formatting packet")?
-            }
-        };
-        self.socket.write_message(Message::Text(msg)).unwrap();
+        let msg = format_packet(packet);
+        self.socket.write_message(msg).unwrap();
         Ok(())
+    }
+    pub fn read_message(&mut self) {
+        loop {
+            let result = self.socket.read_message();
+            match result {
+                Ok(msg) => {
+                    info!("{}", msg.to_text().unwrap());
+                }
+                Err(e) => {
+                    error!("Error reading message: {:?}", e);
+                    break;
+                }
+            }
+        }
     }
 }
