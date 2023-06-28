@@ -31,6 +31,12 @@ impl fmt::Display for DataServer {
     }
 }
 
+#[derive(Serialize)]
+struct SocketMessage {
+    m: Value,
+    p: Value,
+}
+
 impl Socket {
     pub fn new(data_server: DataServer, user_data: Option<UserData>) -> Self {
         let server = data_server.to_string();
@@ -47,39 +53,42 @@ impl Socket {
             Err(e) => panic!("Error during handshake: {}", e),
         };
         info!("WebSocket handshake has been successfully completed");
-
-        let mut msg: HashMap<String, Value> = HashMap::new();
-        msg.insert("m".to_string(), Value::String("set_auth_token".to_string()));
         match user_data {
             Some(user_data) => {
-                msg.insert(
-                    "p".to_string(),
-                    Value::Array(vec![Value::String(user_data.auth_token)]),
-                );
+                let auth = SocketMessage {
+                    m: Value::String("set_auth_token".to_string()),
+                    p: Value::Array(vec![Value::String(user_data.auth_token)]),
+                };
+                let msg = format_packet(auth);
+                match socket.write_message(msg.clone()) {
+                    Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
+                    Err(e) => error!("Error sending message: {:?}", e),
+                }
             }
             None => {
-                msg.insert(
-                    "p".to_string(),
-                    Value::Array(vec![Value::String("unauthorized_user_token".to_string())]),
-                );
+                let auth = SocketMessage {
+                    m: Value::String("set_auth_token".to_string()),
+                    p: Value::Array(vec![Value::String("unauthorized_user_token".to_string())]),
+                };
+                let msg = format_packet(auth);
+                match socket.write_message(msg.clone()) {
+                    Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
+                    Err(e) => error!("Error sending message: {:?}", e),
+                }
             }
-        }
-
-        let msg = format_packet(msg);
-        match socket.write_message(msg.clone()) {
-            Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
-            Err(e) => error!("Error sending message: {:?}", e),
-        }
+        };
         Socket {
             socket,
             messages: vec![],
         }
     }
+
     pub fn send<T>(&mut self, packet: T) -> Result<(), Box<dyn Error>>
     where
         T: Serialize,
     {
-        let msg = format_packet(packet);
+        let msg = serde_json::to_value(packet)?;
+        let msg = format_packet(msg);
         self.messages.push(msg);
         self.send_queue();
         Ok(())
