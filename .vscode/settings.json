@@ -8,6 +8,7 @@
     "LUXSE",
     "MILSEDEX",
     "NEWCONNECT",
+    "prodata",
     "Referer",
     "rustls",
     "sessionid",
@@ -17,6 +18,7 @@
     "tungstenite",
     "uacq",
     "UPCOM",
+    "widgetdata",
     "XETR"
   ],
   "githubPullRequests.ignoredPullRequestBranches": ["main"]

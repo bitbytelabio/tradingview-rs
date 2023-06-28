@@ -12,6 +12,7 @@ use url::Url;
 
 pub struct Socket {
     pub socket: WebSocket<MaybeTlsStream<TcpStream>>,
+    messages: Vec<Message>,
 }
 
 pub enum DataServer {
@@ -65,17 +66,35 @@ impl Socket {
         }
 
         let msg = format_packet(msg);
-        socket.write_message(msg).unwrap();
-        Socket { socket }
+        match socket.write_message(msg.clone()) {
+            Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
+            Err(e) => error!("Error sending message: {:?}", e),
+        }
+        Socket {
+            socket,
+            messages: vec![],
+        }
     }
     pub fn send<T>(&mut self, packet: T) -> Result<(), Box<dyn Error>>
     where
         T: Serialize,
     {
         let msg = format_packet(packet);
-        self.socket.write_message(msg).unwrap();
+        self.messages.push(msg);
+        self.send_queue();
         Ok(())
     }
+
+    fn send_queue(&mut self) {
+        while self.socket.can_read() && self.socket.can_write() && self.messages.len() > 0 {
+            let msg = self.messages.remove(0);
+            match self.socket.write_message(msg.clone()) {
+                Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
+                Err(e) => error!("Error sending message: {:?}", e),
+            }
+        }
+    }
+
     pub fn read_message(&mut self) {
         loop {
             let result = self.socket.read_message();
