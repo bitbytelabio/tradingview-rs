@@ -1,53 +1,17 @@
+use datafeed::utils::protocol::{format_packet, parse_packet};
+use tracing::debug;
 use tungstenite::{client::IntoClientRequest, connect, Message};
 
 #[tokio::main]
 async fn main() {
     // Initialize tracing subscriber
     tracing_subscriber::fmt::init();
-    // Parse the URL from the connection address
-    let url = url::Url::parse("wss://data.tradingview.com/socket.io/websocket").unwrap();
-    // Convert the URL into a client request
-    let mut request = url.into_client_request().unwrap();
-    // Add Origin header to the request
-    let headers = request.headers_mut();
-    headers.insert("Origin", "https://data.tradingview.com/".parse().unwrap());
-    // Log the request
-    tracing::debug!("request: {:?}", request);
-    // Connect to the WebSocket server
-    let (mut socket, res) = connect(request).unwrap();
-    // Log the response
-    tracing::debug!("response: {:?}", res);
-    println!("WebSocket handshake has been successfully completed");
+    let mut client = datafeed::client::Socket::new(true);
 
-    let _ = socket.write_message(Message::Text(
-        r#"{
-    "action": "authenticate",
-    "data": {
-        "key_id": "API-KEY",
-        "secret_key": "SECRET-KEY"
-    }
-}"#
-        .into(),
-    ));
-
-    let _ = socket.write_message(Message::Text(
-        r#"{
-    "action": "listen",
-    "data": {
-        "streams": ["AM.SPY"]
-    }
-}"#
-        .into(),
-    ));
-
-    loop {
-        let result = socket.read_message();
-        match result {
-            Ok(msg) => println!("Received: {}", msg),
-            Err(e) => {
-                println!("Error reading message: {:?}", e);
-                break;
-            }
-        }
-    }
+    client.read_message();
+    // let raw = r#"~m~559~m~{"m":"qsd","p":["qs_snapshoter_basic-symbol-quotes_2btz4hzMC5lc",{"n":"TVC:DE10Y","s":"ok","v":{"visible-plots-set":"ohlc","update_mode":"streaming","typespecs":["government","yield","benchmark"],"type":"bond","symbol-primaryname":"TVC:DE10Y","source-logoid":"provider/tvc","short_name":"DE10Y","provider_id":"refinitiv","pro_name":"TVC:DE10Y","pricescale":1000,"minmov":1,"logoid":"country/DE","listed_exchange":"TVC","fractional":false,"exchange":"TVC","description":"Germany 10 Year Government Bonds Yield","country_code":"DE","base_name":["TVC:DE10Y"]}}]}"#;
+    // let packets = parse_packet(raw);
+    // debug!("{:?}", packets);
+    // let msg = format_packet(packets[0].clone());
+    // debug!("{:?}", msg.to_string());
 }

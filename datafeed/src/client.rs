@@ -1,25 +1,67 @@
+use crate::auth::UserData;
 use crate::utils::protocol::{format_packet, parse_packet};
+use serde::Serialize;
+use serde::__private::de;
 use serde_json::Value;
-use std::io::{Read, Write};
+use std::collections::HashMap;
+use std::error::Error;
 use std::net::TcpStream;
+use tracing::{debug, error, info};
 use tungstenite::{client::IntoClientRequest, connect, stream::MaybeTlsStream, Message, WebSocket};
 use url::Url;
 
-trait Client {
-    fn new() -> Self;
-    fn send(&mut self, msg: &str);
-    fn recv(&mut self) -> String;
+pub struct Socket {
+    pub socket: WebSocket<MaybeTlsStream<TcpStream>>,
 }
 
-// impl TVSocket {
-//     pub fn new() -> Self {
-//         let url = Url::parse("wss://data.tradingview.com/socket.io/websocket").unwrap();
-//         let mut request = url.into_client_request().unwrap();
-//         let headers = request.headers_mut();
-//         headers.insert("Origin", "https://data.tradingview.com/".parse().unwrap());
-//         let (socket, _) = connect(request).unwrap();
-//         println!("WebSocket handshake has been successfully completed");
-//         TVSocket { socket }
-//     }
-//     pub fn send() {}
-// }
+impl Socket {
+    pub fn new(pro: bool) -> Self {
+        let server = if pro { "prodata" } else { "data" };
+        let url = Url::parse(&format!(
+            "wss://{}.tradingview.com/socket.io/websocket",
+            server
+        ))
+        .unwrap();
+        let mut request = url.into_client_request().unwrap();
+        let headers = request.headers_mut();
+        headers.insert("Origin", "https://data.tradingview.com/".parse().unwrap());
+        let mut socket = match connect(request) {
+            Ok((socket, _)) => socket,
+            Err(e) => panic!("Error during handshake: {}", e),
+        };
+        info!("WebSocket handshake has been successfully completed");
+
+        let mut msg: HashMap<String, Value> = HashMap::new();
+        msg.insert("m".to_string(), Value::String("set_auth_token".to_string()));
+        msg.insert(
+            "p".to_string(),
+            Value::Array(vec![Value::String("unauthorized_user_token".to_string())]),
+        );
+        debug!("{:?}", msg);
+        let msg = format_packet(msg);
+        socket.write_message(msg).unwrap();
+        Socket { socket }
+    }
+    pub fn send<T>(&mut self, packet: T) -> Result<(), Box<dyn Error>>
+    where
+        T: Serialize,
+    {
+        let msg = format_packet(packet);
+        self.socket.write_message(msg).unwrap();
+        Ok(())
+    }
+    pub fn read_message(&mut self) {
+        loop {
+            let result = self.socket.read_message();
+            match result {
+                Ok(msg) => {
+                    info!("{}", msg.to_text().unwrap());
+                }
+                Err(e) => {
+                    error!("Error reading message: {:?}", e);
+                    break;
+                }
+            }
+        }
+    }
+}

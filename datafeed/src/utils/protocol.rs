@@ -1,49 +1,56 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::error::Error;
-// Define the structure of a Packet
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct Packet {
-    pub p: Value,
-    pub m: Value,
-}
+use tracing::{debug, warn};
+use tungstenite::protocol::Message;
 // Define two regular expressions for cleaning and splitting the message
 lazy_static::lazy_static! {
     static ref CLEANER_RGX: Regex = Regex::new(r"~h~").unwrap();
     static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 // Parse the packet from the message
-pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
+pub fn parse_packet(message: &str) -> Vec<Value> {
     if message.is_empty() {
-        return Err("Empty message".into());
+        vec![Value::Null];
     }
     let cleaned_message = CLEANER_RGX.replace_all(message, "");
-    let packets: Vec<Packet> = SPLITTER_RGX
+    let packets: Vec<Value> = SPLITTER_RGX
         .split(&cleaned_message)
-        .filter(|x| {
-            !x.is_empty() && !(x.contains("studies_metadata_hash") && x.contains("javastudies"))
-        })
+        .filter(|x| !x.is_empty())
         .map(|x| {
-            let packet: Packet = match serde_json::from_str(&x) {
-                Ok(p) => p,
+            let packet: Value = match serde_json::from_str(x) {
+                Ok(packet) => packet,
                 Err(e) => {
-                    tracing::error!("Error parsing packet: {}", e);
-                    Packet {
-                        p: Value::Null,
-                        m: Value::Null,
-                    }
+                    debug!("Error parsing packet: {}", e);
+                    Value::Null
                 }
             };
             packet
         })
-        .filter(|x| x.p != Value::Null || x.m != Value::Null)
+        // .filter(|x| x != &Value::Null)
         .collect();
-    Ok(packets)
+    packets
 }
 
 // Format the packet into a message
-pub fn format_packet(packet: &Packet) -> Result<String, Box<dyn Error>> {
-    let msg = serde_json::to_string(&packet)?;
-    Ok(format!("~m~{}~m~{}", msg.len(), msg))
+pub fn format_packet<T>(packet: T) -> Message
+where
+    T: Serialize,
+{
+    let msg = match serde_json::to_value(&packet) {
+        Ok(msg) => match serde_json::to_string(&msg) {
+            Ok(msg) => msg,
+            Err(e) => {
+                warn!("Error formatting packet: {}", e);
+                String::from("")
+            }
+        },
+        Err(e) => {
+            warn!("Error formatting packet: {}", e);
+            String::from("")
+        }
+    };
+    let formatted_msg = format!("~m~{}~m~{}", msg.len(), msg.as_str());
+    debug!("Formatted packet: {}", formatted_msg);
+    Message::Text(formatted_msg)
 }
