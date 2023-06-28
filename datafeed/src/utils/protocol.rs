@@ -1,9 +1,7 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::{de, Value};
-use std::error::Error;
+use serde_json::Value;
 use tracing::debug;
-use tracing_subscriber::fmt::format;
 use tungstenite::protocol::Message;
 // Define the structure of a Packet
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
@@ -17,32 +15,27 @@ lazy_static::lazy_static! {
     static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 // Parse the packet from the message
-pub fn parse_packet(message: &str) -> Result<Vec<Packet>, Box<dyn Error>> {
+pub fn parse_packet(message: &str) -> Vec<Value> {
     if message.is_empty() {
-        return Err("Empty message".into());
+        vec![Value::Null];
     }
     let cleaned_message = CLEANER_RGX.replace_all(message, "");
-    let packets: Vec<Packet> = SPLITTER_RGX
+    let packets: Vec<Value> = SPLITTER_RGX
         .split(&cleaned_message)
-        .filter(|x| {
-            !x.is_empty() && !(x.contains("studies_metadata_hash") && x.contains("javastudies"))
-        })
+        .filter(|x| !x.is_empty())
         .map(|x| {
-            let packet: Packet = match serde_json::from_str(&x) {
-                Ok(p) => p,
+            let packet: Value = match serde_json::from_str(x) {
+                Ok(packet) => packet,
                 Err(e) => {
-                    tracing::error!("Error parsing packet: {}", e);
-                    Packet {
-                        p: Value::Null,
-                        m: Value::Null,
-                    }
+                    debug!("Error parsing packet: {}", e);
+                    Value::Null
                 }
             };
             packet
         })
-        .filter(|x| x.p != Value::Null || x.m != Value::Null)
+        .filter(|x| x != &Value::Null)
         .collect();
-    Ok(packets)
+    packets
 }
 
 // Format the packet into a message
