@@ -40,6 +40,9 @@ futures-util = { version = "0.3", default-features = false, features = [
 ] }
 futures-channel = "0.3"
 
+strum = "0.25"
+strum_macros = "0.25"
+
 [[example]]
 name = "auth"
 
