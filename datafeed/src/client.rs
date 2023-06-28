@@ -1,11 +1,12 @@
 use crate::auth::UserData;
 use crate::utils::protocol::{format_packet, parse_packet};
 use serde::Serialize;
+use serde::__private::de;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
 use std::net::TcpStream;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use tungstenite::{client::IntoClientRequest, connect, stream::MaybeTlsStream, Message, WebSocket};
 use url::Url;
 
@@ -30,9 +31,15 @@ impl Socket {
         };
         info!("WebSocket handshake has been successfully completed");
 
-        let mut msg: HashMap<String, Vec<String>> = HashMap::new();
-        // msg.add("set_auth_token".to_string(), vec![UserData::get_token()]);
-
+        let mut msg: HashMap<String, Value> = HashMap::new();
+        msg.insert("m".to_string(), Value::String("set_auth_token".to_string()));
+        msg.insert(
+            "p".to_string(),
+            Value::Array(vec![Value::String("unauthorized_user_token".to_string())]),
+        );
+        debug!("{:?}", msg);
+        let msg = format_packet(msg);
+        socket.write_message(msg).unwrap();
         Socket { socket }
     }
     pub fn send<T>(&mut self, packet: T) -> Result<(), Box<dyn Error>>
