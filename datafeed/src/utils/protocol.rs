@@ -1,14 +1,8 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::debug;
+use tracing::{debug, warn};
 use tungstenite::protocol::Message;
-// Define the structure of a Packet
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct Packet {
-    pub p: Value,
-    pub m: Value,
-}
 // Define two regular expressions for cleaning and splitting the message
 lazy_static::lazy_static! {
     static ref CLEANER_RGX: Regex = Regex::new(r"~h~").unwrap();
@@ -47,12 +41,12 @@ where
         Ok(msg) => match serde_json::to_string(&msg) {
             Ok(msg) => msg,
             Err(e) => {
-                debug!("Error formatting packet: {}", e);
+                warn!("Error formatting packet: {}", e);
                 String::from("")
             }
         },
         Err(e) => {
-            debug!("Error formatting packet: {}", e);
+            warn!("Error formatting packet: {}", e);
             String::from("")
         }
     };

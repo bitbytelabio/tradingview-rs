@@ -1,6 +1,8 @@
 use crate::auth::UserData;
-use crate::utils::protocol::{format_packet, parse_packet, Packet};
+use crate::utils::protocol::{format_packet, parse_packet};
+use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::error::Error;
 use std::net::TcpStream;
 use tracing::{error, info};
@@ -28,9 +30,15 @@ impl Socket {
         };
         info!("WebSocket handshake has been successfully completed");
 
+        let mut msg: HashMap<String, Vec<String>> = HashMap::new();
+        // msg.add("set_auth_token".to_string(), vec![UserData::get_token()]);
+
         Socket { socket }
     }
-    pub fn send(&mut self, packet: &Packet) -> Result<(), Box<dyn Error>> {
+    pub fn send<T>(&mut self, packet: T) -> Result<(), Box<dyn Error>>
+    where
+        T: Serialize,
+    {
         let msg = format_packet(packet);
         self.socket.write_message(msg).unwrap();
         Ok(())
