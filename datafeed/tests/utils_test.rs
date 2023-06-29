@@ -7,4 +7,10 @@ mod utils {
         let data = protocol::parse_packet(messages);
         assert_eq!(data.len(), 129);
     }
+
+    #[test]
+    fn gen_session_id_test() {
+        let quote_session = gen_session_id("qc");
+        dbg!(quote_session);
+    }
 }

@@ -1,8 +1,8 @@
 use crate::auth::UserData;
+use crate::utils::gen_session_id;
 use crate::utils::protocol::{format_packet, parse_packet};
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::net::TcpStream;
@@ -13,6 +13,7 @@ use url::Url;
 pub struct Socket {
     pub socket: WebSocket<MaybeTlsStream<TcpStream>>,
     messages: Vec<Message>,
+    session_id: String,
 }
 
 pub enum DataServer {
@@ -80,6 +81,7 @@ impl Socket {
         Socket {
             socket,
             messages: vec![],
+            session_id: gen_session_id("qs"),
         }
     }
 

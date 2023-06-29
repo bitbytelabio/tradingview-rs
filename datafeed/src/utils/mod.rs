@@ -1,7 +1,7 @@
 use rand::Rng;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use reqwest::{Client, Error, Response};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 pub mod protocol;
 
@@ -35,7 +35,16 @@ pub async fn get_request(url: &str, cookies: Option<String>) -> Result<Response,
     request = match cookies {
         Some(cookies) => {
             let mut headers = HeaderMap::new();
-            headers.insert(COOKIE, HeaderValue::from_str(&cookies).unwrap());
+            headers.insert(
+                COOKIE,
+                match HeaderValue::from_str(&cookies) {
+                    Ok(header_value) => header_value,
+                    Err(e) => {
+                        error!("Error parsing cookies: {}", e);
+                        HeaderValue::from_static("")
+                    }
+                },
+            );
             request.headers(headers)
         }
         None => request,

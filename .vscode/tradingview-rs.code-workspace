@@ -1,0 +1,31 @@
+{
+  "folders": [
+    {
+      "name": "tradingview-rs",
+      "path": "../"
+    }
+  ],
+  "settings": {
+    "cSpell.words": [
+      "ARCA",
+      "BIST",
+      "javastudies",
+      "KHTML",
+      "LSIN",
+      "LUXSE",
+      "MILSEDEX",
+      "NEWCONNECT",
+      "Referer",
+      "rustls",
+      "sessionid",
+      "socketio",
+      "totp",
+      "TSXV",
+      "tungstenite",
+      "uacq",
+      "UPCOM",
+      "XETR"
+    ],
+    "githubPullRequests.ignoredPullRequestBranches": ["main"]
+  }
+}
