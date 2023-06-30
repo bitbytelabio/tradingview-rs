@@ -1,7 +1,7 @@
 use crate::auth::UserData;
 use crate::utils::gen_session_id;
 use crate::utils::protocol::{format_packet, parse_packet};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
 use std::fmt;
@@ -13,7 +13,9 @@ use url::Url;
 pub struct Socket {
     pub socket: WebSocket<MaybeTlsStream<TcpStream>>,
     messages: Vec<Message>,
-    session_id: String,
+    quote_session: Option<String>,
+    chart_session: Option<String>,
+    replay_session: Option<String>,
 }
 
 pub enum DataServer {
@@ -32,7 +34,7 @@ impl fmt::Display for DataServer {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct SocketMessage {
     m: Value,
     p: Value,
@@ -81,7 +83,9 @@ impl Socket {
         Socket {
             socket,
             messages: vec![],
-            session_id: gen_session_id("qs"),
+            quote_session: None,
+            chart_session: None,
+            replay_session: None,
         }
     }
 
@@ -111,7 +115,15 @@ impl Socket {
             let result = self.socket.read_message();
             match result {
                 Ok(msg) => {
-                    info!("{}", msg.to_text().unwrap());
+                    debug!("Message received: {}", msg.to_string());
+                    let parsed_msg = parse_packet(&msg.to_string());
+                    parsed_msg.into_iter().for_each(|x| {
+                        if x.is_number() {
+                            self.socket.write_message(msg.clone()).unwrap();
+                            debug!("Message sent successfully: {}", msg.to_string());
+                        }
+                        debug!("Message received: {:?}", x);
+                    });
                 }
                 Err(e) => {
                     error!("Error reading message: {:?}", e);
