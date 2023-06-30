@@ -1,6 +1,7 @@
 use crate::auth::UserData;
 use crate::utils::gen_session_id;
 use crate::utils::protocol::{format_packet, parse_packet};
+use futures_util::future::ok;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
@@ -35,9 +36,9 @@ impl fmt::Display for DataServer {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct SocketMessage {
-    m: Value,
-    p: Value,
+pub struct SocketMessage {
+    pub m: String,
+    pub p: Vec<Value>,
 }
 
 impl Socket {
@@ -59,8 +60,8 @@ impl Socket {
         match user_data {
             Some(user_data) => {
                 let auth = SocketMessage {
-                    m: Value::String("set_auth_token".to_string()),
-                    p: Value::Array(vec![Value::String(user_data.auth_token)]),
+                    m: "set_auth_token".to_string(),
+                    p: vec![Value::String(user_data.auth_token)],
                 };
                 let msg = format_packet(auth);
                 match socket.write_message(msg.clone()) {
@@ -70,8 +71,8 @@ impl Socket {
             }
             None => {
                 let auth = SocketMessage {
-                    m: Value::String("set_auth_token".to_string()),
-                    p: Value::Array(vec![Value::String("unauthorized_user_token".to_string())]),
+                    m: "set_auth_token".to_string(),
+                    p: vec![Value::String("unauthorized_user_token".to_string())],
                 };
                 let msg = format_packet(auth);
                 match socket.write_message(msg.clone()) {
@@ -93,9 +94,7 @@ impl Socket {
     where
         T: Serialize,
     {
-        let msg = serde_json::to_value(packet)?;
-        let msg = format_packet(msg);
-        self.messages.push(msg);
+        self.messages.push(format_packet(packet));
         self.send_queue();
         Ok(())
     }
@@ -104,8 +103,13 @@ impl Socket {
         while self.socket.can_read() && self.socket.can_write() && self.messages.len() > 0 {
             let msg = self.messages.remove(0);
             match self.socket.write_message(msg.clone()) {
-                Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
-                Err(e) => error!("Error sending message: {:?}", e),
+                Ok(_) => {
+                    debug!("Message sent successfully: {}", msg.to_string());
+                }
+                Err(e) => {
+                    error!("Error sending message: {:?}", e);
+                    self.messages.push(msg);
+                }
             }
         }
     }
