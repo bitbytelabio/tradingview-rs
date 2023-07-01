@@ -15,5 +15,6 @@ mod utils {
     #[test]
     fn gen_session_id_test() {
         let quote_session = gen_session_id("qc");
+        assert!(!quote_session.is_empty());
     }
 }
