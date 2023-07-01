@@ -1,7 +1,6 @@
 use crate::auth::UserData;
 use crate::utils::gen_session_id;
 use crate::utils::protocol::{format_packet, parse_packet};
-use futures_util::future::ok;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
@@ -12,11 +11,8 @@ use tungstenite::{client::IntoClientRequest, connect, stream::MaybeTlsStream, Me
 use url::Url;
 
 pub struct Socket {
-    pub socket: WebSocket<MaybeTlsStream<TcpStream>>,
+    pub socket_stream: WebSocket<MaybeTlsStream<TcpStream>>,
     messages: Vec<Message>,
-    quote_session: Option<String>,
-    chart_session: Option<String>,
-    replay_session: Option<String>,
 }
 
 pub enum DataServer {
@@ -39,6 +35,26 @@ impl fmt::Display for DataServer {
 pub struct SocketMessage {
     pub m: String,
     pub p: Vec<Value>,
+}
+
+pub trait SocketClient {
+    type QuoteSession: fmt::Display;
+    type ChartSession: fmt::Display;
+    type ReplaySession: fmt::Display;
+    fn quote_create_session(&mut self) -> Self::QuoteSession;
+    fn quote_set_fields(&mut self, session: Self::QuoteSession);
+    fn quote_add_symbols(&mut self, session: Self::QuoteSession, symbol: String);
+    fn chart_create_session(&mut self) -> Self::ChartSession;
+    fn chart_set_fields(&mut self, session: Self::ChartSession);
+    fn chart_add_symbols(&mut self, session: Self::ChartSession, symbol: String);
+    fn replay_create_session(&mut self) -> Self::ReplaySession;
+    fn replay_set_fields(&mut self, session: Self::ReplaySession);
+    fn replay_add_symbols(&mut self, session: Self::ReplaySession, symbol: String);
+    fn new(data_server: DataServer, user_data: Option<UserData>) -> Self;
+    fn send<T>(&mut self, packet: T) -> Result<(), Box<dyn Error>>
+    where
+        T: Serialize;
+    fn read_message(&mut self);
 }
 
 impl Socket {
@@ -82,11 +98,8 @@ impl Socket {
             }
         };
         Socket {
-            socket,
+            socket_stream: socket,
             messages: vec![],
-            quote_session: None,
-            chart_session: None,
-            replay_session: None,
         }
     }
 
@@ -100,9 +113,12 @@ impl Socket {
     }
 
     fn send_queue(&mut self) {
-        while self.socket.can_read() && self.socket.can_write() && self.messages.len() > 0 {
+        while self.socket_stream.can_read()
+            && self.socket_stream.can_write()
+            && self.messages.len() > 0
+        {
             let msg = self.messages.remove(0);
-            match self.socket.write_message(msg.clone()) {
+            match self.socket_stream.write_message(msg.clone()) {
                 Ok(_) => {
                     debug!("Message sent successfully: {}", msg.to_string());
                 }
@@ -116,14 +132,14 @@ impl Socket {
 
     pub fn read_message(&mut self) {
         loop {
-            let result = self.socket.read_message();
+            let result = self.socket_stream.read_message();
             match result {
                 Ok(msg) => {
                     debug!("Message received: {}", msg.to_string());
                     let parsed_msg = parse_packet(&msg.to_string());
                     parsed_msg.into_iter().for_each(|x| {
                         if x.is_number() {
-                            self.socket.write_message(msg.clone()).unwrap();
+                            self.socket_stream.write_message(msg.clone()).unwrap();
                             debug!("Message sent successfully: {}", msg.to_string());
                         }
                         debug!("Message received: {:?}", x);
