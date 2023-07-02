@@ -135,7 +135,6 @@ impl Socket {
             let result = self.socket_stream.read_message();
             match result {
                 Ok(msg) => {
-                    debug!("Message received: {}", msg.to_string());
                     let parsed_msg = parse_packet(&msg.to_string());
                     parsed_msg.into_iter().for_each(|x| {
                         if x.is_number() {
