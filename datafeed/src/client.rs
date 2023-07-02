@@ -37,26 +37,6 @@ pub struct SocketMessage {
     pub p: Vec<Value>,
 }
 
-pub trait SocketClient {
-    type QuoteSession: fmt::Display;
-    type ChartSession: fmt::Display;
-    type ReplaySession: fmt::Display;
-    fn quote_create_session(&mut self) -> Self::QuoteSession;
-    fn quote_set_fields(&mut self, session: Self::QuoteSession);
-    fn quote_add_symbols(&mut self, session: Self::QuoteSession, symbol: String);
-    fn chart_create_session(&mut self) -> Self::ChartSession;
-    fn chart_set_fields(&mut self, session: Self::ChartSession);
-    fn chart_add_symbols(&mut self, session: Self::ChartSession, symbol: String);
-    fn replay_create_session(&mut self) -> Self::ReplaySession;
-    fn replay_set_fields(&mut self, session: Self::ReplaySession);
-    fn replay_add_symbols(&mut self, session: Self::ReplaySession, symbol: String);
-    fn new(data_server: DataServer, user_data: Option<UserData>) -> Self;
-    fn send<T>(&mut self, packet: T) -> Result<(), Box<dyn Error>>
-    where
-        T: Serialize;
-    fn read_message(&mut self);
-}
-
 impl Socket {
     pub fn new(data_server: DataServer, user_data: Option<UserData>) -> Self {
         let server = data_server.to_string();

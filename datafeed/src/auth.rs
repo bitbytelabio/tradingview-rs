@@ -1,3 +1,4 @@
+use crate::utils::get_request;
 use crate::UA;
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
@@ -23,7 +24,7 @@ pub async fn get_user(
     signature: &str,
     url: Option<&str>,
 ) -> Result<UserData, Box<dyn std::error::Error>> {
-    let response = crate::utils::get_request(
+    let response = get_request(
         url.unwrap_or_else(|| "https://www.tradingview.com/"),
         Some(format!(
             "sessionid={}; sessionid_sign={};",
