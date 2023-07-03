@@ -20,6 +20,7 @@ lazy_static::lazy_static! {
     ];
 }
 
+use serde_json::to_value;
 use serde_json::Value;
 
 use crate::client::SocketMessage;

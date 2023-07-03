@@ -1,58 +1,122 @@
-# create a 3 nodes kafka cluster using confluent kafka container with kraft mode
-version: '3'
+version: '3.7'
+name: redpanda-owl-shop
+networks:
+  redpanda_network:
+    driver: bridge
+volumes:
+  redpanda: null
 services:
-  broker1:
-    image: confluentinc/cp-kafka:latest
-    container_name: broker1
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.1.13
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      # Address the broker advertises to clients that connect to the Kafka API.
+      # Use the internal addresses to connect to the Redpanda brokers
+      # from inside the same Docker network.
+      # Use the external addresses to connect to the Redpanda brokers
+      # from outside the Docker network.
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      # Address the broker advertises to clients that connect to the HTTP Proxy.
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      # Redpanda brokers use the RPC API to communicate with each other internally.
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
     ports:
-      - "9091:9092"
+      - 18081:18081
+      - 18082:18082
+      - 19092:19092
+      - 19644:9644
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+    networks:
+      - redpanda_network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+  console:
+    image: docker.redpanda.com/redpandadata/console:v2.2.4
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
     environment:
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-      KAFKA_BROKER_ID: 1
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9091,PLAINTEXT_INTERNAL://broker1:29092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker1:9092,2@broker2:9092,3@broker3:9092
-      KAFKA_LISTENERS: CONTROLLER://broker1:9092,PLAINTEXT://broker1:9092
-  broker2:
-    image: confluentinc/cp-kafka:latest
-    container_name: broker2
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+        connect:
+          enabled: true
+          clusters:
+            - name: local-connect-cluster
+              url: http://connect:8083
     ports:
-      - "9092:9092"
+      - 8080:8080
+    networks:
+      - redpanda_network
+    depends_on:
+      - redpanda
+  owl-shop:
+    image: quay.io/cloudhut/owl-shop:sha-042112b
+    networks:
+      - redpanda_network
+    # platform: 'linux/amd64'
+    entrypoint: /bin/sh
+    command: -c "echo \"$$OWLSHOP_CONFIG_FILE\" > /tmp/config.yml; /app/owlshop"
     environment:
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-      KAFKA_BROKER_ID: 2
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker2:29092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
-      KAFKA_NODE_ID: 2
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker1:9092,2@broker2:9092,3@broker3:9092
-      KAFKA_LISTENERS: CONTROLLER://broker2:9092,PLAINTEXT://broker2:9092
-  broker3:
-    image: confluentinc/cp-kafka:latest
-    container_name: broker3
+      CONFIG_FILEPATH: /tmp/config.yml
+      OWLSHOP_CONFIG_FILE: |
+        shop:
+          requestRate: 1
+          interval: 0.1s
+          topicReplicationFactor: 1
+          topicPartitionCount: 1
+        kafka:
+          brokers: "redpanda:9092"
+    depends_on:
+      - redpanda
+  connect:
+    image: docker.redpanda.com/redpandadata/connectors:latest
+    hostname: connect
+    container_name: connect
+    networks:
+      - redpanda_network
+    # platform: 'linux/amd64'
+    depends_on:
+      - redpanda
     ports:
-      - "9093:9092"
+      - "8083:8083"
     environment:
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-      KAFKA_BROKER_ID: 3
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9093,PLAINTEXT_INTERNAL://broker3:29092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
-      KAFKA_NODE_ID: 3
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker1:9092,2@broker2:9092,3@broker3:9092
-      KAFKA_LISTENERS: CONTROLLER://broker3:9092,PLAINTEXT://broker3:9092
+      CONNECT_CONFIGURATION: |
+        key.converter=org.apache.kafka.connect.converters.ByteArrayConverter
+        value.converter=org.apache.kafka.connect.converters.ByteArrayConverter
+        group.id=connectors-cluster
+        offset.storage.topic=_internal_connectors_offsets
+        config.storage.topic=_internal_connectors_configs
+        status.storage.topic=_internal_connectors_status
+        config.storage.replication.factor=-1
+        offset.storage.replication.factor=-1
+        status.storage.replication.factor=-1
+        offset.flush.interval.ms=1000
+        producer.linger.ms=50
+        producer.batch.size=131072
+      CONNECT_BOOTSTRAP_SERVERS: redpanda:9092
+      CONNECT_GC_LOG_ENABLED: "false"
+      CONNECT_HEAP_OPTS: -Xms512M -Xmx512M
+      CONNECT_LOG_LEVEL: info
