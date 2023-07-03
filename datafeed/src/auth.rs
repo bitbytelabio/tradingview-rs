@@ -1,3 +1,4 @@
+use crate::utils::get_request;
 use crate::UA;
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
@@ -23,7 +24,7 @@ pub async fn get_user(
     signature: &str,
     url: Option<&str>,
 ) -> Result<UserData, Box<dyn std::error::Error>> {
-    let response = crate::utils::get_request(
+    let response = get_request(
         url.unwrap_or_else(|| "https://www.tradingview.com/"),
         Some(format!(
             "sessionid={}; sessionid_sign={};",
@@ -157,7 +158,7 @@ pub async fn login_user(
             Some(opt) => {
                 let session = &session.unwrap();
                 let signature = &signature.unwrap();
-                let response = Client::builder()
+                let response = match Client::builder()
                     .use_rustls_tls()
                     .default_headers({
                         let mut headers = HeaderMap::new();
@@ -187,7 +188,13 @@ pub async fn login_user(
                     )
                     .send()
                     .await
-                    .unwrap();
+                {
+                    Ok(response) => response,
+                    Err(e) => {
+                        error!("Error sending request: {:?}", e);
+                        return Err("Error sending request".into());
+                    }
+                };
                 if response.status() != 200 {
                     error!("Invalid TOTP secret");
                     return Err("Invalid TOTP secret".into());

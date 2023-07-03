@@ -25,7 +25,5 @@ jobs:
       options: --user root
     steps:
       - uses: actions/checkout@v3
-      - name: Install dependencies
-        run: apt-get update && apt-get install -y libssl-dev pkg-config
       - name: Unit tests
         run: make test
