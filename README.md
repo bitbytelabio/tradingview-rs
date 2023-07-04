@@ -20,6 +20,7 @@ This is a datafeed server for algorithmic trading written in Rust. It is designe
 - [ ] Polars support
 - [ ] Rest API
 - [ ] gRPC API
+- [ ] Desktop chart drawing
 
 ## Getting Started
 ### Prerequisites

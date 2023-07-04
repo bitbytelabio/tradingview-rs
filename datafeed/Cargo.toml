@@ -37,8 +37,8 @@ rand = "0.8"
 lazy_static = "1.4"
 url = "2.3.1"
 http = "0.2.9"
-tungstenite = { version = "0.19", features = ["rustls"] }
-tokio-tungstenite = { version = "0.19", features = ["rustls"] }
+tungstenite = { version = "0.19", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.19", features = ["native-tls"] }
 
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
