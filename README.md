@@ -15,10 +15,11 @@ This is a datafeed server for algorithmic trading written in Rust. It is designe
 - [ ] Interact with public chats
 - [ ] Get Screener top values
 - [ ] Get Calendar
-- [ ] Kafka support
-- [ ] Webhook support
-- [ ] Telegram support
+- [ ] Kafka support with RedPanda as storage backend
+- [ ] Stream ETL with Meilisearch
+- [ ] Polars support
 - [ ] Rest API
+- [ ] gRPC API
 
 ## Getting Started
 ### Prerequisites

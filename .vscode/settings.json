@@ -4,12 +4,17 @@
     "BIST",
     "javastudies",
     "KHTML",
+    "logoid",
     "LSIN",
     "LUXSE",
+    "Meilisearch",
     "MILSEDEX",
+    "minmov",
     "minmove",
     "NEWCONNECT",
+    "pricescale",
     "prodata",
+    "rchp",
     "Referer",
     "rustls",
     "sessionid",
@@ -20,11 +25,7 @@
     "uacq",
     "UPCOM",
     "widgetdata",
-    "XETR",
-    "logoid",
-    "minmov",
-    "pricescale",
-    "rchp"
+    "XETR"
   ],
   "githubPullRequests.ignoredPullRequestBranches": ["main"]
 }
