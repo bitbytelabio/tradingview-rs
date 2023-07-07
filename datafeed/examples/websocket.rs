@@ -1,6 +1,6 @@
 use datafeed::client::SocketMessage;
 use datafeed::utils::protocol::{format_packet, parse_packet};
-use futures_util::SinkExt;
+// use futures_util::SinkExt;
 use serde_json::Value;
 use tracing::debug;
 use tungstenite::{client::IntoClientRequest, connect, stream::NoDelay, Message};

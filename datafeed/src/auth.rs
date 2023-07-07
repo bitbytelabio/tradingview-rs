@@ -32,10 +32,18 @@ pub async fn get_user(
         )),
     )
     .await
-    .unwrap()
+    .unwrap_or_else(|e| {
+        // !TODO: Handle this error
+        error!("Error sending request: {:?}", e);
+        panic!("Error sending request");
+    })
     .text()
     .await
-    .unwrap();
+    .unwrap_or_else(|e| {
+        // !TODO: Handle this error
+        error!("Error getting response: {:?}", e);
+        panic!("Error getting response");
+    });
 
     if response.contains("auth_token") {
         info!("User is logged in");
@@ -44,7 +52,7 @@ pub async fn get_user(
         let id = id_regex.captures(&response).unwrap()[1]
             .to_string()
             .parse()
-            .unwrap();
+            .unwrap_or_default();
 
         let username_regex = Regex::new(r#""username":"(.*?)""#).unwrap();
         let username = username_regex.captures(&response).unwrap()[1].to_string();
@@ -72,6 +80,7 @@ pub async fn get_user(
         };
         Ok(user_data)
     } else {
+        // !TODO: Handle this error
         Err("Wrong or expired sessionid/signature".into())
     }
 }
@@ -81,7 +90,7 @@ pub async fn login_user(
     password: &str,
     opt_secret: Option<String>,
 ) -> Result<UserData, Box<dyn std::error::Error>> {
-    let response = Client::builder()
+    let response: reqwest::Response = Client::builder()
         .use_rustls_tls()
         .default_headers({
             let mut headers = HeaderMap::new();
@@ -98,7 +107,12 @@ pub async fn login_user(
         .user_agent(UA)
         .https_only(true)
         .gzip(true)
-        .build()?
+        .build()
+        .unwrap_or_else(|e| {
+            // !TODO: Handle this error
+            error!("Error building client: {:?}", e);
+            panic!("Error building client");
+        })
         .post("https://www.tradingview.com/accounts/signin/")
         .multipart(
             reqwest::multipart::Form::new()
@@ -108,7 +122,11 @@ pub async fn login_user(
         )
         .send()
         .await
-        .unwrap();
+        .unwrap_or_else(|e| {
+            // !TODO: Handle this error
+            error!("Error sending request: {:?}", e);
+            panic!("Error sending request")
+        });
 
     let (session, signature) = response
         .cookies()
@@ -181,7 +199,12 @@ pub async fn login_user(
                     .user_agent(UA)
                     .https_only(true)
                     .gzip(true)
-                    .build()?
+                    .build()
+                    .unwrap_or_else(|e| {
+                        // !TODO: Handle this error
+                        error!("Error building client: {:?}", e);
+                        panic!("Error building client");
+                    })
                     .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
                     .multipart(
                         reqwest::multipart::Form::new().text("code", get_code!(&opt).unwrap()),
@@ -191,6 +214,7 @@ pub async fn login_user(
                 {
                     Ok(response) => response,
                     Err(e) => {
+                        // !TODO: Handle this error
                         error!("Error sending request: {:?}", e);
                         return Err("Error sending request".into());
                     }
@@ -233,6 +257,7 @@ pub async fn login_user(
         }
     } else {
         return {
+            // !TODO: Handle this error
             error!("Wrong username or password");
             Err("Wrong username or password".into())
         };
