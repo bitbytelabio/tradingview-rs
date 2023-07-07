@@ -1,6 +1,7 @@
 use crate::auth::UserData;
 use crate::utils::gen_session_id;
 use crate::utils::protocol::{format_packet, parse_packet};
+use crate::UA;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
@@ -40,14 +41,11 @@ pub struct SocketMessage {
 impl Socket {
     pub fn new(data_server: DataServer, user_data: Option<UserData>) -> Self {
         let server = data_server.to_string();
-        let url = Url::parse(&format!(
-            "wss://{}.tradingview.com/socket.io/websocket",
-            server
-        ))
-        .unwrap();
+        let url = Url::parse("wss://data.tradingview.com/socket.io/websocket").unwrap();
         let mut request = url.into_client_request().unwrap();
         let headers = request.headers_mut();
-        headers.insert("Origin", "https://data.tradingview.com/".parse().unwrap());
+        headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
+        headers.insert("User-Agent", UA.parse().unwrap());
         let mut socket = match connect(request) {
             Ok((socket, _)) => socket,
             Err(e) => panic!("Error during handshake: {}", e),

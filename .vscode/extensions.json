@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "pbkit.vscode-pbkit",
+    "rapidapi.vscode-services",
+    "rust-lang.rust-analyzer",
+    "gruntfuggly.todo-tree",
+    "aaron-bond.better-comments",
+    "esbenp.prettier-vscode"
+  ]
+}
