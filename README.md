@@ -1,4 +1,4 @@
-# Tradingview Datafeed Server for Algorithmic Trading written in Rust
+# Tradingview Datafeed Server
 ## Introduction
 This is a datafeed server for algorithmic trading written in Rust. It is designed to be used with the [Tradingview Charting Library](https://www.tradingview.com/HTML5-stock-forex-bitcoin-charting-library/). It is currently in development and not ready for production use.
 
