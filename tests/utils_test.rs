@@ -13,8 +13,10 @@ mod utils {
     }
 
     #[test]
-    fn gen_session_id_test() {
-        let quote_session = gen_session_id("qc");
-        assert!(!quote_session.is_empty() && quote_session.starts_with("qc"));
+    fn test_gen_session_id() {
+        let session_type = "test";
+        let session_id = gen_session_id(session_type);
+        assert_eq!(session_id.len(), 17); // 5 (session_type) + 1 (_) + 12 (random characters)
+        assert!(session_id.starts_with(session_type));
     }
 }

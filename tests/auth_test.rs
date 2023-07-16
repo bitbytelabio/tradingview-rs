@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod auth {
+    use super::*;
     use std::env;
-    use datafeed::auth::*;
 
     #[tokio::test]
     async fn get_user_test_with_invalid_session() {
