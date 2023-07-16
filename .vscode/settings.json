@@ -17,6 +17,7 @@
     "prodata",
     "rchp",
     "Referer",
+    "reqwest",
     "rustls",
     "sessionid",
     "socketio",
