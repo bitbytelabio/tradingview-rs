@@ -31,8 +31,5 @@
   ],
   "githubPullRequests.ignoredPullRequestBranches": [
     "main"
-  ],
-  "rust-analyzer.linkedProjects": [
-    "./Cargo.toml"
   ]
 }

@@ -5,7 +5,7 @@ version = "0.0.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bitbytelabio/tradingview-rs"
-readme = "../README.md"
+readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
 
 [profile.dev]

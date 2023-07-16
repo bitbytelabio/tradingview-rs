@@ -1,12 +1,11 @@
 #[cfg(test)]
 mod auth {
-    use super::*;
     use std::env;
 
     #[tokio::test]
     async fn get_user_test_with_invalid_session() {
         // tracing_subscriber::fmt::init();
-        match get_user("invalid_session", "invalid_signature", None).await {
+        match tradingview_rs::auth::get_user("invalid_session", "invalid_signature", None).await {
             Ok(_) => assert!(false, "Wrong session and signature should not return user"),
             Err(err) => assert!(err
                 .to_string()
@@ -19,7 +18,7 @@ mod auth {
         // tracing_subscriber::fmt::init();
         let session = env::var("TV_SESSION").unwrap();
         let signature = env::var("TV_SIGNATURE").unwrap();
-        match get_user(&session, &signature, None).await {
+        match tradingview_rs::auth::get_user(&session, &signature, None).await {
             Ok(user) => assert!(
                 || -> bool {
                     user.id > 0
@@ -46,7 +45,7 @@ mod auth {
         // tracing_subscriber::fmt::init();
         let username = env::var("TV_USERNAME").unwrap();
         let password = env::var("TV_PASSWORD").unwrap();
-        match login_user(&username, &password, None).await {
+        match tradingview_rs::auth::login_user(&username, &password, None).await {
             Ok(user) => assert!(
                 || -> bool {
                     user.id > 0
@@ -71,7 +70,7 @@ mod auth {
     #[tokio::test]
     async fn login_user_with_invalid_credential() {
         // tracing_subscriber::fmt::init();
-        match login_user("invalid_username", "invalid_password", None).await {
+        match tradingview_rs::auth::login_user("invalid_username", "invalid_password", None).await {
             Ok(_) => assert!(false, "Wrong username and password should not return user"),
             Err(err) => assert!(err.to_string().contains("Wrong username or password")),
         }
@@ -83,7 +82,7 @@ mod auth {
         let username = env::var("TV_TOTP_USERNAME").unwrap();
         let password = env::var("TV_TOTP_PASSWORD").unwrap();
         let totp = env::var("TV_TOTP_SECRET").unwrap();
-        match login_user(&username, &password, Some(totp)).await {
+        match tradingview_rs::auth::login_user(&username, &password, Some(totp)).await {
             Ok(user) => assert!(
                 || -> bool {
                     user.id > 0
@@ -110,7 +109,13 @@ mod auth {
         // tracing_subscriber::fmt::init();
         let username = env::var("TV_TOTP_USERNAME").unwrap();
         let password = env::var("TV_TOTP_PASSWORD").unwrap();
-        match login_user(&username, &password, Some("ZTIXV4KTRISK4KK7".to_string())).await {
+        match tradingview_rs::auth::login_user(
+            &username,
+            &password,
+            Some("ZTIXV4KTRISK4KK7".to_string()),
+        )
+        .await
+        {
             Ok(_) => assert!(false, "Wrong totp should not return user"),
             Err(err) => assert!(
                 err.to_string().contains("TOTP Secret is required")
