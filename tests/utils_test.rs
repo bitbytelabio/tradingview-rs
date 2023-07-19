@@ -7,7 +7,7 @@ mod utils {
         let messages =
             std::fs::read_to_string(format!("{}/tests/data/socket_messages.txt", current_dir))
                 .unwrap();
-        let data = tradingview_rs::utils::protocol::parse_packet(messages.as_str());
+        let data = tradingview_rs::utils::parse_packet(messages.as_str());
         assert_eq!(data.len(), 42);
     }
 

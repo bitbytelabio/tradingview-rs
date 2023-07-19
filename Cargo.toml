@@ -8,16 +8,6 @@ repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
 
-[profile.dev]
-opt-level = 0
-
-[profile.release]
-opt-level = 3
-
-[[bin]]
-name = "datafeed"
-path = "src/server.rs"
-
 [dependencies]
 tracing = "0.1"
 tracing-subscriber = "0.3"
