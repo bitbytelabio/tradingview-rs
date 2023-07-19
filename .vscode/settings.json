@@ -17,6 +17,7 @@
     "prodata",
     "rchp",
     "Referer",
+    "reqwest",
     "rustls",
     "sessionid",
     "socketio",
@@ -29,5 +30,7 @@
     "widgetdata",
     "XETR"
   ],
-  "githubPullRequests.ignoredPullRequestBranches": ["main"]
+  "githubPullRequests.ignoredPullRequestBranches": [
+    "main"
+  ]
 }

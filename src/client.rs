@@ -1,6 +1,6 @@
 use crate::auth::UserData;
 use crate::utils::gen_session_id;
-use crate::utils::protocol::{format_packet, parse_packet};
+use crate::utils::{format_packet, parse_packet};
 use crate::UA;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
