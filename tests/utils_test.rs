@@ -13,9 +13,9 @@ mod utils {
 
     #[test]
     fn test_gen_session_id() {
-        let session_type = "test";
+        let session_type = "qc";
         let session_id = tradingview_rs::utils::gen_session_id(session_type);
-        assert_eq!(session_id.len(), 17); // 5 (session_type) + 1 (_) + 12 (random characters)
+        assert_eq!(session_id.len(), 15); // 2 (session_type) + 1 (_) + 12 (random characters)
         assert!(session_id.starts_with(session_type));
     }
 }

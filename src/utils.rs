@@ -63,21 +63,19 @@ fn create_client() -> Result<reqwest::Client, reqwest::Error> {
 }
 
 pub fn gen_session_id(session_type: &str) -> String {
-    let mut rng = rand::thread_rng();
-    let characters: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result: String = (0..12)
-        .map(|_| {
-            let random_index = rng.gen_range(0..characters.len());
-            characters[random_index] as char
-        })
+    let rng = rand::thread_rng();
+    let _characters: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let result: String = rng
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(12)
+        .map(char::from)
         .collect();
-
-    format!("{}_{}", session_type, result)
+    session_type.to_owned() + "_" + &result
 }
 
 pub fn parse_packet(message: &str) -> Vec<Value> {
     if message.is_empty() {
-        vec![Value::Null];
+        return vec![Value::Null];
     }
     let cleaned_message = CLEANER_RGX.replace_all(message, "");
     let packets: Vec<Value> = SPLITTER_RGX
