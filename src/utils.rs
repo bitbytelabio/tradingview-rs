@@ -64,7 +64,6 @@ fn create_client() -> Result<reqwest::Client, reqwest::Error> {
 
 pub fn gen_session_id(session_type: &str) -> String {
     let rng = rand::thread_rng();
-    let _characters: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let result: String = rng
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(12)
@@ -96,24 +95,13 @@ pub fn parse_packet(message: &str) -> Vec<Value> {
     packets
 }
 
-pub fn format_packet<T>(packet: T) -> Message
+pub fn format_packet<T>(packet: T) -> Result<Message, Box<dyn std::error::Error>>
 where
     T: Serialize,
 {
-    let msg = match serde_json::to_value(&packet) {
-        Ok(msg) => match serde_json::to_string(&msg) {
-            Ok(msg) => msg,
-            Err(e) => {
-                warn!("Error formatting packet: {}", e);
-                String::from("")
-            }
-        },
-        Err(e) => {
-            warn!("Error formatting packet: {}", e);
-            String::from("")
-        }
-    };
-    let formatted_msg = format!("~m~{}~m~{}", msg.len(), msg.as_str());
+    let msg = serde_json::to_value(&packet)?;
+    let msg_str = serde_json::to_string(&msg)?;
+    let formatted_msg = format!("~m~{}~m~{}", msg_str.len(), msg_str);
     debug!("Formatted packet: {}", formatted_msg);
-    Message::Text(formatted_msg)
+    Ok(Message::Text(formatted_msg))
 }

@@ -1,3 +1,4 @@
+use crate::client;
 use crate::utils::get_request;
 use crate::UA;
 use google_authenticator::get_code;
@@ -18,13 +19,13 @@ pub struct Client {
 }
 
 impl Client {
-    async fn new(username: &str, password: &str, opt_secret: Option<String>) {}
+    async fn new(username: Option<String>, password: Option<String>, opt_secret: Option<String>) {}
     async fn login() {}
     async fn get_user(
         session: String,
         signature: String,
         url: Option<String>,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let response = get_request(
             &url.unwrap_or_else(|| "https://www.tradingview.com/".to_string()),
             Some(format!(
@@ -79,10 +80,10 @@ impl Client {
                 auth_token,
             });
         }
-        Err(std::io::Error::new(
+        Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::Other,
             "User is not logged in",
-        ))
+        )))
     }
     fn error_handler() {}
 }
