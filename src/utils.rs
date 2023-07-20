@@ -1,13 +1,11 @@
 use rand::Rng;
 use regex::Regex;
-use reqwest;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 use tungstenite::protocol::Message;
 
-// Define two regular expressions for cleaning and splitting the message
 lazy_static::lazy_static! {
     static ref CLEANER_RGX: Regex = Regex::new(r"~h~").unwrap();
     static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
@@ -77,7 +75,6 @@ pub fn gen_session_id(session_type: &str) -> String {
     format!("{}_{}", session_type, result)
 }
 
-// Parse the packet from the message
 pub fn parse_packet(message: &str) -> Vec<Value> {
     if message.is_empty() {
         vec![Value::Null];
@@ -101,7 +98,6 @@ pub fn parse_packet(message: &str) -> Vec<Value> {
     packets
 }
 
-// Format the packet into a message
 pub fn format_packet<T>(packet: T) -> Message
 where
     T: Serialize,
