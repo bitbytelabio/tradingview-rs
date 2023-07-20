@@ -16,7 +16,7 @@ pub async fn get_request(
     cookies: Option<String>,
 ) -> Result<reqwest::Response, reqwest::Error> {
     info!("Sending request to: {}", url);
-    let client = create_client()?;
+    let client = build_client()?;
     let mut request = client.get(url);
     if let Some(cookies) = cookies {
         let mut headers = HeaderMap::new();
@@ -37,7 +37,7 @@ pub async fn get_request(
     Ok(response)
 }
 
-fn create_client() -> Result<reqwest::Client, reqwest::Error> {
+fn build_client() -> Result<reqwest::Client, reqwest::Error> {
     Ok(reqwest::Client::builder()
         .use_rustls_tls()
         .default_headers({
@@ -72,9 +72,9 @@ pub fn gen_session_id(session_type: &str) -> String {
     session_type.to_owned() + "_" + &result
 }
 
-pub fn parse_packet(message: &str) -> Vec<Value> {
+pub fn parse_packet(message: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
     if message.is_empty() {
-        return vec![Value::Null];
+        return Err("Empty message".into());
     }
     let cleaned_message = CLEANER_RGX.replace_all(message, "");
     let packets: Vec<Value> = SPLITTER_RGX
@@ -84,7 +84,7 @@ pub fn parse_packet(message: &str) -> Vec<Value> {
             let packet: Value = match serde_json::from_str(x) {
                 Ok(packet) => packet,
                 Err(e) => {
-                    debug!("Error parsing packet: {}", e);
+                    error!("Error parsing packet: {}", e);
                     Value::Null
                 }
             };
@@ -92,7 +92,7 @@ pub fn parse_packet(message: &str) -> Vec<Value> {
         })
         .filter(|x| x != &Value::Null)
         .collect();
-    packets
+    Ok(packets)
 }
 
 pub fn format_packet<T>(packet: T) -> Result<Message, Box<dyn std::error::Error>>
