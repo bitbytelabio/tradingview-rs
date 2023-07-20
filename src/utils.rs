@@ -1,7 +1,7 @@
 use rand::Rng;
 use regex::Regex;
+use reqwest;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
-use reqwest::{Client, Error, Response};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
@@ -13,10 +13,34 @@ lazy_static::lazy_static! {
     static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
-#[tracing::instrument]
-pub async fn get_request(url: &str, cookies: Option<String>) -> Result<Response, Error> {
+pub async fn get_request(
+    url: &str,
+    cookies: Option<String>,
+) -> Result<reqwest::Response, reqwest::Error> {
     info!("Sending request to: {}", url);
-    let client = Client::builder()
+    let client = create_client()?;
+    let mut request = client.get(url);
+    if let Some(cookies) = cookies {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            COOKIE,
+            match HeaderValue::from_str(&cookies) {
+                Ok(header_value) => header_value,
+                Err(e) => {
+                    error!("Error parsing cookies: {}", e);
+                    HeaderValue::from_static("")
+                }
+            },
+        );
+        request = request.headers(headers);
+    }
+    debug!("Sending request: {:?}", request);
+    let response = request.send().await?;
+    Ok(response)
+}
+
+fn create_client() -> Result<reqwest::Client, reqwest::Error> {
+    Ok(reqwest::Client::builder()
         .use_rustls_tls()
         .default_headers({
             let mut headers = HeaderMap::new();
@@ -37,32 +61,9 @@ pub async fn get_request(url: &str, cookies: Option<String>) -> Result<Response,
         .https_only(true)
         .user_agent(crate::UA)
         .gzip(true)
-        .build()?;
-
-    let mut request = client.get(url);
-    request = match cookies {
-        Some(cookies) => {
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                COOKIE,
-                match HeaderValue::from_str(&cookies) {
-                    Ok(header_value) => header_value,
-                    Err(e) => {
-                        error!("Error parsing cookies: {}", e);
-                        HeaderValue::from_static("")
-                    }
-                },
-            );
-            request.headers(headers)
-        }
-        None => request,
-    };
-    debug!("Sending request: {:?}", request);
-    let response = request.send().await?;
-    Ok(response)
+        .build()?)
 }
 
-#[tracing::instrument]
 pub fn gen_session_id(session_type: &str) -> String {
     let mut rng = rand::thread_rng();
     let characters: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
