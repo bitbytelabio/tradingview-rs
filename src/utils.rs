@@ -1,44 +1,15 @@
 use rand::Rng;
 use regex::Regex;
-use reqwest::{
-    cookie,
-    header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER},
-};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use serde::Serialize;
 use serde_json::Value;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error};
 use tungstenite::protocol::Message;
 
 lazy_static::lazy_static! {
     static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").unwrap();
     static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
-
-// pub async fn get_request(
-//     url: &str,
-//     cookies: Option<String>,
-// ) -> Result<reqwest::Response, reqwest::Error> {
-//     info!("Sending request to: {}", url);
-//     let client = build_client(None);
-//     let mut request = client.get(url);
-//     if let Some(cookies) = cookies {
-//         let mut headers = HeaderMap::new();
-//         headers.insert(
-//             COOKIE,
-//             match HeaderValue::from_str(&cookies) {
-//                 Ok(header_value) => header_value,
-//                 Err(e) => {
-//                     error!("Error parsing cookies: {}", e);
-//                     HeaderValue::from_static("")
-//                 }
-//             },
-//         );
-//         request = request.headers(headers);
-//     }
-//     debug!("Sending request: {:?}", request);
-//     let response = request.send().await?;
-//     Ok(response)
-// }
 
 pub fn build_client(cookie: Option<&str>) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let mut headers = HeaderMap::new();
