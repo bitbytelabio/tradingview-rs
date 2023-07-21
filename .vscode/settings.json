@@ -21,7 +21,6 @@
     "rustls",
     "sessionid",
     "socketio",
-    "topt",
     "totp",
     "Tradingview",
     "TSXV",

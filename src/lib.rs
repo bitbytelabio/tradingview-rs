@@ -1,7 +1,7 @@
 extern crate google_authenticator;
 extern crate regex;
 
-mod client;
+pub mod user;
 
 pub mod api;
 pub mod auth;
