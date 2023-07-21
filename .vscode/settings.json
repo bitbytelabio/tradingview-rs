@@ -30,7 +30,4 @@
     "widgetdata",
     "XETR"
   ],
-  "githubPullRequests.ignoredPullRequestBranches": [
-    "main"
-  ]
 }

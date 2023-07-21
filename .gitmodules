@@ -1,3 +1,0 @@
-[submodule "tests/tradingview-api"]
-	path = tests/tradingview-api
-	url = https://github.com/Mathieu2301/TradingView-API.git

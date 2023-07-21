@@ -1,124 +1,115 @@
 use rand::Rng;
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
-use reqwest::{Client, Error, Response};
+use reqwest::{
+    cookie,
+    header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER},
+};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 use tungstenite::protocol::Message;
 
-// Define two regular expressions for cleaning and splitting the message
 lazy_static::lazy_static! {
-    static ref CLEANER_RGX: Regex = Regex::new(r"~h~").unwrap();
-    static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
+    static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").unwrap();
+    static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
-#[tracing::instrument]
-pub async fn get_request(url: &str, cookies: Option<String>) -> Result<Response, Error> {
-    info!("Sending request to: {}", url);
-    let client = Client::builder()
+// pub async fn get_request(
+//     url: &str,
+//     cookies: Option<String>,
+// ) -> Result<reqwest::Response, reqwest::Error> {
+//     info!("Sending request to: {}", url);
+//     let client = build_client(None);
+//     let mut request = client.get(url);
+//     if let Some(cookies) = cookies {
+//         let mut headers = HeaderMap::new();
+//         headers.insert(
+//             COOKIE,
+//             match HeaderValue::from_str(&cookies) {
+//                 Ok(header_value) => header_value,
+//                 Err(e) => {
+//                     error!("Error parsing cookies: {}", e);
+//                     HeaderValue::from_static("")
+//                 }
+//             },
+//         );
+//         request = request.headers(headers);
+//     }
+//     debug!("Sending request: {:?}", request);
+//     let response = request.send().await?;
+//     Ok(response)
+// }
+
+pub fn build_client(cookie: Option<&str>) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        ACCEPT,
+        HeaderValue::from_static("application/json, text/plain, */*"),
+    );
+    headers.insert(
+        ORIGIN,
+        HeaderValue::from_static("https://www.tradingview.com"),
+    );
+    headers.insert(
+        REFERER,
+        HeaderValue::from_static("https://www.tradingview.com/"),
+    );
+    if let Some(cookie) = cookie {
+        headers.insert(COOKIE, HeaderValue::from_str(cookie)?);
+    }
+
+    let client = reqwest::Client::builder()
         .use_rustls_tls()
-        .default_headers({
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                ACCEPT,
-                HeaderValue::from_static("application/json, text/plain, */*"),
-            );
-            headers.insert(
-                ORIGIN,
-                HeaderValue::from_static("https://www.tradingview.com"),
-            );
-            headers.insert(
-                REFERER,
-                HeaderValue::from_static("https://www.tradingview.com/"),
-            );
-            headers
-        })
+        .default_headers(headers)
         .https_only(true)
         .user_agent(crate::UA)
         .gzip(true)
         .build()?;
-
-    let mut request = client.get(url);
-    request = match cookies {
-        Some(cookies) => {
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                COOKIE,
-                match HeaderValue::from_str(&cookies) {
-                    Ok(header_value) => header_value,
-                    Err(e) => {
-                        error!("Error parsing cookies: {}", e);
-                        HeaderValue::from_static("")
-                    }
-                },
-            );
-            request.headers(headers)
-        }
-        None => request,
-    };
-    debug!("Sending request: {:?}", request);
-    let response = request.send().await?;
-    Ok(response)
+    Ok(client)
 }
 
-#[tracing::instrument]
 pub fn gen_session_id(session_type: &str) -> String {
-    let mut rng = rand::thread_rng();
-    let characters: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let result: String = (0..12)
-        .map(|_| {
-            let random_index = rng.gen_range(0..characters.len());
-            characters[random_index] as char
-        })
+    let rng = rand::thread_rng();
+    let result: String = rng
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(12)
+        .map(char::from)
         .collect();
-
-    format!("{}_{}", session_type, result)
+    session_type.to_owned() + "_" + &result
 }
 
-// Parse the packet from the message
-pub fn parse_packet(message: &str) -> Vec<Value> {
+pub fn parse_packet(message: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
     if message.is_empty() {
-        vec![Value::Null];
+        return Err("Empty message".into());
     }
-    let cleaned_message = CLEANER_RGX.replace_all(message, "");
-    let packets: Vec<Value> = SPLITTER_RGX
+
+    let cleaned_message = CLEANER_REGEX.replace_all(message, "");
+    let packets: Vec<Value> = SPLITTER_REGEX
         .split(&cleaned_message)
-        .filter(|x| !x.is_empty())
-        .map(|x| {
-            let packet: Value = match serde_json::from_str(x) {
-                Ok(packet) => packet,
-                Err(e) => {
-                    debug!("Error parsing packet: {}", e);
-                    Value::Null
+        .filter(|packet| !packet.is_empty())
+        .map(|packet| match serde_json::from_str(packet) {
+            Ok(value) => value,
+            Err(error) => {
+                if error.is_syntax() {
+                    error!("Error parsing packet: invalid JSON: {}", error);
+                } else {
+                    error!("Error parsing packet: {}", error);
                 }
-            };
-            packet
+                Value::Null
+            }
         })
-        .filter(|x| x != &Value::Null)
+        .filter(|value| value != &Value::Null)
         .collect();
-    packets
+
+    Ok(packets)
 }
 
-// Format the packet into a message
-pub fn format_packet<T>(packet: T) -> Message
+pub fn format_packet<T>(packet: T) -> Result<Message, Box<dyn std::error::Error>>
 where
     T: Serialize,
 {
-    let msg = match serde_json::to_value(&packet) {
-        Ok(msg) => match serde_json::to_string(&msg) {
-            Ok(msg) => msg,
-            Err(e) => {
-                warn!("Error formatting packet: {}", e);
-                String::from("")
-            }
-        },
-        Err(e) => {
-            warn!("Error formatting packet: {}", e);
-            String::from("")
-        }
-    };
-    let formatted_msg = format!("~m~{}~m~{}", msg.len(), msg.as_str());
-    debug!("Formatted packet: {}", formatted_msg);
-    Message::Text(formatted_msg)
+    let json_string = serde_json::to_string(&packet)?;
+    let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
+    debug!("Formatted packet: {}", formatted_message);
+    Ok(Message::Text(formatted_message))
 }
