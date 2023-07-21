@@ -7,8 +7,8 @@ use tracing::{debug, error, info, warn};
 use tungstenite::protocol::Message;
 
 lazy_static::lazy_static! {
-    static ref CLEANER_RGX: Regex = Regex::new(r"~h~").unwrap();
-    static ref SPLITTER_RGX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
+    static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").unwrap();
+    static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
 pub async fn get_request(
@@ -85,38 +85,45 @@ pub fn parse_packet(message: &str) -> Result<Vec<Value>, Box<dyn std::error::Err
         return Err("Empty message".into());
     }
 
-    let cleaned_message = CLEANER_RGX.replace_all(message, "");
-    let packets: Vec<Value> = SPLITTER_RGX
+    let cleaned_message = CLEANER_REGEX.replace_all(message, "");
+    let packets: Vec<Value> = SPLITTER_REGEX
         .split(&cleaned_message)
-        .filter(|x| !x.is_empty())
-        .map(|x| match serde_json::from_str(x) {
-            Ok(packet) => packet,
-            Err(e) => {
-                if e.is_syntax() {
-                    error!("Error parsing packet: invalid JSON: {}", e);
-                } else if e.is_eof() {
-                    error!("Error parsing packet: incomplete JSON: {}", e);
-                } else if e.is_io() {
-                    error!("Error parsing packet: I/O error: {}", e);
+        .filter(|packet| !packet.is_empty())
+        .map(|packet| match serde_json::from_str(packet) {
+            Ok(value) => value,
+            Err(error) => {
+                if error.is_syntax() {
+                    error!("Error parsing packet: invalid JSON: {}", error);
+                } else if error.is_eof() {
+                    error!("Error parsing packet: incomplete JSON: {}", error);
+                } else if error.is_io() {
+                    error!("Error parsing packet: I/O error: {}", error);
                 } else {
-                    error!("Error parsing packet: {}", e);
+                    error!("Error parsing packet: {}", error);
                 }
                 Value::Null
             }
         })
-        .filter(|x| x != &Value::Null)
+        .filter(|value| value != &Value::Null)
         .collect();
 
     Ok(packets)
 }
 
+/// Formats a packet into a message string.
+///
+/// The function serializes the given packet to a JSON string using the `serde_json`
+/// crate, and then formats the JSON string into a message string that can be sent
+/// over the network. The message string consists of a "~m~" prefix, followed by
+/// the length of the JSON string, and another "~m~" prefix, followed by the JSON
+/// string itself. The function returns a `Message` enum variant containing the
+/// formatted message string.
 pub fn format_packet<T>(packet: T) -> Result<Message, Box<dyn std::error::Error>>
 where
     T: Serialize,
 {
-    let msg = serde_json::to_value(&packet)?;
-    let msg_str = serde_json::to_string(&msg)?;
-    let formatted_msg = format!("~m~{}~m~{}", msg_str.len(), msg_str);
-    debug!("Formatted packet: {}", formatted_msg);
-    Ok(Message::Text(formatted_msg))
+    let json_string = serde_json::to_string(&packet)?;
+    let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
+    debug!("Formatted packet: {}", formatted_message);
+    Ok(Message::Text(formatted_message))
 }
