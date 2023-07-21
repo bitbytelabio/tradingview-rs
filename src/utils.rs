@@ -37,7 +37,7 @@ pub async fn get_request(
     Ok(response)
 }
 
-fn build_client() -> Result<reqwest::Client, reqwest::Error> {
+pub fn build_client() -> Result<reqwest::Client, reqwest::Error> {
     Ok(reqwest::Client::builder()
         .use_rustls_tls()
         .default_headers({
@@ -94,10 +94,6 @@ pub fn parse_packet(message: &str) -> Result<Vec<Value>, Box<dyn std::error::Err
             Err(error) => {
                 if error.is_syntax() {
                     error!("Error parsing packet: invalid JSON: {}", error);
-                } else if error.is_eof() {
-                    error!("Error parsing packet: incomplete JSON: {}", error);
-                } else if error.is_io() {
-                    error!("Error parsing packet: I/O error: {}", error);
                 } else {
                     error!("Error parsing packet: {}", error);
                 }

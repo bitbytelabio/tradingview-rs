@@ -86,8 +86,8 @@ pub async fn get_user(
 }
 
 pub async fn login_user(
-    username: &str,
-    password: &str,
+    username: String,
+    password: String,
     opt_secret: Option<String>,
 ) -> Result<UserData, Box<dyn std::error::Error>> {
     let response: reqwest::Response = Client::builder()
@@ -107,26 +107,16 @@ pub async fn login_user(
         .user_agent(UA)
         .https_only(true)
         .gzip(true)
-        .build()
-        .unwrap_or_else(|e| {
-            // !TODO: Handle this error
-            error!("Error building client: {:?}", e);
-            panic!("Error building client");
-        })
+        .build()?
         .post("https://www.tradingview.com/accounts/signin/")
         .multipart(
             reqwest::multipart::Form::new()
-                .text("username", username.to_string())
-                .text("password", password.to_string())
-                .text("remember", "true".to_string()),
+                .text("username", username)
+                .text("password", password)
+                .text("remember", "true".to_owned()),
         )
         .send()
-        .await
-        .unwrap_or_else(|e| {
-            // !TODO: Handle this error
-            error!("Error sending request: {:?}", e);
-            panic!("Error sending request")
-        });
+        .await?;
 
     let (session, signature) = response
         .cookies()
@@ -140,33 +130,33 @@ pub async fn login_user(
             }
         });
 
-    let response_data: Value = response.json().await.unwrap();
+    let response_data: Value = response.json().await?;
 
     debug!("Response message: {:#?}", response_data);
 
-    if response_data["error"] == "".to_string() {
+    if response_data["error"] == "".to_owned() {
         debug!("User data: {:#?}", response_data["user"]);
         warn!("2FA is not enabled for this account");
         info!("User is logged in successfully");
         let data = UserData {
-            id: response_data["user"]["id"].as_u64().unwrap() as u32,
+            id: response_data["user"]["id"].as_u64().unwrap_or_default() as u32,
             username: response_data["user"]["username"]
                 .as_str()
-                .unwrap()
+                .unwrap_or_default()
                 .to_string(),
-            session: session.unwrap(),
-            signature: signature.unwrap(),
+            session: session.unwrap_or_default(),
+            signature: signature.unwrap_or_default(),
             session_hash: response_data["user"]["session_hash"]
                 .as_str()
-                .unwrap()
+                .unwrap_or_default()
                 .to_string(),
             private_channel: response_data["user"]["private_channel"]
                 .as_str()
-                .unwrap()
+                .unwrap_or_default()
                 .to_string(),
             auth_token: response_data["user"]["auth_token"]
                 .as_str()
-                .unwrap()
+                .unwrap_or_default()
                 .to_string(),
         };
         debug!("User data: {:#?}", data);
@@ -176,7 +166,7 @@ pub async fn login_user(
             Some(opt) => {
                 let session = &session.unwrap();
                 let signature = &signature.unwrap();
-                let response = match Client::builder()
+                let response = Client::builder()
                     .use_rustls_tls()
                     .default_headers({
                         let mut headers = HeaderMap::new();
@@ -200,25 +190,13 @@ pub async fn login_user(
                     .https_only(true)
                     .gzip(true)
                     .build()
-                    .unwrap_or_else(|e| {
-                        // !TODO: Handle this error
-                        error!("Error building client: {:?}", e);
-                        panic!("Error building client");
-                    })
+                    .unwrap()
                     .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
                     .multipart(
                         reqwest::multipart::Form::new().text("code", get_code!(&opt).unwrap()),
                     )
                     .send()
-                    .await
-                {
-                    Ok(response) => response,
-                    Err(e) => {
-                        // !TODO: Handle this error
-                        error!("Error sending request: {:?}", e);
-                        return Err("Error sending request".into());
-                    }
-                };
+                    .await?;
                 if response.status() != 200 {
                     error!("Invalid TOTP secret");
                     return Err("Invalid TOTP secret".into());
@@ -229,21 +207,21 @@ pub async fn login_user(
                         id: response_data["user"]["id"].as_u64().unwrap() as u32,
                         username: response_data["user"]["username"]
                             .as_str()
-                            .unwrap()
+                            .unwrap_or_default()
                             .to_string(),
                         session: session.to_string(),
                         signature: signature.to_string(),
                         session_hash: response_data["user"]["session_hash"]
                             .as_str()
-                            .unwrap()
+                            .unwrap_or_default()
                             .to_string(),
                         private_channel: response_data["user"]["private_channel"]
                             .as_str()
-                            .unwrap()
+                            .unwrap_or_default()
                             .to_string(),
                         auth_token: response_data["user"]["auth_token"]
                             .as_str()
-                            .unwrap()
+                            .unwrap_or_default()
                             .to_string(),
                     };
                     debug!("User data: {:#?}", data);
@@ -257,7 +235,6 @@ pub async fn login_user(
         }
     } else {
         return {
-            // !TODO: Handle this error
             error!("Wrong username or password");
             Err("Wrong username or password".into())
         };
