@@ -9,27 +9,26 @@ use crate::errors::LoginError;
 
 #[derive(Debug, Deserialize)]
 pub struct LoginUserResponse {
-    error: String,
     user: User,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct User {
-    id: u32,
-    username: String,
-    is_pro: bool,
-    auth_token: String,
-    session_hash: String,
-    private_channel: String,
+    pub id: u32,
+    pub username: String,
+    pub is_pro: bool,
+    pub auth_token: String,
+    pub session_hash: String,
+    pub private_channel: String,
 
     #[serde(skip_deserializing)]
     password: String,
     #[serde(skip_deserializing)]
     totp_secret: String,
     #[serde(skip_deserializing)]
-    session: String,
+    pub session: String,
     #[serde(skip_deserializing)]
-    session_signature: String,
+    pub signature: String,
 }
 
 impl User {
@@ -50,7 +49,7 @@ impl User {
                 password: "".to_owned(),
                 totp_secret: "".to_owned(),
                 session: "".to_owned(),
-                session_signature: "".to_owned(),
+                signature: "".to_owned(),
             };
         }
 
@@ -64,85 +63,91 @@ impl User {
         password: String,
         totp_secret: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        use reqwest::multipart::Form;
-
         let client: reqwest::Client = crate::utils::build_client(None)?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
             .multipart(
-                Form::new()
-                    .text("username", username)
-                    .text("password", password)
-                    .text("remember", "true".to_owned()),
+                reqwest::multipart::Form::new()
+                    .text("username", username.clone())
+                    .text("password", password.clone())
+                    .text("remember", "true"),
             )
             .send()
-            .await
-            .unwrap();
+            .await?;
 
-        let (session, session_signature) =
+        let (session, signature) =
             response
                 .cookies()
                 .fold((None, None), |session_cookies, cookie| {
-                    if cookie.name() == "sessionid" {
-                        (Some(cookie.value().to_string()), session_cookies.1)
-                    } else if cookie.name() == "sessionid_sign" {
-                        (session_cookies.0, Some(cookie.value().to_string()))
-                    } else {
-                        session_cookies
+                    match cookie.name() {
+                        "sessionid" => (Some(cookie.value().to_string()), session_cookies.1),
+                        "sessionid_sign" => (session_cookies.0, Some(cookie.value().to_string())),
+                        _ => session_cookies,
                     }
                 });
 
-        if session.is_none() || session_signature.is_none() {
-            error!("Wrong username or password");
-            return Err(Box::new(LoginError::LoginFailed));
+        if session.is_none() || signature.is_none() {
+            let error_msg = "Wrong username or password".to_string();
+            error!("{}", error_msg);
+            return Err(Box::new(LoginError::LoginFailed(error_msg)));
         }
 
         let response: Value = response.json().await?;
+
+        let mut user: User;
 
         if response["error"] == "".to_owned() {
             debug!("User data: {:#?}", response);
             warn!("2FA is not enabled for this account");
             info!("User is logged in successfully");
             let login_resp: LoginUserResponse = serde_json::from_value(response)?;
-            Ok(login_resp.user)
+
+            user = login_resp.user;
         } else if response["error"] == "2FA_required".to_owned() {
             if totp_secret.is_none() {
-                error!("2FA is enabled for this account, but no secret was provided");
-                return Err(Box::new(LoginError::InvalidTOTP));
+                let error_msg =
+                    "2FA is enabled for this account, but no secret was provided".to_string();
+                error!("{}", error_msg);
+                return Err(Box::new(LoginError::TOTPError(error_msg)));
             }
             let response: Value = Self::handle_2fa(
-                &totp_secret.unwrap(),
-                session.unwrap().as_str(),
-                session_signature.unwrap().as_str(),
+                &totp_secret.clone().unwrap(),
+                session.clone().unwrap().as_str(),
+                signature.clone().unwrap().as_str(),
             )
             .await?
             .json()
             .await?;
-            if response["error"] == "".to_owned() {
-                debug!("User data: {:#?}", response);
-                info!("User is logged in successfully");
-                let login_resp: LoginUserResponse = serde_json::from_value(response)?;
-                Ok(login_resp.user)
-            } else {
-                error!("2FA authentication failed, something went wrong");
-                Err(Box::new(LoginError::MFALoginFailed))
-            }
+            debug!("User data: {:#?}", response);
+            info!("User is logged in successfully");
+            let login_resp: LoginUserResponse = serde_json::from_value(response)?;
+
+            user = login_resp.user;
         } else {
-            Err(Box::new(LoginError::LoginFailed))
+            let error_msg = "Wrong username or password".to_string();
+            error!("{}", error_msg);
+            return Err(Box::new(LoginError::LoginFailed(error_msg)));
         }
+
+        user.session = session.unwrap();
+        user.signature = signature.unwrap();
+        user.password = password;
+        user.totp_secret = totp_secret.unwrap_or_default();
+
+        Ok(user)
     }
 
     async fn handle_2fa(
         totp_secret: &str,
         session: &str,
-        session_signature: &str,
+        signature: &str,
     ) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
         use reqwest::multipart::Form;
 
         let client: reqwest::Client = crate::utils::build_client(Some(&format!(
-            "sessionid={}; sessionid_sign={}",
-            session, session_signature
+            "sessionid={}; sessionid_sign={};",
+            session, signature
         )))?;
 
         let response = client
@@ -154,19 +159,21 @@ impl User {
         if response.status().is_success() {
             return Ok(response);
         } else {
-            return Err(Box::new(LoginError::MFALoginFailed));
+            return Err(Box::new(LoginError::TOTPError(
+                "TOTP authentication failed, bad request".to_string(),
+            )));
         }
     }
 
-    pub async fn get_auth_token(
-        self,
+    pub async fn get_user(
         session: String,
-        session_signature: String,
+        signature: String,
+        is_pro: Option<bool>,
         url: Option<String>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<User, Box<dyn std::error::Error>> {
         let client = crate::utils::build_client(Some(&format!(
             "sessionid={}; sessionid_sign={}",
-            session, session_signature
+            session, signature
         )))?;
 
         let resp_body = client
@@ -184,7 +191,9 @@ impl User {
                 Some(captures) => captures[1].to_string().parse()?,
                 None => {
                     error!("Error parsing user id");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing user id".to_string(),
+                    )));
                 }
             };
 
@@ -193,7 +202,9 @@ impl User {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing username");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing username".to_string(),
+                    )));
                 }
             };
 
@@ -201,8 +212,10 @@ impl User {
             let session_hash = match session_hash_regex.captures(&resp_body) {
                 Some(captures) => captures[1].to_string(),
                 None => {
-                    error!("Error parsing username");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    error!("Error parsing session_hash");
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing session_hash".to_string(),
+                    )));
                 }
             };
 
@@ -210,8 +223,10 @@ impl User {
             let private_channel = match private_channel_regex.captures(&resp_body) {
                 Some(captures) => captures[1].to_string(),
                 None => {
-                    error!("Error parsing username");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    error!("Error parsing private_channel");
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing private_channel".to_string(),
+                    )));
                 }
             };
 
@@ -220,19 +235,52 @@ impl User {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing auth token");
-                    return Err(Box::new(LoginError::ParseAuthTokenError));
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing auth token".to_string(),
+                    )));
                 }
             };
 
-            return Ok(User {
+            Ok(User {
+                auth_token: auth_token,
                 id: id,
-                username,
-                session_hash,
-                private_channel,
-                auth_token,
-                ..self
-            });
+                username: username,
+                session: session,
+                signature: signature,
+                session_hash: session_hash,
+                private_channel: private_channel,
+                password: "".to_string(),
+                totp_secret: "".to_string(),
+                is_pro: is_pro.unwrap_or_default(),
+            })
+        } else {
+            Err(Box::new(LoginError::SessionExpired))
         }
-        Err(Box::new(LoginError::SessionExpired))
+    }
+
+    pub async fn update_token(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let client = crate::utils::build_client(Some(&format!(
+            "sessionid={}; sessionid_sign={}",
+            self.session, self.signature
+        )))?;
+
+        let resp_body = client
+            .get("https://www.tradingview.com/")
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        Ok(if resp_body.contains("auth_token") {
+            self.auth_token = match Regex::new(r#""auth_token":"(.*?)""#)?.captures(&resp_body) {
+                Some(captures) => captures[1].to_string(),
+                None => {
+                    error!("Error parsing auth token");
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing auth token".to_string(),
+                    )));
+                }
+            };
+        })
     }
 }
