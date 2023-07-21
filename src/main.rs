@@ -1,12 +1,26 @@
-use tradingview_rs::user::LoginUserResponse;
+use tradingview_rs::user::User;
 
-fn main() {
-    let contents = std::fs::read_to_string(
-        "/home/datnguyen/Projects/tradingview-rs/tests/_data/user-login.json",
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt::init();
+
+    let mut user = User::new(
+        Some("lite@bitbytelab.io".to_string()),
+        Some("dAIuLpdzmEy8HWnIYRGwigRA4XwJT4Ny/WIsD/rXy5qurJwu".to_string()),
+        Some("PTB2JVFN3YXVGVFX".to_string()),
     )
-    .expect("Should have been able to read the file");
-    let deserialized: LoginUserResponse = serde_json::from_str(&contents)
-        .expect("Failed to deserialize JSON data to TradingView struct");
+    .await;
 
-    println!("{:#?}", deserialized);
+    // let user = User::get_user(
+    //     "ztpez0vb32w1zdu3yzlhc5egqlo67yee".to_owned(),
+    //     "v1:8fRMIzAGzeK9ufTNs7L7B0ZeplG2inabghj2JSuBg4g=".to_owned(),
+    //     None,
+    // )
+    // .await
+    // .unwrap();
+    println!("User1: {:#?}", user);
+
+    user.update_token().await.unwrap();
+
+    println!("User2: {:#?}", user);
 }
