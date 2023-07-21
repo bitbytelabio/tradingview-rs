@@ -95,7 +95,9 @@ impl User {
 
         if session.is_none() || session_signature.is_none() {
             error!("Wrong username or password");
-            return Err(Box::new(LoginError::LoginFailed));
+            return Err(Box::new(LoginError::LoginFailed(
+                "Wrong username or password".to_string(),
+            )));
         }
 
         let response: Value = response.json().await?;
@@ -109,7 +111,9 @@ impl User {
         } else if response["error"] == "2FA_required".to_owned() {
             if totp_secret.is_none() {
                 error!("2FA is enabled for this account, but no secret was provided");
-                return Err(Box::new(LoginError::InvalidTOTP));
+                return Err(Box::new(LoginError::TOTPError(
+                    "2FA is enabled for this account, but no secret was provided".to_string(),
+                )));
             }
             let response: Value = Self::handle_2fa(
                 &totp_secret.unwrap(),
@@ -125,11 +129,15 @@ impl User {
                 let login_resp: LoginUserResponse = serde_json::from_value(response)?;
                 Ok(login_resp.user)
             } else {
-                error!("2FA authentication failed, something went wrong");
-                Err(Box::new(LoginError::MFALoginFailed))
+                error!("TOTP authentication failed, invalid code/secret");
+                Err(Box::new(LoginError::TOTPError(
+                    "TOTP authentication failed, invalid code/secret".to_string(),
+                )))
             }
         } else {
-            Err(Box::new(LoginError::LoginFailed))
+            Err(Box::new(LoginError::LoginFailed(
+                "Wrong username or password".to_string(),
+            )))
         }
     }
 
@@ -154,7 +162,9 @@ impl User {
         if response.status().is_success() {
             return Ok(response);
         } else {
-            return Err(Box::new(LoginError::MFALoginFailed));
+            return Err(Box::new(LoginError::TOTPError(
+                "TOTP authentication failed, bad request".to_string(),
+            )));
         }
     }
 
@@ -184,7 +194,9 @@ impl User {
                 Some(captures) => captures[1].to_string().parse()?,
                 None => {
                     error!("Error parsing user id");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing user id".to_string(),
+                    )));
                 }
             };
 
@@ -193,7 +205,9 @@ impl User {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing username");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing username".to_string(),
+                    )));
                 }
             };
 
@@ -201,8 +215,10 @@ impl User {
             let session_hash = match session_hash_regex.captures(&resp_body) {
                 Some(captures) => captures[1].to_string(),
                 None => {
-                    error!("Error parsing username");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    error!("Error parsing session_hash");
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing session_hash".to_string(),
+                    )));
                 }
             };
 
@@ -210,8 +226,10 @@ impl User {
             let private_channel = match private_channel_regex.captures(&resp_body) {
                 Some(captures) => captures[1].to_string(),
                 None => {
-                    error!("Error parsing username");
-                    return Err(Box::new(LoginError::ParseUserDataError));
+                    error!("Error parsing private_channel");
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing private_channel".to_string(),
+                    )));
                 }
             };
 
@@ -220,7 +238,9 @@ impl User {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing auth token");
-                    return Err(Box::new(LoginError::ParseAuthTokenError));
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing auth token".to_string(),
+                    )));
                 }
             };
 

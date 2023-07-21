@@ -2,16 +2,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum LoginError {
-    #[error("Invalid username or password")]
-    LoginFailed,
-    #[error("TOTP Secret is empty or invalid")]
-    InvalidTOTP,
-    #[error("MFA login failed")]
-    MFALoginFailed,
+    #[error("Wrong username or password")]
+    LoginFailed(String),
+    #[error("TOTP Error")]
+    TOTPError(String),
     #[error("can not parse user data")]
-    ParseUserDataError,
-    #[error("can not parse auth token")]
-    ParseAuthTokenError,
+    ParseError(String),
     #[error("Wrong or expired sessionid/signature")]
     SessionExpired,
 }
