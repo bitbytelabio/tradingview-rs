@@ -1,7 +1,5 @@
-use futures_util::future::ErrInto;
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
-use http::Error;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
@@ -16,12 +14,12 @@ pub struct LoginUserResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct User {
-    id: u32,
-    username: String,
+    pub id: u32,
+    pub username: String,
     pub is_pro: bool,
-    auth_token: String,
-    session_hash: String,
-    private_channel: String,
+    pub auth_token: String,
+    pub session_hash: String,
+    pub private_channel: String,
 
     #[serde(skip_deserializing)]
     password: String,
@@ -30,7 +28,7 @@ pub struct User {
     #[serde(skip_deserializing)]
     pub session: String,
     #[serde(skip_deserializing)]
-    pub session_signature: String,
+    pub signature: String,
 }
 
 impl User {
@@ -51,7 +49,7 @@ impl User {
                 password: "".to_owned(),
                 totp_secret: "".to_owned(),
                 session: "".to_owned(),
-                session_signature: "".to_owned(),
+                signature: "".to_owned(),
             };
         }
 
@@ -78,7 +76,7 @@ impl User {
             .send()
             .await?;
 
-        let (session, session_signature) =
+        let (session, signature) =
             response
                 .cookies()
                 .fold((None, None), |session_cookies, cookie| {
@@ -89,7 +87,7 @@ impl User {
                     }
                 });
 
-        if session.is_none() || session_signature.is_none() {
+        if session.is_none() || signature.is_none() {
             let error_msg = "Wrong username or password".to_string();
             error!("{}", error_msg);
             return Err(Box::new(LoginError::LoginFailed(error_msg)));
@@ -116,7 +114,7 @@ impl User {
             let response: Value = Self::handle_2fa(
                 &totp_secret.clone().unwrap(),
                 session.clone().unwrap().as_str(),
-                session_signature.clone().unwrap().as_str(),
+                signature.clone().unwrap().as_str(),
             )
             .await?
             .json()
@@ -133,7 +131,7 @@ impl User {
         }
 
         user.session = session.unwrap();
-        user.session_signature = session_signature.unwrap();
+        user.signature = signature.unwrap();
         user.password = password;
         user.totp_secret = totp_secret.unwrap_or_default();
 
@@ -143,13 +141,13 @@ impl User {
     async fn handle_2fa(
         totp_secret: &str,
         session: &str,
-        session_signature: &str,
+        signature: &str,
     ) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
         use reqwest::multipart::Form;
 
         let client: reqwest::Client = crate::utils::build_client(Some(&format!(
             "sessionid={}; sessionid_sign={};",
-            session, session_signature
+            session, signature
         )))?;
 
         let response = client
@@ -169,13 +167,13 @@ impl User {
 
     pub async fn get_user(
         session: String,
-        session_signature: String,
+        signature: String,
         is_pro: Option<bool>,
         url: Option<String>,
     ) -> Result<User, Box<dyn std::error::Error>> {
         let client = crate::utils::build_client(Some(&format!(
             "sessionid={}; sessionid_sign={}",
-            session, session_signature
+            session, signature
         )))?;
 
         let resp_body = client
@@ -248,7 +246,7 @@ impl User {
                 id: id,
                 username: username,
                 session: session,
-                session_signature: session_signature,
+                signature: signature,
                 session_hash: session_hash,
                 private_channel: private_channel,
                 password: "".to_string(),
@@ -263,7 +261,7 @@ impl User {
     pub async fn update_token(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let client = crate::utils::build_client(Some(&format!(
             "sessionid={}; sessionid_sign={}",
-            self.session, self.session_signature
+            self.session, self.signature
         )))?;
 
         let resp_body = client

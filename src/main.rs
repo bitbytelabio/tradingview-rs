@@ -4,17 +4,23 @@ use tradingview_rs::user::User;
 async fn main() {
     tracing_subscriber::fmt::init();
 
+    // let mut user1 = User::new(
+    //     Some("lite_bitbytelab".to_string()),
+    //     Some("dAIuLpdzmEy8HWnIYRGwigRA4XwJT4Ny/WIsD/rXy5qurJwu".to_string()),
+    //     Some("PTB2JVFN3YXVGVFX".to_owned()),
+    // )
+    // .await;
     let mut user1 = User::new(
-        Some("lite_bitbytelab".to_string()),
-        Some("dAIuLpdzmEy8HWnIYRGwigRA4XwJT4Ny/WIsD/rXy5qurJwu".to_string()),
-        Some("PTB2JVFN3YXVGVFX".to_owned()),
+        Some("tv-test@ntdsecurity.com".to_string()),
+        Some("pf64Zw1OgLkwPZhDAH+WzLqKBXNomBs=".to_string()),
+        None,
     )
     .await;
     println!("User1: {:#?}", user1);
 
     let user2: User = match User::get_user(
         user1.session.clone(),
-        user1.session_signature.clone(),
+        user1.signature.clone(),
         Some(user1.is_pro.clone()),
         Some("https://www.tradingview.com/markets/".to_string()),
     )

@@ -1,16 +1,15 @@
 extern crate google_authenticator;
 extern crate regex;
 
-pub mod user;
-
 pub mod api;
 pub mod auth;
 pub mod chart;
+pub mod client;
 pub mod config;
 pub mod errors;
-pub mod misc_requests;
 pub mod model;
 pub mod quote;
+pub mod user;
 pub mod utils;
 pub mod websocket;
 

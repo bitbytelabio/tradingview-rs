@@ -11,3 +11,11 @@ pub enum LoginError {
     #[error("Wrong or expired sessionid/signature")]
     SessionExpired,
 }
+
+#[derive(Debug, Error)]
+pub enum ClientError {
+    #[error("Empty message")]
+    EmptyMessage,
+    #[error("No token found")]
+    NoTokenFound(String),
+}
