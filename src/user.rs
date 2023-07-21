@@ -18,7 +18,7 @@ pub struct LoginUserResponse {
 pub struct User {
     id: u32,
     username: String,
-    is_pro: bool,
+    pub is_pro: bool,
     auth_token: String,
     session_hash: String,
     private_channel: String,
@@ -28,9 +28,9 @@ pub struct User {
     #[serde(skip_deserializing)]
     totp_secret: String,
     #[serde(skip_deserializing)]
-    session: String,
+    pub session: String,
     #[serde(skip_deserializing)]
-    session_signature: String,
+    pub session_signature: String,
 }
 
 impl User {
@@ -170,6 +170,7 @@ impl User {
     pub async fn get_user(
         session: String,
         session_signature: String,
+        is_pro: Option<bool>,
         url: Option<String>,
     ) -> Result<User, Box<dyn std::error::Error>> {
         let client = crate::utils::build_client(Some(&format!(
@@ -252,7 +253,7 @@ impl User {
                 private_channel: private_channel,
                 password: "".to_string(),
                 totp_secret: "".to_string(),
-                is_pro: false,
+                is_pro: is_pro.unwrap_or_default(),
             })
         } else {
             Err(Box::new(LoginError::SessionExpired))

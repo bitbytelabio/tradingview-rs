@@ -4,23 +4,30 @@ use tradingview_rs::user::User;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let mut user = User::new(
-        Some("lite@bitbytelab.io".to_string()),
+    let mut user1 = User::new(
+        Some("lite_bitbytelab".to_string()),
         Some("dAIuLpdzmEy8HWnIYRGwigRA4XwJT4Ny/WIsD/rXy5qurJwu".to_string()),
-        Some("PTB2JVFN3YXVGVFX".to_string()),
+        Some("PTB2JVFN3YXVGVFX".to_owned()),
     )
     .await;
+    println!("User1: {:#?}", user1);
 
-    // let user = User::get_user(
-    //     "ztpez0vb32w1zdu3yzlhc5egqlo67yee".to_owned(),
-    //     "v1:8fRMIzAGzeK9ufTNs7L7B0ZeplG2inabghj2JSuBg4g=".to_owned(),
-    //     None,
-    // )
-    // .await
-    // .unwrap();
-    println!("User1: {:#?}", user);
+    let user2: User = match User::get_user(
+        user1.session.clone(),
+        user1.session_signature.clone(),
+        Some(user1.is_pro.clone()),
+        Some("https://www.tradingview.com/markets/".to_string()),
+    )
+    .await
+    {
+        Ok(user) => user,
+        Err(e) => {
+            println!("Error: {}", e);
+            return;
+        }
+    };
 
-    user.update_token().await.unwrap();
+    // user.update_token().await.unwrap();
 
-    println!("User2: {:#?}", user);
+    println!("User2: {:#?}", user2);
 }
