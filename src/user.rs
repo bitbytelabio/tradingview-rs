@@ -171,23 +171,37 @@ impl User {
         is_pro: Option<bool>,
         url: Option<String>,
     ) -> Result<User, Box<dyn std::error::Error>> {
-        let client = crate::utils::build_client(Some(&format!(
-            "sessionid={}; sessionid_sign={}",
-            session, signature
-        )))?;
+        use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
 
-        let resp_body = client
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+
+        headers.insert(
+            COOKIE,
+            HeaderValue::from_str(&format!(
+                "sessionid={}; sessionid_sign={}",
+                session, signature
+            ))?,
+        );
+
+        let resp = reqwest::Client::builder()
+            .use_rustls_tls()
+            .default_headers(headers)
+            .https_only(true)
+            .user_agent(crate::UA)
+            .gzip(true)
+            .build()?
             .get(url.unwrap_or_else(|| "https://www.tradingview.com/".to_string()))
             .send()
             .await?
             .text()
             .await?;
 
-        if resp_body.contains("auth_token") {
+        if resp.contains("auth_token") {
             info!("User is logged in");
             info!("Loading auth token and user info");
             let id_regex = Regex::new(r#""id":([0-9]{1,10}),"#)?;
-            let id: u32 = match id_regex.captures(&resp_body) {
+            let id: u32 = match id_regex.captures(&resp) {
                 Some(captures) => captures[1].to_string().parse()?,
                 None => {
                     error!("Error parsing user id");
@@ -198,7 +212,7 @@ impl User {
             };
 
             let username_regex = Regex::new(r#""username":"(.*?)""#)?;
-            let username = match username_regex.captures(&resp_body) {
+            let username = match username_regex.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing username");
@@ -209,7 +223,7 @@ impl User {
             };
 
             let session_hash_regex = Regex::new(r#""session_hash":"(.*?)""#)?;
-            let session_hash = match session_hash_regex.captures(&resp_body) {
+            let session_hash = match session_hash_regex.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing session_hash");
@@ -220,7 +234,7 @@ impl User {
             };
 
             let private_channel_regex = Regex::new(r#""private_channel":"(.*?)""#)?;
-            let private_channel = match private_channel_regex.captures(&resp_body) {
+            let private_channel = match private_channel_regex.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing private_channel");
@@ -231,7 +245,7 @@ impl User {
             };
 
             let auth_token_regex = Regex::new(r#""auth_token":"(.*?)""#)?;
-            let auth_token = match auth_token_regex.captures(&resp_body) {
+            let auth_token = match auth_token_regex.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing auth token");
@@ -259,20 +273,34 @@ impl User {
     }
 
     pub async fn update_token(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let client = crate::utils::build_client(Some(&format!(
-            "sessionid={}; sessionid_sign={}",
-            self.session, self.signature
-        )))?;
+        use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
 
-        let resp_body = client
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+
+        headers.insert(
+            COOKIE,
+            HeaderValue::from_str(&format!(
+                "sessionid={}; sessionid_sign={}",
+                self.session, self.signature
+            ))?,
+        );
+
+        let resp = reqwest::Client::builder()
+            .use_rustls_tls()
+            .default_headers(headers)
+            .https_only(true)
+            .user_agent(crate::UA)
+            .gzip(true)
+            .build()?
             .get("https://www.tradingview.com/")
             .send()
             .await?
             .text()
             .await?;
 
-        Ok(if resp_body.contains("auth_token") {
-            self.auth_token = match Regex::new(r#""auth_token":"(.*?)""#)?.captures(&resp_body) {
+        Ok(if resp.contains("auth_token") {
+            self.auth_token = match Regex::new(r#""auth_token":"(.*?)""#)?.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing auth token");

@@ -13,10 +13,7 @@ lazy_static::lazy_static! {
 
 pub fn build_client(cookie: Option<&str>) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let mut headers = HeaderMap::new();
-    headers.insert(
-        ACCEPT,
-        HeaderValue::from_static("application/json, text/plain, */*"),
-    );
+    headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     headers.insert(
         ORIGIN,
         HeaderValue::from_static("https://www.tradingview.com"),

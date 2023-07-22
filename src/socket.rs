@@ -1,3 +1,24 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SocketMessage {
+    pub m: Value,
+    pub p: Value,
+}
+
+impl SocketMessage {
+    pub fn new<M, P>(m: M, p: P) -> Self
+    where
+        M: Serialize,
+        P: Serialize,
+    {
+        let m = serde_json::to_value(m).unwrap();
+        let p = serde_json::to_value(p).unwrap();
+        SocketMessage { m, p }
+    }
+}
+
 // use crate::auth::UserData;
 // use crate::utils::{format_packet, parse_packet};
 // use crate::UA;
