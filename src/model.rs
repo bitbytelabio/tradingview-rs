@@ -32,15 +32,15 @@ pub struct Quote {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuoteValue {
-    #[serde(default, rename = "lp")]
+    #[serde(default, rename(deserialize = "lp"))]
     price: f64,
     #[serde(default)]
     ask: f64,
     #[serde(default)]
     bid: f64,
-    #[serde(default, rename = "ch")]
+    #[serde(default, rename(deserialize = "ch"))]
     charge: f64,
-    #[serde(default, rename = "lp_time")]
+    #[serde(default, rename(deserialize = "lp_time"))]
     timestamps: u64,
     #[serde(default)]
     volume: f64,
