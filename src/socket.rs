@@ -13,8 +13,8 @@ impl SocketMessage {
         M: Serialize,
         P: Serialize,
     {
-        let m = serde_json::to_value(m).unwrap();
-        let p = serde_json::to_value(p).unwrap();
+        let m = serde_json::to_value(m).expect("Failed to serialize Socket Message");
+        let p = serde_json::to_value(p).expect("Failed to serialize Socket Message");
         SocketMessage { m, p }
     }
 }
