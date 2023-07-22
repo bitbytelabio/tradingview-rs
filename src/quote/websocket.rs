@@ -131,7 +131,7 @@ impl Socket {
                                     .unwrap();
                             info!("Quote data: {:?}", quote_data);
                         }
-                        warn!("Message received: {:?}", x);
+                        debug!("Message received: {:?}", x);
                     });
                 }
                 Err(e) => {

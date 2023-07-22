@@ -5,15 +5,12 @@ use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Indicator {
-    #[serde(rename = "scriptName")]
+    #[serde(rename(deserialize = "scriptName"))]
     pub name: String,
-
-    #[serde(rename = "scriptIdPart")]
+    #[serde(rename(deserialize = "scriptIdPart"))]
     pub id: String,
-
     pub version: String,
-
-    #[serde(flatten, rename = "extra")]
+    #[serde(flatten, rename(deserialize = "extra"))]
     pub info: HashMap<String, Value>,
 }
 
@@ -33,15 +30,15 @@ pub struct Quote {
 #[serde(rename_all = "camelCase")]
 pub struct QuoteValue {
     #[serde(default, rename(deserialize = "lp"))]
-    price: f64,
+    pub price: f64,
     #[serde(default)]
-    ask: f64,
+    pub ask: f64,
     #[serde(default)]
-    bid: f64,
+    pub bid: f64,
     #[serde(default, rename(deserialize = "ch"))]
-    charge: f64,
+    pub charge: f64,
     #[serde(default, rename(deserialize = "lp_time"))]
-    timestamps: u64,
+    pub timestamps: u64,
     #[serde(default)]
-    volume: f64,
+    pub volume: f64,
 }
