@@ -1,39 +1,19 @@
+use tradingview_rs::quote::ALL_QUOTE_FIELDS;
+use tradingview_rs::socket::SocketMessage;
 use tradingview_rs::user::User;
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    // let mut user1 = User::new(
-    //     Some("lite_bitbytelab".to_string()),
-    //     Some("dAIuLpdzmEy8HWnIYRGwigRA4XwJT4Ny/WIsD/rXy5qurJwu".to_string()),
-    //     Some("PTB2JVFN3YXVGVFX".to_owned()),
-    // )
-    // .await;
-    let mut user1 = User::new(
-        Some("tv-test@ntdsecurity.com".to_string()),
-        Some("pf64Zw1OgLkwPZhDAH+WzLqKBXNomBs=".to_string()),
-        None,
-    )
-    .await;
-    println!("User1: {:#?}", user1);
+    let session = tradingview_rs::utils::gen_session_id("qs");
+    let mut new_vec: Vec<String> = vec![session];
+    new_vec.extend_from_slice(&ALL_QUOTE_FIELDS);
 
-    let user2: User = match User::get_user(
-        user1.session.clone(),
-        user1.signature.clone(),
-        Some(user1.is_pro.clone()),
-        Some("https://www.tradingview.com/markets/".to_string()),
-    )
-    .await
-    {
-        Ok(user) => user,
-        Err(e) => {
-            println!("Error: {}", e);
-            return;
-        }
-    };
+    let message =
+        tradingview_rs::socket::SocketMessage::new("quote_create_session".to_string(), new_vec);
 
-    // user.update_token().await.unwrap();
-
-    println!("User2: {:#?}", user2);
+    // println!("{:?}", message);
+    let format_msg = tradingview_rs::utils::format_packet(message).unwrap();
+    println!("{:?}", format_msg.to_string());
 }

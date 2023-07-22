@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Default, Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Indicator {
     #[serde(rename = "scriptName")]
     pub name: String,
@@ -16,3 +16,6 @@ pub struct Indicator {
     #[serde(flatten, rename = "extra")]
     pub info: HashMap<String, Value>,
 }
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Quote {}
