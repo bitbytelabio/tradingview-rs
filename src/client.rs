@@ -6,54 +6,46 @@ pub struct Client {
     user: User,
 }
 
-#[tracing::instrument]
-fn get_screener(exchange: &str) -> String {
-    let e = exchange.to_uppercase();
-    if ["NASDAQ", "NYSE", "NYSE ARCA", "OTC"].contains(&e.as_str()) {
-        return String::from("america");
-    }
-    if ["ASX"].contains(&e.as_str()) {
-        return String::from("australia");
-    }
-    if ["TSX", "TSXV", "CSE", "NEO"].contains(&e.as_str()) {
-        return String::from("canada");
-    }
-    if ["EGX"].contains(&e.as_str()) {
-        return String::from("egypt");
-    }
-    if ["FWB", "SWB", "XETR"].contains(&e.as_str()) {
-        return String::from("germany");
-    }
-    if ["BSE", "NSE"].contains(&e.as_str()) {
-        return String::from("india");
-    }
-    if ["TASE"].contains(&e.as_str()) {
-        return String::from("israel");
-    }
-    if ["MIL", "MILSEDEX"].contains(&e.as_str()) {
-        return String::from("italy");
-    }
-    if ["LUXSE"].contains(&e.as_str()) {
-        return String::from("luxembourg");
-    }
-    if ["NEWCONNECT"].contains(&e.as_str()) {
-        return String::from("poland");
-    }
-    if ["NGM"].contains(&e.as_str()) {
-        return String::from("sweden");
-    }
-    if ["BIST"].contains(&e.as_str()) {
-        return String::from("turkey");
-    }
-    if ["LSE", "LSIN"].contains(&e.as_str()) {
-        return String::from("uk");
-    }
-    if ["HNX", "HOSE", "UPCOM"].contains(&e.as_str()) {
-        return String::from("vietnam");
-    }
-    return exchange.to_lowercase();
+#[derive(Debug, PartialEq)]
+pub enum Screener {
+    America,
+    Australia,
+    Canada,
+    Egypt,
+    Germany,
+    India,
+    Israel,
+    Italy,
+    Luxembourg,
+    Poland,
+    Sweden,
+    Turkey,
+    UK,
+    Vietnam,
+    Other(String),
 }
 
+#[tracing::instrument]
+fn get_screener(exchange: &str) -> Screener {
+    let e = exchange.to_uppercase();
+    match e.as_str() {
+        "NASDAQ" | "NYSE" | "NYSE ARCA" | "OTC" => Screener::America,
+        "ASX" => Screener::Australia,
+        "TSX" | "TSXV" | "CSE" | "NEO" => Screener::Canada,
+        "EGX" => Screener::Egypt,
+        "FWB" | "SWB" | "XETR" => Screener::Germany,
+        "BSE" | "NSE" => Screener::India,
+        "TASE" => Screener::Israel,
+        "MIL" | "MILSEDEX" => Screener::Italy,
+        "LUXSE" => Screener::Luxembourg,
+        "NEWCONNECT" => Screener::Poland,
+        "NGM" => Screener::Sweden,
+        "BIST" => Screener::Turkey,
+        "LSE" | "LSIN" => Screener::UK,
+        "HNX" | "HOSE" | "UPCOM" => Screener::Vietnam,
+        _ => Screener::Other(exchange.to_lowercase()),
+    }
+}
 impl Client {
     fn new(user: User) -> Self {
         Self { user }

@@ -1,44 +1,32 @@
+use crate::socket::SocketMessage;
 use crate::utils::{format_packet, parse_packet};
 use crate::UA;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
-use std::fmt;
 use std::net::TcpStream;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tungstenite::{client::IntoClientRequest, connect, stream::MaybeTlsStream, Message, WebSocket};
 use url::Url;
 
+use super::session;
 pub struct Socket {
     pub socket_stream: WebSocket<MaybeTlsStream<TcpStream>>,
     messages: Vec<Message>,
 }
 
-pub enum DataServer {
-    Data,
-    ProData,
-    WidgetData,
-}
-
-impl fmt::Display for DataServer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            DataServer::Data => write!(f, "data"),
-            DataServer::ProData => write!(f, "prodata"),
-            DataServer::WidgetData => write!(f, "widgetdata"),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SocketMessage {
-    pub m: String,
-    pub p: Vec<Value>,
-}
-
 impl Socket {
-    pub fn new(data_server: DataServer, user_data: Option<UserData>) -> Self {
-        let server = data_server.to_string();
+    pub fn set_quote_fields(session: &str) -> SocketMessage {
+        let mut p_vec = vec![session.to_string()];
+        super::ALL_QUOTE_FIELDS.iter().for_each(|field| {
+            p_vec.push(field.to_string());
+        });
+
+        SocketMessage::new("quote_set_fields", p_vec)
+    }
+
+    pub fn new(server: crate::socket::DataServer, auth_token: Option<String>) -> Self {
+        let server = server.to_string();
         let url = Url::parse("wss://data.tradingview.com/socket.io/websocket").unwrap();
         let mut request = url.into_client_request().unwrap();
         let headers = request.headers_mut();
@@ -49,30 +37,51 @@ impl Socket {
             Err(e) => panic!("Error during handshake: {}", e),
         };
         info!("WebSocket handshake has been successfully completed");
-        match user_data {
-            Some(user_data) => {
-                let auth = SocketMessage {
-                    m: "set_auth_token".to_string(),
-                    p: vec![Value::String(user_data.auth_token)],
-                };
-                let msg = format_packet(auth);
-                match socket.write_message(msg.clone()) {
-                    Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
-                    Err(e) => error!("Error sending message: {:?}", e),
-                }
-            }
-            None => {
-                let auth = SocketMessage {
-                    m: "set_auth_token".to_string(),
-                    p: vec![Value::String("unauthorized_user_token".to_string())],
-                };
-                let msg = format_packet(auth);
-                match socket.write_message(msg.clone()) {
-                    Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
-                    Err(e) => error!("Error sending message: {:?}", e),
-                }
-            }
-        };
+        // match auth_token {
+        //     Some(auth_token) => {
+        //         let auth = SocketMessage::new("set_auth_token", vec![auth_token]);
+
+        //         let msg = format_packet(auth).unwrap();
+
+        //         match socket.write_message(msg.clone()) {
+        //             Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
+        //             Err(e) => error!("Error sending message: {:?}", e),
+        //         }
+        //     }
+        //     None => {
+        //         let auth = SocketMessage::new("set_auth_token", vec!["unauthorized_user_token"]);
+        //         let msg = format_packet(auth).unwrap();
+        //         match socket.write_message(msg.clone()) {
+        //             Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
+        //             Err(e) => error!("Error sending message: {:?}", e),
+        //         }
+        //     }
+        // };
+
+        let session = crate::utils::gen_session_id("qs");
+
+        let messages = vec![
+            format_packet(SocketMessage::new(
+                "set_auth_token",
+                vec!["unauthorized_user_token"],
+            ))
+            .unwrap(),
+            format_packet(SocketMessage::new("quote_create_session", vec![&session])).unwrap(),
+            format_packet(Self::set_quote_fields(&session)).unwrap(),
+            format_packet(SocketMessage::new(
+                "quote_add_symbols",
+                vec![session.clone(), "BINANCE:BTCUSDT".to_string()],
+            ))
+            .unwrap(),
+        ];
+
+        messages
+            .iter()
+            .for_each(|msg| match socket.write_message(msg.clone()) {
+                Ok(_) => debug!("Message sent successfully: {:?}", msg.to_string()),
+                Err(e) => error!("Error sending message: {:?}", e),
+            });
+
         Socket {
             socket_stream: socket,
             messages: vec![],
@@ -83,7 +92,7 @@ impl Socket {
     where
         T: Serialize,
     {
-        self.messages.push(format_packet(packet));
+        self.messages.push(format_packet(packet).unwrap());
         self.send_queue();
         Ok(())
     }
@@ -111,13 +120,18 @@ impl Socket {
             let result = self.socket_stream.read_message();
             match result {
                 Ok(msg) => {
-                    let parsed_msg = parse_packet(&msg.to_string());
+                    let parsed_msg = parse_packet(&msg.to_string()).unwrap();
                     parsed_msg.into_iter().for_each(|x| {
                         if x.is_number() {
                             self.socket_stream.write_message(msg.clone()).unwrap();
                             debug!("Message sent successfully: {}", msg.to_string());
+                        } else if x["m"].is_string() && x["m"] == "qsd" {
+                            let quote_data =
+                                serde_json::from_value::<crate::model::Quote>(x["p"][1].clone())
+                                    .unwrap();
+                            info!("Quote data: {:?}", quote_data);
                         }
-                        debug!("Message received: {:?}", x);
+                        warn!("Message received: {:?}", x);
                     });
                 }
                 Err(e) => {

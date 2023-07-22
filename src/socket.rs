@@ -19,6 +19,22 @@ impl SocketMessage {
     }
 }
 
+pub enum DataServer {
+    Data,
+    ProData,
+    WidgetData,
+}
+
+impl std::fmt::Display for DataServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DataServer::Data => write!(f, "data"),
+            DataServer::ProData => write!(f, "prodata"),
+            DataServer::WidgetData => write!(f, "widgetdata"),
+        }
+    }
+}
+
 // use crate::auth::UserData;
 // use crate::utils::{format_packet, parse_packet};
 // use crate::UA;

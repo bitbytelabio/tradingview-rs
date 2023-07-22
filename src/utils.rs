@@ -1,3 +1,4 @@
+use rand::seq::SliceRandom; // add this import to use `choose_multiple`
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
@@ -48,7 +49,7 @@ pub fn gen_session_id(session_type: &str) -> String {
 
 pub fn parse_packet(message: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
     if message.is_empty() {
-        return Err("Empty message".into());
+        return Ok(vec![]);
     }
 
     let cleaned_message = CLEANER_REGEX.replace_all(message, "");
