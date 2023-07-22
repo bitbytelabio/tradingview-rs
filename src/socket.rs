@@ -13,9 +13,25 @@ impl SocketMessage {
         M: Serialize,
         P: Serialize,
     {
-        let m = serde_json::to_value(m).unwrap();
-        let p = serde_json::to_value(p).unwrap();
+        let m = serde_json::to_value(m).expect("Failed to serialize Socket Message");
+        let p = serde_json::to_value(p).expect("Failed to serialize Socket Message");
         SocketMessage { m, p }
+    }
+}
+
+pub enum DataServer {
+    Data,
+    ProData,
+    WidgetData,
+}
+
+impl std::fmt::Display for DataServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DataServer::Data => write!(f, "data"),
+            DataServer::ProData => write!(f, "prodata"),
+            DataServer::WidgetData => write!(f, "widgetdata"),
+        }
     }
 }
 
