@@ -63,7 +63,7 @@ impl User {
         password: String,
         totp_secret: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let client: reqwest::Client = crate::utils::build_client(None)?;
+        let client: reqwest::Client = crate::utils::reqwest_build_client(None)?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
@@ -145,7 +145,7 @@ impl User {
     ) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
         use reqwest::multipart::Form;
 
-        let client: reqwest::Client = crate::utils::build_client(Some(&format!(
+        let client: reqwest::Client = crate::utils::reqwest_build_client(Some(&format!(
             "sessionid={}; sessionid_sign={};",
             session, signature
         )))?;
@@ -168,7 +168,6 @@ impl User {
     pub async fn get_user(
         session: String,
         signature: String,
-        is_pro: Option<bool>,
         url: Option<String>,
     ) -> Result<User, Box<dyn std::error::Error>> {
         use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
@@ -255,6 +254,17 @@ impl User {
                 }
             };
 
+            let is_pro_regex = Regex::new(r#""is_pro":"(.*?)""#)?;
+            let is_pro: bool = match is_pro_regex.captures(&resp) {
+                Some(captures) => captures[1].to_string().parse()?,
+                None => {
+                    error!("Error parsing auth token");
+                    return Err(Box::new(LoginError::ParseError(
+                        "Error parsing auth token".to_string(),
+                    )));
+                }
+            };
+
             Ok(User {
                 auth_token: auth_token,
                 id: id,
@@ -265,7 +275,7 @@ impl User {
                 private_channel: private_channel,
                 password: "".to_string(),
                 totp_secret: "".to_string(),
-                is_pro: is_pro.unwrap_or_default(),
+                is_pro: is_pro,
             })
         } else {
             Err(Box::new(LoginError::SessionExpired))
