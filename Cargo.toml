@@ -28,7 +28,7 @@ rand = "^0.8"
 regex = "^1"
 google-authenticator = "^0.4"
 tungstenite = { version = "0.20", features = ["native-tls"] }
-tokio-tungstenite = { version = "0.19", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
