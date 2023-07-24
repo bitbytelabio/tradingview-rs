@@ -1,19 +1,28 @@
-use tradingview_rs::quote::ALL_QUOTE_FIELDS;
 use tradingview_rs::socket::SocketMessage;
-use tradingview_rs::user::User;
 use tradingview_rs::utils::{format_packet, parse_packet};
 use tradingview_rs::UA;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tracing::{debug, error, info, warn};
+use tokio_tungstenite::connect_async;
+use tracing::{debug, error, info};
 
 use tungstenite::client::IntoClientRequest;
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+
+    tokio::spawn(async move {
+        let mut stdin = tokio::io::stdin();
+        let mut stdout = tokio::io::stdout();
+        let mut buffer = [0; 1024];
+
+        loop {
+            let n = stdin.read(&mut buffer).await.unwrap();
+            stdout.write_all(&buffer[0..n]).await.unwrap();
+        }
+    });
 
     let url = url::Url::parse("wss://data.tradingview.com/socket.io/websocket").unwrap();
     let mut request = url.into_client_request().unwrap();
