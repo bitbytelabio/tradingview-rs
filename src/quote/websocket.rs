@@ -77,7 +77,7 @@ impl Socket {
 
         messages
             .iter()
-            .for_each(|msg| match socket.write_message(msg.clone()) {
+            .for_each(|msg| match socket.send(msg.clone()) {
                 Ok(_) => debug!("Message sent successfully: {:?}", msg.to_string()),
                 Err(e) => error!("Error sending message: {:?}", e),
             });
@@ -103,7 +103,7 @@ impl Socket {
             && self.messages.len() > 0
         {
             let msg = self.messages.remove(0);
-            match self.socket_stream.write_message(msg.clone()) {
+            match self.socket_stream.send(msg.clone()) {
                 Ok(_) => {
                     debug!("Message sent successfully: {}", msg.to_string());
                 }
@@ -117,13 +117,13 @@ impl Socket {
 
     pub fn read_message(&mut self) {
         loop {
-            let result = self.socket_stream.read_message();
+            let result = self.socket_stream.read();
             match result {
                 Ok(msg) => {
                     let parsed_msg = parse_packet(&msg.to_string()).unwrap();
                     parsed_msg.into_iter().for_each(|x| {
                         if x.is_number() {
-                            self.socket_stream.write_message(msg.clone()).unwrap();
+                            self.socket_stream.send(msg.clone()).unwrap();
                             debug!("Message sent successfully: {}", msg.to_string());
                         } else if x["m"].is_string() && x["m"] == "qsd" {
                             let quote_data =
