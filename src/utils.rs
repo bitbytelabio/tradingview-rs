@@ -1,4 +1,3 @@
-use rand::seq::SliceRandom; // add this import to use `choose_multiple`
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
@@ -12,7 +11,9 @@ lazy_static::lazy_static! {
     static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
-pub fn build_client(cookie: Option<&str>) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
+pub fn reqwest_build_client(
+    cookie: Option<&str>,
+) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     headers.insert(
