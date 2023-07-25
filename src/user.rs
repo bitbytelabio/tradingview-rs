@@ -95,16 +95,12 @@ impl UserBuilder {
             session: self.session.take().unwrap_or_default(),
             signature: self.signature.take().unwrap_or_default(),
         };
-        // Check if session and signature are empty
+
         if !user.session.is_empty() && !user.signature.is_empty() {
             Ok(user.get_user(None).await?)
-        }
-        // Check if username and password are empty
-        else if !user.username.is_empty() && !user.password.is_empty() {
+        } else if !user.username.is_empty() && !user.password.is_empty() {
             Ok(user.login().await?)
-        }
-        // Perform login
-        else {
+        } else {
             Ok(user)
         }
     }
@@ -181,7 +177,7 @@ impl User {
                 error!("{}", error_msg);
                 return Err(Box::new(LoginError::TOTPError(error_msg)));
             }
-            let response: Value = Self::handle_2fa(
+            let response: Value = Self::handle_mfa(
                 &self.totp_secret,
                 session.clone().unwrap_or_default().as_str(),
                 signature.clone().unwrap_or_default().as_str(),
@@ -207,7 +203,7 @@ impl User {
         })
     }
 
-    async fn handle_2fa(
+    async fn handle_mfa(
         totp_secret: &str,
         session: &str,
         signature: &str,
