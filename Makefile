@@ -12,6 +12,9 @@ endif
 build: 
 	@cargo build --verbose --all-features
 
+test-user:
+	@cargo test -p tradingview-rs --test user_test
+
 test:
 	@cargo test --verbose --all-features
 

@@ -20,7 +20,7 @@ pub struct LoginUserResponse {
     user: User,
 }
 
-#[derive(Default, Debug, Deserialize)]
+#[derive(Default, Debug, Deserialize, PartialEq)]
 pub struct User {
     pub id: u32,
     pub username: String,
@@ -97,9 +97,11 @@ impl UserBuilder {
         };
 
         if !user.session.is_empty() && !user.signature.is_empty() {
-            Ok(user.get_user(None).await?)
+            let user = user.get_user(None).await?;
+            Ok(user)
         } else if !user.username.is_empty() && !user.password.is_empty() {
-            Ok(user.login().await?)
+            let user = user.login().await?;
+            Ok(user)
         } else {
             Ok(user)
         }
@@ -124,9 +126,7 @@ impl User {
 
     pub async fn login(&mut self) -> Result<Self, Box<dyn std::error::Error>> {
         if self.username.is_empty() || self.password.is_empty() {
-            return Err(Box::new(LoginError::LoginFailed(
-                "Username or password is empty".to_string(),
-            )));
+            return Err(Box::new(LoginError::EmptyCredentials));
         };
 
         let client: reqwest::Client = crate::utils::reqwest_build_client(None)?;
@@ -154,9 +154,8 @@ impl User {
                 });
 
         if session.is_none() || signature.is_none() {
-            let error_msg = "unable to login, username or password is invalid".to_string();
-            error!("{}", error_msg);
-            return Err(Box::new(LoginError::LoginFailed(error_msg)));
+            error!("unable to login, username or password is invalid");
+            return Err(Box::new(LoginError::LoginFailed));
         }
 
         let response: Value = response.json().await?;
@@ -172,10 +171,8 @@ impl User {
             user = login_resp.user;
         } else if response["error"] == "2FA_required".to_owned() {
             if self.totp_secret.is_empty() {
-                let error_msg =
-                    "2FA is enabled for this account, but no TOTP secret was provided".to_string();
-                error!("{}", error_msg);
-                return Err(Box::new(LoginError::TOTPError(error_msg)));
+                error!("2FA is enabled for this account, but no TOTP secret was provided");
+                return Err(Box::new(LoginError::TOTPEmpty));
             }
             let response: Value = Self::handle_mfa(
                 &self.totp_secret,
@@ -191,9 +188,8 @@ impl User {
 
             user = login_resp.user;
         } else {
-            let error_msg = "unable to login, username or password is invalid".to_string();
-            error!("{}", error_msg);
-            return Err(Box::new(LoginError::LoginFailed(error_msg)));
+            error!("unable to login, username or password is invalid");
+            return Err(Box::new(LoginError::LoginFailed));
         }
 
         Ok(User {
@@ -209,9 +205,7 @@ impl User {
         signature: &str,
     ) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
         if totp_secret.is_empty() {
-            return Err(Box::new(LoginError::TOTPError(
-                "TOTP secret is empty".to_string(),
-            )));
+            return Err(Box::new(LoginError::TOTPEmpty));
         }
 
         use reqwest::multipart::Form;
@@ -230,9 +224,7 @@ impl User {
         if response.status().is_success() {
             return Ok(response);
         } else {
-            return Err(Box::new(LoginError::TOTPError(
-                "TOTP authentication failed, bad request".to_string(),
-            )));
+            return Err(Box::new(LoginError::AuthenticationMFAError));
         }
     }
 
@@ -241,9 +233,7 @@ impl User {
         url: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         if self.session.is_empty() || self.signature.is_empty() {
-            return Err(Box::new(LoginError::SessionExpired(
-                "Session or signature is empty".to_string(),
-            )));
+            return Err(Box::new(LoginError::SessionNotFound));
         }
 
         use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
@@ -280,45 +270,35 @@ impl User {
                 Some(captures) => captures[1].to_string().parse()?,
                 None => {
                     error!("Error parsing user id");
-                    return Err(Box::new(LoginError::ParseError(
-                        "Error parsing user id".to_string(),
-                    )));
+                    return Err(Box::new(LoginError::ParseIDError));
                 }
             };
             let username = match USERNAME_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing username");
-                    return Err(Box::new(LoginError::ParseError(
-                        "Error parsing username".to_string(),
-                    )));
+                    return Err(Box::new(LoginError::ParseUsernameError));
                 }
             };
             let session_hash = match SESSION_HASH_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing session_hash");
-                    return Err(Box::new(LoginError::ParseError(
-                        "Error parsing session_hash".to_string(),
-                    )));
+                    return Err(Box::new(LoginError::ParseSessionHashError));
                 }
             };
             let private_channel = match PRIVATE_CHANNEL_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing private_channel");
-                    return Err(Box::new(LoginError::ParseError(
-                        "Error parsing private_channel".to_string(),
-                    )));
+                    return Err(Box::new(LoginError::ParsePrivateChannelError));
                 }
             };
             let auth_token = match AUTH_TOKEN_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing auth token");
-                    return Err(Box::new(LoginError::ParseError(
-                        "Error parsing auth token".to_string(),
-                    )));
+                    return Err(Box::new(LoginError::ParseAuthTokenError));
                 }
             };
 
@@ -335,9 +315,7 @@ impl User {
                 totp_secret: self.totp_secret.clone(),
             })
         } else {
-            Err(Box::new(LoginError::SessionExpired(
-                "Session is expired or invalid".to_string(),
-            )))
+            Err(Box::new(LoginError::SessionExpired))
         }
     }
 }
