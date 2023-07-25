@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "apng",
     "ARCA",
     "backtest",
     "BIST",
@@ -22,6 +23,7 @@
     "sessionid",
     "socketio",
     "TASE",
+    "thiserror",
     "totp",
     "Tradingview",
     "TSXV",
