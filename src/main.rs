@@ -1,11 +1,4 @@
-use tradingview_rs::socket::SocketMessage;
-use tradingview_rs::utils::{format_packet, parse_packet};
-use tradingview_rs::UA;
-
-use futures_util::{SinkExt, StreamExt};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_tungstenite::connect_async;
-use tracing::{debug, error, info};
+use tracing::debug;
 
 #[tokio::main]
 async fn main() {
@@ -18,11 +11,9 @@ async fn main() {
     // .await;
 
     // quote_socket.read_message().await;
-}
 
-fn optional_arg<Thing>(thing: Option<Thing>) -> Thing
-where
-    Thing: Default,
-{
-    thing.unwrap_or(Thing::default())
+    use tradingview_rs::user::*;
+    // let user = User::new().build();
+    let user = User::new().credentials("aaa", "bbb").build().await;
+    debug!("user: {:#?}", user);
 }

@@ -9,7 +9,7 @@ pub enum LoginError {
     #[error("can not parse user data")]
     ParseError(String),
     #[error("Wrong or expired sessionid/signature")]
-    SessionExpired,
+    SessionExpired(String),
 }
 
 #[derive(Debug, Error)]
