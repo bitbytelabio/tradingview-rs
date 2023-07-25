@@ -46,8 +46,13 @@ fn get_screener(exchange: &str) -> Screener {
         _ => Screener::Other(exchange.to_lowercase()),
     }
 }
+
+struct ClientBuilder;
+
+impl ClientBuilder {}
+
 impl Client {
-    fn new(user: User) -> Self {
+    pub fn new(user: User) -> Self {
         Self { user }
     }
 
@@ -94,11 +99,7 @@ impl Client {
             Some(token) => {
                 return Ok(match token.as_str() {
                     Some(token) => token.to_string(),
-                    None => {
-                        return Err(Box::new(errors::ClientError::NoTokenFound(
-                            "Chart token not found".to_string(),
-                        )))
-                    }
+                    None => return Err(Box::new(errors::ClientError::NoChartTokenFound)),
                 })
             }
             None => return Err("No token found").unwrap(),
