@@ -14,6 +14,13 @@ async fn main() {
 
     use tradingview_rs::user::*;
     // let user = User::new().build();
-    let user = User::new().credentials("aaa", "bbb").build().await;
+    let user = User::new()
+        .pro(true)
+        .session(
+            "2endn5wa0rw9gmu8bewxc6ymqbxhrbw2",
+            "v1:+MY3Ea/emfmC56ZMMu2Q5PO+kW3ZB36QxiW2U6nEhIw=",
+        )
+        .build()
+        .await;
     debug!("user: {:#?}", user);
 }

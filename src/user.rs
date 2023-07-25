@@ -13,7 +13,6 @@ lazy_static::lazy_static! {
     static ref SESSION_HASH_REGEX: Regex = Regex::new(r#""session_hash":"(.*?)""#).unwrap();
     static ref PRIVATE_CHANNEL_REGEX: Regex =  Regex::new(r#""private_channel":"(.*?)""#).unwrap();
     static ref AUTH_TOKEN_REGEX: Regex =  Regex::new(r#""auth_token":"(.*?)""#).unwrap();
-    static ref IS_PRO_REGEX: Regex = Regex::new(r#""is_pro":"(.*?)""#).unwrap();
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,7 +24,6 @@ pub struct LoginUserResponse {
 pub struct User {
     pub id: u32,
     pub username: String,
-    pub is_pro: bool,
     pub auth_token: String,
     pub session_hash: String,
     pub private_channel: String,
@@ -38,6 +36,8 @@ pub struct User {
     pub session: String,
     #[serde(skip_deserializing)]
     pub signature: String,
+    #[serde(skip_deserializing)]
+    pub is_pro: bool,
 }
 
 #[derive(Debug)]
@@ -61,16 +61,23 @@ impl UserBuilder {
         self
     }
 
+    pub fn pro(&mut self, is_pro: bool) -> &mut Self {
+        self.is_pro = Some(is_pro);
+        self
+    }
+
     pub fn totp_secret(&mut self, totp_secret: &str) -> &mut Self {
         self.totp_secret = Some(totp_secret.to_owned());
         self
     }
 
-    pub fn session(&mut self, session: String, signature: String) -> &mut Self {
-        self.session = Some(session);
-        self.signature = Some(signature);
+    pub fn session(&mut self, session: &str, signature: &str) -> &mut Self {
+        self.session = Some(session.to_owned());
+        self.signature = Some(signature.to_owned());
         self
     }
+
+    pub fn vault_config() {}
 
     pub async fn build(&mut self) -> Result<User, Box<dyn std::error::Error>> {
         let mut user = User {
@@ -89,11 +96,11 @@ impl UserBuilder {
             signature: self.signature.take().unwrap_or_default(),
         };
         // Check if session and signature are empty
-        if self.session.is_some() && self.signature.is_some() {
+        if !user.session.is_empty() && !user.signature.is_empty() {
             Ok(user.get_user(None).await?)
         }
         // Check if username and password are empty
-        else if self.username.is_some() && self.password.is_some() {
+        else if !user.username.is_empty() && !user.password.is_empty() {
             Ok(user.login().await?)
         }
         // Perform login
@@ -318,15 +325,6 @@ impl User {
                     )));
                 }
             };
-            let is_pro: bool = match IS_PRO_REGEX.captures(&resp) {
-                Some(captures) => captures[1].to_string().parse()?,
-                None => {
-                    error!("Error parsing auth token");
-                    return Err(Box::new(LoginError::ParseError(
-                        "Error parsing auth token".to_string(),
-                    )));
-                }
-            };
 
             Ok(User {
                 auth_token: auth_token,
@@ -334,7 +332,7 @@ impl User {
                 username: username,
                 session_hash: session_hash,
                 private_channel: private_channel,
-                is_pro: is_pro,
+                is_pro: self.is_pro,
                 session: self.session.clone(),
                 signature: self.signature.clone(),
                 password: self.password.clone(),
