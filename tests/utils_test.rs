@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod utils {
     #[test]
-    fn parse_packet_test() {
+    fn test_parse_packet() {
         let current_dir = std::env::current_dir().unwrap().display().to_string();
         println!("Current dir: {}", current_dir);
         let messages =
