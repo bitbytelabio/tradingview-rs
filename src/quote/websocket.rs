@@ -19,13 +19,18 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 use url::Url;
 
+#[derive(Debug)]
 pub struct QuoteSocket {
-    pub write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-    pub read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+    read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     session: String,
     messages: VecDeque<Message>,
+    ready: bool,
+    auth_token: String,
     // callbacks: Option<Box<dyn FnMut(SocketMessage) + Send + Sync + 'static>>,
 }
+
+pub struct Callback {}
 
 pub struct QuoteSocketBuilder {
     server: DataServer,
@@ -35,12 +40,12 @@ pub struct QuoteSocketBuilder {
 impl QuoteSocketBuilder {}
 
 impl QuoteSocket {
-    fn set_quote_fields(session: &str) -> SocketMessage {
+    fn set_quote_fields(session: &str) -> Vec<String> {
         let mut params = vec![session.to_string()];
         super::ALL_QUOTE_FIELDS.iter().for_each(|field| {
             params.push(field.to_string());
         });
-        SocketMessage::new("quote_set_fields", params)
+        params
     }
 
     pub async fn connect(
@@ -63,6 +68,7 @@ impl QuoteSocket {
             Err(e) => return Err(Box::new(e)),
         };
 
+        self.ready = true;
         info!("WebSocket handshake has been successfully completed");
 
         let (write, read) = socket.split();
@@ -70,28 +76,87 @@ impl QuoteSocket {
         self.write = write;
         self.read = read;
         self.session = gen_session_id("qs");
+        self.messages = VecDeque::new();
 
         Ok(())
     }
 
-    async fn send<T>(&mut self, message: T) -> Result<(), Box<dyn std::error::Error>>
+    pub async fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send("set_auth_token", vec!["unauthorized_user_token"])
+            .await?;
+        self.send("chart_create_session", vec![self.session.clone()])
+            .await?;
+        self.send("quote_set_fields", Self::set_quote_fields(&self.session))
+            .await?;
+        self.send(
+            "quote_add_symbols",
+            vec![self.session.clone(), "BINANCE:BTCUSDT".to_owned()],
+        )
+        .await?;
+
+        while let Some(result) = self.read.next().await {
+            match result {
+                Ok(msg) => {
+                    let parsed_msg = parse_packet(&msg.to_string()).unwrap();
+                    for x in parsed_msg {
+                        if x.is_number() {
+                            let y = self.write.send(msg.clone()).await;
+                            match y {
+                                Ok(_) => {
+                                    debug!("Message sent successfully: {:#?}", msg.to_string())
+                                }
+                                Err(e) => error!("Error sending message: {:#?}", e),
+                            }
+                        } else if x["m"].is_string() && x["m"] == "qsd" {
+                            let quote_data =
+                                serde_json::from_value::<crate::model::Quote>(x["p"][1].clone())
+                                    .unwrap();
+                            info!("Quote data: {:#?}", quote_data);
+                        }
+                        debug!("Message received: {:#?}", x);
+                    }
+                }
+                Err(e) => {
+                    error!("Error reading message: {:#?}", e);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn send<M, P>(
+        &mut self,
+        message: M,
+        payload: Vec<P>,
+    ) -> Result<(), Box<dyn std::error::Error>>
     where
-        T: Serialize,
+        M: Serialize,
+        P: Serialize,
     {
+        let msg = match format_packet(SocketMessage::new(message, payload)) {
+            Ok(msg) => msg,
+            Err(e) => return Err(e),
+        };
+
+        self.messages.push_back(msg);
+        self.send_queue().await?;
         Ok(())
     }
 
     async fn send_queue(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        while self.ready && !self.messages.is_empty() {
+            let msg = self.messages.pop_front().unwrap();
+            self.write.send(msg).await?;
+        }
         Ok(())
     }
 
     async fn close(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.write.close().await?;
         Ok(())
     }
 
-    async fn on_connected(&mut self) {
-        todo!()
-    }
+    async fn on_connected(&mut self) {}
 
     async fn on_ping(&mut self) {
         todo!()
