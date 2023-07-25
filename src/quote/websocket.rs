@@ -1,25 +1,26 @@
+use super::session;
 use crate::socket::SocketMessage;
 use crate::utils::{format_packet, parse_packet};
 use crate::UA;
-use serde::{Deserialize, Serialize};
-use std::error::Error;
+
+use tracing::{debug, error, info, warn};
+use url::Url;
+
+use futures_util::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
     MaybeTlsStream, WebSocketStream,
 };
-use tracing::{debug, error, info, warn};
-use url::Url;
 
-use futures_util::{SinkExt, StreamExt};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-use super::session;
 pub struct Socket {
     // pub SocketStream: WebSocketStream<MaybeTlsStream<TcpStream>>,
-    pub write: futures_util::stream::SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-    pub read: futures_util::stream::SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    pub write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+    pub read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     messages: Vec<Message>,
 }
 
@@ -136,20 +137,22 @@ impl Socket {
                         if x.is_number() {
                             let y = self.write.send(msg.clone()).await;
                             match y {
-                                Ok(_) => debug!("Message sent successfully: {}", msg.to_string()),
-                                Err(e) => error!("Error sending message: {:?}", e),
+                                Ok(_) => {
+                                    debug!("Message sent successfully: {:#?}", msg.to_string())
+                                }
+                                Err(e) => error!("Error sending message: {:#?}", e),
                             }
                         } else if x["m"].is_string() && x["m"] == "qsd" {
                             let quote_data =
                                 serde_json::from_value::<crate::model::Quote>(x["p"][1].clone())
                                     .unwrap();
-                            info!("Quote data: {:?}", quote_data);
+                            info!("Quote data: {:#?}", quote_data);
                         }
-                        debug!("Message received: {:?}", x);
+                        debug!("Message received: {:#?}", x);
                     }
                 }
                 Err(e) => {
-                    error!("Error reading message: {:?}", e);
+                    error!("Error reading message: {:#?}", e);
                 }
             }
         }
