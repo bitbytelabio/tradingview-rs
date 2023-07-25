@@ -3,8 +3,8 @@ use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use serde::Serialize;
 use serde_json::Value;
+use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};
-use tungstenite::protocol::Message;
 
 lazy_static::lazy_static! {
     static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").unwrap();

@@ -23,24 +23,27 @@ reqwest = { version = "0.11", features = [
 ] }
 lazy_static = "^1.4"
 url = "^2"
-http = "^0.2"
 rand = "^0.8"
 regex = "^1"
 google-authenticator = "^0.4"
-tungstenite = { version = "0.20", features = ["native-tls"] }
-tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
+tokio-tungstenite = { version = "^0.20", features = [
+    "rustls-tls-native-roots",
+] }
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
 futures-channel = "0.3"
-
 tracing = "0.1"
 tracing-subscriber = "0.3"
 thiserror = "^1.0"
+async-trait = "^0.1"
+
+# rayon = { version = "1.7" }
 # log = "0.4"
 # env_logger = "0.10"
-rayon = { version = "1.7" }
+# http = "^0.2"
+
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

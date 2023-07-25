@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;
@@ -12,7 +13,7 @@ pub struct LoginUserResponse {
     user: User,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Default, Debug, Deserialize)]
 pub struct User {
     pub id: u32,
     pub username: String,
@@ -31,34 +32,19 @@ pub struct User {
     pub signature: String,
 }
 
-impl User {
-    pub async fn new(
-        username: Option<String>,
-        password: Option<String>,
-        totp_secret: Option<String>,
-    ) -> Self {
-        if username.is_none() || password.is_none() {
-            warn!("Username or password is empty, using the free user, data would be limited");
-            return User {
-                id: 0,
-                username: "".to_owned(),
-                is_pro: false,
-                auth_token: "unauthorized_user_token".to_owned(),
-                session_hash: "".to_owned(),
-                private_channel: "".to_owned(),
-                password: "".to_owned(),
-                totp_secret: "".to_owned(),
-                session: "".to_owned(),
-                signature: "".to_owned(),
-            };
-        }
+#[async_trait]
+pub trait UserBuilder {}
 
-        Self::login(username.unwrap(), password.unwrap(), totp_secret)
-            .await
-            .unwrap()
+impl User {
+    pub async fn new() -> Self {
+        return User {
+            auth_token: "unauthorized_user_token".to_owned(),
+            ..User::default()
+        };
     }
 
-    async fn login(
+    pub async fn login(
+        &mut self,
         username: String,
         password: String,
         totp_secret: Option<String>,
@@ -95,7 +81,7 @@ impl User {
 
         let response: Value = response.json().await?;
 
-        let mut user: User;
+        let user: User;
 
         if response["error"] == "".to_owned() {
             debug!("User data: {:#?}", response);
@@ -130,12 +116,13 @@ impl User {
             return Err(Box::new(LoginError::LoginFailed(error_msg)));
         }
 
-        user.session = session.unwrap();
-        user.signature = signature.unwrap();
-        user.password = password;
-        user.totp_secret = totp_secret.unwrap_or_default();
-
-        Ok(user)
+        Ok(User {
+            session: session.unwrap_or_default(),
+            signature: signature.unwrap_or_default(),
+            password: password,
+            totp_secret: totp_secret.unwrap_or_default(),
+            ..user
+        })
     }
 
     async fn handle_2fa(
@@ -171,10 +158,17 @@ impl User {
         url: Option<String>,
     ) -> Result<User, Box<dyn std::error::Error>> {
         use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
+        lazy_static::lazy_static! {
+            static ref ID_REGEX: Regex = Regex::new(r#""id":([0-9]{1,10}),"#).unwrap();
+            static ref USERNAME_REGEX: Regex =  Regex::new(r#""username":"(.*?)""#).unwrap();
+            static ref SESSION_HASH_REGEX: Regex = Regex::new(r#""session_hash":"(.*?)""#).unwrap();
+            static ref PRIVATE_CHANNEL_REGEX: Regex =  Regex::new(r#""private_channel":"(.*?)""#).unwrap();
+            static ref AUTH_TOKEN_REGEX: Regex =  Regex::new(r#""auth_token":"(.*?)""#).unwrap();
+            static ref IS_PRO_REGEX: Regex = Regex::new(r#""is_pro":"(.*?)""#).unwrap();
+        }
 
         let mut headers = HeaderMap::new();
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-
         headers.insert(
             COOKIE,
             HeaderValue::from_str(&format!(
@@ -190,17 +184,15 @@ impl User {
             .user_agent(crate::UA)
             .gzip(true)
             .build()?
-            .get(url.unwrap_or_else(|| "https://www.tradingview.com/".to_string()))
+            .get(url.unwrap_or("https://www.tradingview.com/".to_owned()))
             .send()
             .await?
             .text()
             .await?;
 
         if resp.contains("auth_token") {
-            info!("User is logged in");
-            info!("Loading auth token and user info");
-            let id_regex = Regex::new(r#""id":([0-9]{1,10}),"#)?;
-            let id: u32 = match id_regex.captures(&resp) {
+            info!("User is logged in, loading auth token and user info");
+            let id: u32 = match ID_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string().parse()?,
                 None => {
                     error!("Error parsing user id");
@@ -209,9 +201,7 @@ impl User {
                     )));
                 }
             };
-
-            let username_regex = Regex::new(r#""username":"(.*?)""#)?;
-            let username = match username_regex.captures(&resp) {
+            let username = match USERNAME_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing username");
@@ -220,9 +210,7 @@ impl User {
                     )));
                 }
             };
-
-            let session_hash_regex = Regex::new(r#""session_hash":"(.*?)""#)?;
-            let session_hash = match session_hash_regex.captures(&resp) {
+            let session_hash = match SESSION_HASH_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing session_hash");
@@ -231,9 +219,7 @@ impl User {
                     )));
                 }
             };
-
-            let private_channel_regex = Regex::new(r#""private_channel":"(.*?)""#)?;
-            let private_channel = match private_channel_regex.captures(&resp) {
+            let private_channel = match PRIVATE_CHANNEL_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing private_channel");
@@ -242,9 +228,7 @@ impl User {
                     )));
                 }
             };
-
-            let auth_token_regex = Regex::new(r#""auth_token":"(.*?)""#)?;
-            let auth_token = match auth_token_regex.captures(&resp) {
+            let auth_token = match AUTH_TOKEN_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string(),
                 None => {
                     error!("Error parsing auth token");
@@ -253,9 +237,7 @@ impl User {
                     )));
                 }
             };
-
-            let is_pro_regex = Regex::new(r#""is_pro":"(.*?)""#)?;
-            let is_pro: bool = match is_pro_regex.captures(&resp) {
+            let is_pro: bool = match IS_PRO_REGEX.captures(&resp) {
                 Some(captures) => captures[1].to_string().parse()?,
                 None => {
                     error!("Error parsing auth token");
@@ -273,52 +255,11 @@ impl User {
                 signature: signature,
                 session_hash: session_hash,
                 private_channel: private_channel,
-                password: "".to_string(),
-                totp_secret: "".to_string(),
                 is_pro: is_pro,
+                ..User::default()
             })
         } else {
             Err(Box::new(LoginError::SessionExpired))
         }
-    }
-
-    pub async fn update_token(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
-
-        let mut headers = HeaderMap::new();
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-
-        headers.insert(
-            COOKIE,
-            HeaderValue::from_str(&format!(
-                "sessionid={}; sessionid_sign={}",
-                self.session, self.signature
-            ))?,
-        );
-
-        let resp = reqwest::Client::builder()
-            .use_rustls_tls()
-            .default_headers(headers)
-            .https_only(true)
-            .user_agent(crate::UA)
-            .gzip(true)
-            .build()?
-            .get("https://www.tradingview.com/")
-            .send()
-            .await?
-            .text()
-            .await?;
-
-        Ok(if resp.contains("auth_token") {
-            self.auth_token = match Regex::new(r#""auth_token":"(.*?)""#)?.captures(&resp) {
-                Some(captures) => captures[1].to_string(),
-                None => {
-                    error!("Error parsing auth token");
-                    return Err(Box::new(LoginError::ParseError(
-                        "Error parsing auth token".to_string(),
-                    )));
-                }
-            };
-        })
     }
 }
