@@ -1,5 +1,3 @@
-pub mod client;
-pub mod session;
 pub mod websocket;
 
 use lazy_static::lazy_static;
@@ -56,4 +54,3 @@ lazy_static! {
         "provider_id".to_string(),
     ];
 }
-

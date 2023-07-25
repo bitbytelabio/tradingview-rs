@@ -49,26 +49,22 @@ pub enum WebSocketEvent {
 
 pub enum Event {}
 
-#[async_trait]
-pub trait Socket {
-    fn new<Callback>(handler: Callback) -> Self
-    where
-        Callback: FnMut(WebSocketEvent) + Send + Sync + 'static;
+// pub trait Socket {
+//     fn new<Callback>(handler: Callback) -> Self
+//     where
+//         Callback: FnMut(WebSocketEvent) + Send + Sync + 'static;
 
-    async fn connect(&mut self, server: DataServer) -> Result<(), Box<dyn std::error::Error>>;
+//     fn connect(&mut self, server: DataServer) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn disconnect(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+//     fn disconnect(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn send<T>(&mut self, message: T) -> Result<(), Box<dyn std::error::Error>>;
+//     fn send<T>(&mut self, message: T) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn send_queue(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+//     fn send_queue(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn handle_msg(&mut self, msg: &str) -> Result<(), Box<dyn std::error::Error>>;
+//     fn handle_msg(&mut self, msg: &str) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn handle_event(
-        &mut self,
-        event: WebSocketEvent,
-    ) -> Result<(), Box<dyn std::error::Error>>;
+//     fn handle_event(&mut self, event: WebSocketEvent) -> Result<(), Box<dyn std::error::Error>>;
 
-    async fn handle_error(&mut self, error: String) -> Result<(), Box<dyn std::error::Error>>;
-}
+//     fn handle_error(&mut self, error: String) -> Result<(), Box<dyn std::error::Error>>;
+// }

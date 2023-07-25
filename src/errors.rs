@@ -47,3 +47,9 @@ pub enum ClientError {
     #[error("No chart token found")]
     NoChartTokenFound,
 }
+
+#[derive(Debug, Error)]
+pub enum SocketError {
+    #[error("unable to establish websocket connection")]
+    SocketConnectionError,
+}
