@@ -61,7 +61,7 @@ impl Client {
             "sessionid={}; sessionid_sign={};",
             self.user.session, self.user.signature
         );
-        let client: reqwest::Client = crate::utils::reqwest_build_client(Some(&cookie))?;
+        let client: reqwest::Client = crate::utils::build_request(Some(&cookie))?;
         let response = client.get(url).send().await?;
         // let data: serde_json::Value = response.json().await?;
         Ok(response)
@@ -76,7 +76,7 @@ impl Client {
             "sessionid={}; sessionid_sign={};",
             self.user.session, self.user.signature
         );
-        let client: reqwest::Client = crate::utils::reqwest_build_client(Some(&cookie))?;
+        let client: reqwest::Client = crate::utils::build_request(Some(&cookie))?;
         let response = client.post(url).json(&body).send().await?;
         Ok(response)
     }

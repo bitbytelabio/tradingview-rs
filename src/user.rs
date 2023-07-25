@@ -129,7 +129,7 @@ impl User {
             return Err(Box::new(LoginError::EmptyCredentials));
         };
 
-        let client: reqwest::Client = crate::utils::reqwest_build_client(None)?;
+        let client: reqwest::Client = crate::utils::build_request(None)?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
@@ -210,7 +210,7 @@ impl User {
 
         use reqwest::multipart::Form;
 
-        let client: reqwest::Client = crate::utils::reqwest_build_client(Some(&format!(
+        let client: reqwest::Client = crate::utils::build_request(Some(&format!(
             "sessionid={}; sessionid_sign={};",
             session, signature
         )))?;

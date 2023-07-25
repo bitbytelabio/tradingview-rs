@@ -11,9 +11,7 @@ lazy_static::lazy_static! {
     static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
-pub fn reqwest_build_client(
-    cookie: Option<&str>,
-) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
+pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     headers.insert(
