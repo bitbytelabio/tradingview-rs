@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use super::session;
 use crate::socket::SocketMessage;
 use crate::utils::{format_packet, parse_packet};
@@ -18,10 +20,11 @@ use tokio_tungstenite::{
 };
 
 pub struct Socket {
-    // pub SocketStream: WebSocketStream<MaybeTlsStream<TcpStream>>,
     pub write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     pub read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    messages: Vec<Message>,
+    session: String,
+    messages: VecDeque<Message>,
+    callbacks: Vec<Option<Box<dyn FnMut(SocketMessage) + Send + Sync + 'static>>>,
 }
 
 impl Socket {
@@ -48,6 +51,7 @@ impl Socket {
         info!("WebSocket handshake has been successfully completed");
 
         let (mut write, mut read) = socket.split();
+
         // match auth_token {
         //     Some(auth_token) => {
         //         let auth = SocketMessage::new("set_auth_token", vec![auth_token]);
