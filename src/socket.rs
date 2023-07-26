@@ -1,6 +1,7 @@
-use async_trait::async_trait;
+use crate::utils::format_packet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio_tungstenite::tungstenite::protocol::Message;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SocketMessage {
@@ -17,6 +18,11 @@ impl SocketMessage {
         let m = serde_json::to_value(m).expect("Failed to serialize Socket Message");
         let p = serde_json::to_value(p).expect("Failed to serialize Socket Message");
         SocketMessage { m, p }
+    }
+
+    pub fn to_message(&self) -> Result<Message, Box<dyn std::error::Error>> {
+        let msg = format_packet(self)?;
+        Ok(msg)
     }
 }
 

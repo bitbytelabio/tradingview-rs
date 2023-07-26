@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod user {
-    use lazy_static::__Deref;
     use std::env;
     use tradingview_rs::errors::*;
     use tradingview_rs::user::*;
@@ -46,9 +45,10 @@ mod user {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.is::<LoginError>());
-        let binding = error.downcast::<LoginError>().unwrap();
-        let error = binding.deref();
-        assert!(matches!(error, LoginError::LoginFailed));
+        assert!(matches!(
+            *error.downcast::<LoginError>().unwrap(),
+            LoginError::LoginFailed
+        ));
     }
 
     #[tokio::test]
@@ -111,9 +111,10 @@ mod user {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.is::<LoginError>());
-        let binding = error.downcast::<LoginError>().unwrap();
-        let error = binding.deref();
-        assert!(matches!(error, LoginError::SessionExpired));
+        assert!(matches!(
+            *error.downcast::<LoginError>().unwrap(),
+            LoginError::SessionExpired
+        ));
     }
 
     #[tokio::test]
@@ -133,8 +134,9 @@ mod user {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.is::<LoginError>());
-        let binding = error.downcast::<LoginError>().unwrap();
-        let error = binding.deref();
-        assert!(matches!(error, LoginError::MFAError));
+        assert!(matches!(
+            *error.downcast::<LoginError>().unwrap(),
+            LoginError::MFAError
+        ));
     }
 }

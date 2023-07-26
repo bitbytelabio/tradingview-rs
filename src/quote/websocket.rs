@@ -1,7 +1,6 @@
 use crate::{
     errors::SocketError,
     socket::{DataServer, SocketMessage, WebSocketEvent},
-    user::User,
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
 };
@@ -9,8 +8,8 @@ use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
-use serde::{Serialize, Serializer};
-use std::collections::{vec_deque, VecDeque};
+use serde::Serialize;
+use std::collections::VecDeque;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
@@ -26,7 +25,6 @@ pub struct QuoteSocket {
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     session: String,
     messages: VecDeque<Message>,
-    ready: bool,
     auth_token: String,
     // callbacks: Option<Box<dyn FnMut(SocketMessage) + Send + Sync + 'static>>,
 }
@@ -39,6 +37,32 @@ pub struct QuoteSocketBuilder {
 }
 
 impl QuoteSocketBuilder {
+    pub fn auth_token(mut self, auth_token: String) -> Self {
+        self.auth_token = Some(auth_token);
+        self
+    }
+
+    fn set_quote_fields(session: &str) -> Vec<String> {
+        let mut params = vec![session.to_string()];
+        super::ALL_QUOTE_FIELDS.iter().for_each(|field| {
+            params.push(field.to_string());
+        });
+        params
+    }
+
+    fn set_connection_setup_messages(
+        auth_token: &str,
+        session: &str,
+    ) -> Result<VecDeque<Message>, Box<dyn std::error::Error>> {
+        let messages = vec![
+            SocketMessage::new("set_auth_token", vec![auth_token]).to_message()?,
+            SocketMessage::new("quote_create_session", vec![session]).to_message()?,
+            SocketMessage::new("quote_set_fields", Self::set_quote_fields(session)).to_message()?,
+        ];
+
+        Ok(VecDeque::from(messages))
+    }
+
     pub async fn build(&mut self) -> Result<QuoteSocket, Box<dyn std::error::Error>> {
         let url = Url::parse(&format!(
             "wss://{server}.tradingview.com/socket.io/websocket",
@@ -65,13 +89,16 @@ impl QuoteSocketBuilder {
             None => "unauthorized_user_token".to_string(),
         };
 
+        let session = gen_session_id("qs");
+
+        let messages = Self::set_connection_setup_messages(&auth_token, &session)?;
+
         Ok(QuoteSocket {
             write,
             read,
-            session: gen_session_id("qs"),
-            messages: VecDeque::new(),
-            ready: true,
-            auth_token: auth_token,
+            session,
+            messages,
+            auth_token,
         })
     }
 }
@@ -79,26 +106,12 @@ impl QuoteSocketBuilder {
 impl QuoteSocket {
     pub fn new(server: DataServer) -> QuoteSocketBuilder {
         return QuoteSocketBuilder {
-            server: DataServer::Data,
+            server: server,
             auth_token: None,
         };
     }
 
-    fn set_quote_fields(session: &str) -> Vec<String> {
-        let mut params = vec![session.to_string()];
-        super::ALL_QUOTE_FIELDS.iter().for_each(|field| {
-            params.push(field.to_string());
-        });
-        params
-    }
-
     pub async fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.send("set_auth_token", vec![self.auth_token.clone()])
-            .await?;
-        self.send("quote_create_session", vec![self.session.clone()])
-            .await?;
-        self.send("quote_set_fields", Self::set_quote_fields(&self.session))
-            .await?;
         self.send(
             "quote_add_symbols",
             vec![self.session.clone(), "BINANCE:BTCUSDT".to_owned()],
@@ -155,7 +168,7 @@ impl QuoteSocket {
     }
 
     async fn send_queue(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        while self.ready && !self.messages.is_empty() {
+        while !self.messages.is_empty() {
             let msg = self.messages.pop_front().unwrap();
             self.write.send(msg).await?;
         }
