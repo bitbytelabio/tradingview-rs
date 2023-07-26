@@ -224,7 +224,7 @@ impl User {
         if response.status().is_success() {
             return Ok(response);
         } else {
-            return Err(Box::new(LoginError::AuthenticationMFAError));
+            return Err(Box::new(LoginError::MFAError));
         }
     }
 

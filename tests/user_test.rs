@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod user {
+    use lazy_static::__Deref;
     use std::env;
     use tradingview_rs::errors::*;
     use tradingview_rs::user::*;
@@ -45,7 +46,9 @@ mod user {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.is::<LoginError>());
-        assert_eq!(error.to_string(), "username or password is invalid");
+        let binding = error.downcast::<LoginError>().unwrap();
+        let error = binding.deref();
+        assert!(matches!(error, LoginError::LoginFailed));
     }
 
     #[tokio::test]
@@ -108,7 +111,9 @@ mod user {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.is::<LoginError>());
-        assert_eq!(error.to_string(), "Wrong or expired sessionid/signature");
+        let binding = error.downcast::<LoginError>().unwrap();
+        let error = binding.deref();
+        assert!(matches!(error, LoginError::SessionExpired));
     }
 
     #[tokio::test]
@@ -128,6 +133,8 @@ mod user {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.is::<LoginError>());
-        assert_eq!(error.to_string(), "unable to authenticate user with mfa");
+        let binding = error.downcast::<LoginError>().unwrap();
+        let error = binding.deref();
+        assert!(matches!(error, LoginError::MFAError));
     }
 }

@@ -12,7 +12,7 @@ pub enum LoginError {
     TOTPEmpty,
 
     #[error("unable to authenticate user with mfa")]
-    AuthenticationMFAError,
+    MFAError,
 
     #[error("can not parse user id")]
     ParseIDError,
