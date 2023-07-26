@@ -52,4 +52,10 @@ pub enum ClientError {
 pub enum SocketError {
     #[error("unable to establish websocket connection")]
     SocketConnectionError,
+
+    #[error("unable to parse message")]
+    ParseMessageError,
+
+    #[error("unable to send ping message")]
+    PingError,
 }

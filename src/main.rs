@@ -10,9 +10,8 @@ async fn main() {
     .build()
     .await
     .unwrap()
-    .init()
-    .await
-    .unwrap();
+    .load()
+    .await;
 
     // quote_socket.read_message().await;
 
