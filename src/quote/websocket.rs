@@ -215,7 +215,7 @@ impl QuoteSocket {
         todo!()
     }
 
-    async fn on_event(&mut self) {
+    async fn event_handler(&mut self) {
         todo!()
     }
 
