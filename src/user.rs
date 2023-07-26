@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
-use crate::errors::LoginError;
+use crate::error::LoginError;
 
 lazy_static::lazy_static! {
     static ref ID_REGEX: Regex = Regex::new(r#""id":([0-9]{1,10}),"#).unwrap();

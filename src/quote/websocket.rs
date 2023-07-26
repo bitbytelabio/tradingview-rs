@@ -1,5 +1,5 @@
 use crate::{
-    errors::SocketError,
+    error::SocketError,
     socket::{DataServer, SocketMessage, WebSocketEvent},
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
@@ -111,13 +111,17 @@ impl QuoteSocket {
         };
     }
 
-    pub async fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.send(
-            "quote_add_symbols",
-            vec![self.session.clone(), "BINANCE:BTCUSDT".to_owned()],
-        )
-        .await?;
+    async fn handle_message(message: Message) {
+        if message.is_binary() {
+            warn!("Binary message received: {:#?}", message);
+        } else if message.is_text() {
+            warn!("Text message received: {:#?}", message);
+        } else {
+            warn!("Unknown message received: {:#?}", message);
+        }
+    }
 
+    async fn event_loop(&mut self) {
         while let Some(result) = self.read.next().await {
             match result {
                 Ok(msg) => {
@@ -138,6 +142,43 @@ impl QuoteSocket {
                             info!("Quote data: {:#?}", quote_data);
                         }
                         debug!("Message received: {:#?}", x);
+                    }
+                }
+                Err(e) => {
+                    error!("Error reading message: {:#?}", e);
+                }
+            }
+        }
+    }
+
+    pub async fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send(
+            "quote_add_symbols",
+            vec![self.session.clone(), "BINANCE:BTCUSDT".to_owned()],
+        )
+        .await?;
+
+        while let Some(result) = self.read.next().await {
+            match result {
+                Ok(msg) => {
+                    warn!("is ping?: {:?}", msg.is_text());
+                    let parsed_msg = parse_packet(&msg.to_string()).unwrap();
+                    for x in parsed_msg {
+                        if x.is_number() {
+                            let y = self.write.send(msg.clone()).await;
+                            match y {
+                                Ok(_) => {
+                                    debug!("Message sent successfully: {:#?}", msg.to_string())
+                                }
+                                Err(e) => error!("Error sending message: {:#?}", e),
+                            }
+                        } else if x["m"].is_string() && x["m"] == "qsd" {
+                            let quote_data =
+                                serde_json::from_value::<crate::model::Quote>(x["p"][1].clone())
+                                    .unwrap();
+                            // info!("Quote data: {:#?}", quote_data);
+                        }
+                        // debug!("Message received: {:#?}", x);
                     }
                 }
                 Err(e) => {

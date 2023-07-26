@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod user {
     use std::env;
-    use tradingview_rs::errors::*;
+    use tradingview_rs::error::*;
     use tradingview_rs::user::*;
 
     #[tokio::test]
