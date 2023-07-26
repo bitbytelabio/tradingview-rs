@@ -4,10 +4,15 @@ use tracing::debug;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    // let mut quote_socket = tradingview_rs::quote::websocket::QuoteSocket::connect(
-    //     tradingview_rs::socket::DataServer::Data,
-    // )
-    // .await;
+    let _ = tradingview_rs::quote::websocket::QuoteSocket::new(
+        tradingview_rs::socket::DataServer::Data,
+    )
+    .build()
+    .await
+    .unwrap()
+    .init()
+    .await
+    .unwrap();
 
     // quote_socket.read_message().await;
 

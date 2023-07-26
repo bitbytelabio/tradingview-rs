@@ -1,6 +1,7 @@
 use crate::{
     errors::SocketError,
     socket::{DataServer, SocketMessage, WebSocketEvent},
+    user::User,
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
 };
@@ -37,24 +38,11 @@ pub struct QuoteSocketBuilder {
     auth_token: Option<String>,
 }
 
-impl QuoteSocketBuilder {}
-
-impl QuoteSocket {
-    fn set_quote_fields(session: &str) -> Vec<String> {
-        let mut params = vec![session.to_string()];
-        super::ALL_QUOTE_FIELDS.iter().for_each(|field| {
-            params.push(field.to_string());
-        });
-        params
-    }
-
-    pub async fn connect(
-        &mut self,
-        server: crate::socket::DataServer,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+impl QuoteSocketBuilder {
+    pub async fn build(&mut self) -> Result<QuoteSocket, Box<dyn std::error::Error>> {
         let url = Url::parse(&format!(
             "wss://{server}.tradingview.com/socket.io/websocket",
-            server = server.to_string()
+            server = self.server.to_string()
         ))
         .unwrap();
 
@@ -68,23 +56,46 @@ impl QuoteSocket {
             Err(e) => return Err(Box::new(e)),
         };
 
-        self.ready = true;
         info!("WebSocket handshake has been successfully completed");
 
         let (write, read) = socket.split();
 
-        self.write = write;
-        self.read = read;
-        self.session = gen_session_id("qs");
-        self.messages = VecDeque::new();
+        let auth_token = match self.auth_token.clone() {
+            Some(token) => token,
+            None => "unauthorized_user_token".to_string(),
+        };
 
-        Ok(())
+        Ok(QuoteSocket {
+            write,
+            read,
+            session: gen_session_id("qs"),
+            messages: VecDeque::new(),
+            ready: true,
+            auth_token: auth_token,
+        })
+    }
+}
+
+impl QuoteSocket {
+    pub fn new(server: DataServer) -> QuoteSocketBuilder {
+        return QuoteSocketBuilder {
+            server: DataServer::Data,
+            auth_token: None,
+        };
+    }
+
+    fn set_quote_fields(session: &str) -> Vec<String> {
+        let mut params = vec![session.to_string()];
+        super::ALL_QUOTE_FIELDS.iter().for_each(|field| {
+            params.push(field.to_string());
+        });
+        params
     }
 
     pub async fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.send("set_auth_token", vec!["unauthorized_user_token"])
+        self.send("set_auth_token", vec![self.auth_token.clone()])
             .await?;
-        self.send("chart_create_session", vec![self.session.clone()])
+        self.send("quote_create_session", vec![self.session.clone()])
             .await?;
         self.send("quote_set_fields", Self::set_quote_fields(&self.session))
             .await?;
