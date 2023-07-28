@@ -1,3 +1,5 @@
+use crate::prelude::*;
+
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
@@ -11,7 +13,7 @@ lazy_static::lazy_static! {
     static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
 }
 
-pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
+pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     headers.insert(
@@ -46,7 +48,7 @@ pub fn gen_session_id(session_type: &str) -> String {
     session_type.to_owned() + "_" + &result
 }
 
-pub fn parse_packet(message: &str) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+pub fn parse_packet(message: &str) -> Result<Vec<Value>> {
     if message.is_empty() {
         return Ok(vec![]);
     }
@@ -72,7 +74,7 @@ pub fn parse_packet(message: &str) -> Result<Vec<Value>, Box<dyn std::error::Err
     Ok(packets)
 }
 
-pub fn format_packet<T>(packet: T) -> Result<Message, Box<dyn std::error::Error>>
+pub fn format_packet<T>(packet: T) -> Result<Message>
 where
     T: Serialize,
 {

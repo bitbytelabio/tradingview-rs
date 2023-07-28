@@ -126,6 +126,18 @@ impl QuoteSocket {
         };
     }
 
+    pub async fn quote_add_symbol(
+        &mut self,
+        symbol: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.send(
+            "quote_add_symbols",
+            vec![self.session.clone(), symbol.to_string()],
+        )
+        .await?;
+        Ok(())
+    }
+
     async fn handle_message(&mut self, message: Message) -> Result<(), Box<dyn std::error::Error>> {
         if message.is_binary() {
             warn!("Binary message received: {:#?}", message);
@@ -177,14 +189,8 @@ impl QuoteSocket {
         }
     }
 
-    pub async fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.send(
-            "quote_add_symbols",
-            vec![self.session.clone(), "BINANCE:BTCUSDT".to_owned()],
-        )
-        .await?;
+    pub async fn load(&mut self) {
         self.event_loop().await;
-        Ok(())
     }
 
     async fn send<M, P>(

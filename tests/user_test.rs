@@ -44,10 +44,9 @@ mod user {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.is::<LoginError>());
         assert!(matches!(
-            *error.downcast::<LoginError>().unwrap(),
-            LoginError::LoginFailed
+            error,
+            tradingview_rs::error::Error::LoginError(LoginError::InvalidCredentials)
         ));
     }
 
@@ -110,10 +109,10 @@ mod user {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.is::<LoginError>());
+
         assert!(matches!(
-            *error.downcast::<LoginError>().unwrap(),
-            LoginError::SessionExpired
+            error,
+            tradingview_rs::error::Error::LoginError(LoginError::InvalidSession)
         ));
     }
 
@@ -133,10 +132,9 @@ mod user {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.is::<LoginError>());
         assert!(matches!(
-            *error.downcast::<LoginError>().unwrap(),
-            LoginError::MFAError
+            error,
+            tradingview_rs::error::Error::LoginError(LoginError::InvalidOTPSecret)
         ));
     }
 }

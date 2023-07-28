@@ -4,15 +4,17 @@ use tracing::debug;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let _ = tradingview_rs::quote::websocket::QuoteSocket::new(
+    let mut socket = tradingview_rs::quote::websocket::QuoteSocket::new(
         tradingview_rs::socket::DataServer::Data,
     )
     // .quote_fields(vec!["lp".to_string()])
     .build()
     .await
-    .unwrap()
-    .load()
-    .await;
+    .unwrap();
+
+    socket.quote_add_symbol("BINANCE:BTCUSDT").await.unwrap();
+
+    socket.load().await;
 
     // quote_socket.read_message().await;
 
