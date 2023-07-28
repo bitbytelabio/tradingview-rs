@@ -1,5 +1,5 @@
 use crate::model::Indicator;
-use crate::{errors, user::User};
+use crate::{error, user::User};
 
 #[derive(Debug)]
 pub struct Client {
@@ -99,7 +99,7 @@ impl Client {
             Some(token) => {
                 return Ok(match token.as_str() {
                     Some(token) => token.to_string(),
-                    None => return Err(Box::new(errors::ClientError::NoChartTokenFound)),
+                    None => return Err(Box::new(error::ClientError::NoChartTokenFound)),
                 })
             }
             None => return Err("No token found").unwrap(),

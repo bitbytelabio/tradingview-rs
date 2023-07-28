@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod user {
     use std::env;
-    use tradingview_rs::errors::*;
+    use tradingview_rs::error::*;
     use tradingview_rs::user::*;
 
     #[tokio::test]
@@ -44,8 +44,10 @@ mod user {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.is::<LoginError>());
-        assert_eq!(error.to_string(), "username or password is invalid");
+        assert!(matches!(
+            error,
+            tradingview_rs::error::Error::LoginError(LoginError::InvalidCredentials)
+        ));
     }
 
     #[tokio::test]
@@ -107,8 +109,11 @@ mod user {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.is::<LoginError>());
-        assert_eq!(error.to_string(), "Wrong or expired sessionid/signature");
+
+        assert!(matches!(
+            error,
+            tradingview_rs::error::Error::LoginError(LoginError::InvalidSession)
+        ));
     }
 
     #[tokio::test]
@@ -127,7 +132,9 @@ mod user {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.is::<LoginError>());
-        assert_eq!(error.to_string(), "unable to authenticate user with mfa");
+        assert!(matches!(
+            error,
+            tradingview_rs::error::Error::LoginError(LoginError::InvalidOTPSecret)
+        ));
     }
 }
