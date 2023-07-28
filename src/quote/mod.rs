@@ -1,5 +1,5 @@
+pub mod model;
 pub mod websocket;
-
 use lazy_static::lazy_static;
 
 lazy_static! {

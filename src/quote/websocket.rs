@@ -1,6 +1,6 @@
 use crate::{
-    model::Quote,
     prelude::*,
+    quote::{model::Quote, QuoteSocketEvent},
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
@@ -9,7 +9,7 @@ use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,6 +30,7 @@ pub struct QuoteSocket {
     session: String,
     messages: VecDeque<Message>,
     auth_token: String,
+    last_data: Quote,
     // callbacks: Option<Box<dyn FnMut(SocketMessage) + Send + Sync + 'static>>,
 }
 
@@ -106,6 +107,7 @@ impl QuoteSocketBuilder {
             session,
             messages,
             auth_token,
+            last_data: Quote::default(),
         })
     }
 }
@@ -151,23 +153,49 @@ impl QuoteSocket {
     }
 
     async fn handle_msg(&mut self, message: serde_json::Value) -> Result<()> {
-        if message["m"].is_string() && message["m"] == super::QuoteSocketEvent::Data.to_string() {
-            let quote_data = serde_json::from_value::<Quote>(message["p"][1].clone()).unwrap();
-            info!("Quote data: {:?}", quote_data);
-            // info!("Quote data: {:?}", message["p"][1]);
+        if message["m"].is_string()
+            && message["m"] == QuoteSocketEvent::Data.to_string()
+            && message["p"][1]["s"] == "ok"
+        {
+            self.event_handler(QuoteSocketEvent::Data, message["p"][1].clone())
+                .await?;
             return Ok(());
         } else if message["m"].is_string()
             && message["m"] == super::QuoteSocketEvent::Loaded.to_string()
         {
-            info!("Quote data loaded");
+            self.event_handler(QuoteSocketEvent::Loaded, message)
+                .await?;
             return Ok(());
         } else if message["m"].is_string()
-            && message["m"] == super::QuoteSocketEvent::Error.to_string()
+            && message["m"] == QuoteSocketEvent::Data.to_string()
+            && message["p"][1]["s"] == QuoteSocketEvent::Error.to_string()
         {
-            error!("Quote data error");
+            self.event_handler(QuoteSocketEvent::Error, message).await?;
             return Ok(());
         }
         Ok(())
+    }
+
+    async fn event_handler(
+        &mut self,
+        event: QuoteSocketEvent,
+        message: serde_json::Value,
+    ) -> Result<()> {
+        match event {
+            QuoteSocketEvent::Data => {
+                // let data = serde_json::from_value::<Quote>(message)?;
+                // info!("Last quote data: {:?}", self.last_data);
+                // self.last_data = data.clone();
+                // info!("Current quote data: {:?}", data);
+                info!("Quote data loaded {}", message);
+                Ok(())
+            }
+            QuoteSocketEvent::Loaded => {
+                info!("Quote data loaded {}", message);
+                Ok(())
+            }
+            QuoteSocketEvent::Error => Ok(()),
+        }
     }
 
     pub async fn event_loop(&mut self) {
@@ -177,7 +205,7 @@ impl QuoteSocket {
                     let values = parse_packet(&message.to_string()).unwrap();
                     for value in values {
                         match value {
-                            serde_json::Value::Number(_) => self.on_ping(&message).await.unwrap(),
+                            serde_json::Value::Number(_) => self.ping(&message).await.unwrap(),
                             serde_json::Value::Object(_) => self.handle_msg(value).await.unwrap(),
                             _ => (),
                         }
@@ -213,30 +241,9 @@ impl QuoteSocket {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<()> {
-        self.write.close().await?;
-        Ok(())
-    }
-
-    async fn on_ping(&mut self, ping: &Message) -> Result<()> {
+    async fn ping(&mut self, ping: &Message) -> Result<()> {
         self.write.send(ping.clone()).await?;
         Ok(())
-    }
-
-    async fn on_data(&mut self) {
-        todo!()
-    }
-
-    async fn event_handler(&mut self, event: super::QuoteSocketEvent) {
-        todo!()
-    }
-
-    async fn on_error(&mut self) {
-        todo!()
-    }
-
-    async fn on_disconnected(&mut self) {
-        todo!()
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
@@ -250,6 +257,13 @@ impl QuoteSocket {
         self.session = gen_session_id("qs");
         self.send("quote_create_session", vec![self.session.clone()])
             .await?;
+        Ok(self)
+    }
+
+    pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<&mut Self> {
+        let mut payload = vec![self.session.clone()];
+        payload.extend(fields);
+        self.send("quote_set_fields", payload).await?;
         Ok(self)
     }
 }

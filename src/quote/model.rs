@@ -1,21 +1,7 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct Indicator {
-    #[serde(rename(deserialize = "scriptName"))]
-    pub name: String,
-    #[serde(rename(deserialize = "scriptIdPart"))]
-    pub id: String,
-    pub version: String,
-    #[serde(flatten, rename(deserialize = "extra"))]
-    pub info: HashMap<String, Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Default, Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Quote {
     #[serde(rename = "n")]
     pub ticker: String,
@@ -25,7 +11,7 @@ pub struct Quote {
     pub quote: QuoteValue,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct QuoteValue {
     #[serde(default, rename(deserialize = "lp"))]
     pub price: f64,
@@ -38,7 +24,20 @@ pub struct QuoteValue {
     #[serde(default, rename(deserialize = "chp"))]
     pub change_percent: f64,
     #[serde(default, rename(deserialize = "lp_time"))]
-    pub timestamps: u64,
+    pub timestamps: i64,
     #[serde(default)]
     pub volume: f64,
 }
+
+// #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+// #[serde(untagged)]
+// pub enum QuotePayload {
+//     QuoteData(String, Quote),
+//     QuoteLoaded(String),
+// }
+
+// #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+// pub struct QuoteSocketMessage {
+//     pub m: String,
+//     pub p: QuotePayload,
+// }
