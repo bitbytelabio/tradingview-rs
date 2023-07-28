@@ -12,11 +12,15 @@ async fn main() {
     .await
     .unwrap();
 
-    socket.quote_add_symbol("BINANCE:BTCUSDT").await.unwrap();
+    socket
+        .quote_add_symbols(vec![
+            "BINANCE:BTCUSDT".to_string(),
+            "BINANCE:ETHUSDT".to_string(),
+        ])
+        .await
+        .unwrap();
 
     socket.load().await;
-
-    // quote_socket.read_message().await;
 
     // use tradingview_rs::user::*;
     // // let user = User::new().build();

@@ -9,6 +9,7 @@ pub mod model;
 pub mod prelude;
 pub mod quote;
 pub mod socket;
+pub mod symbol;
 pub mod user;
 pub mod utils;
 

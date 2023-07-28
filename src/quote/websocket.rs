@@ -1,5 +1,4 @@
 use crate::{
-    error::SocketError,
     prelude::*,
     socket::{DataServer, SocketMessage, WebSocketEvent},
     utils::{format_packet, gen_session_id, parse_packet},
@@ -53,16 +52,12 @@ impl QuoteSocketBuilder {
         let quote_fields: Vec<String> = match self.quote_fields.clone() {
             Some(fields) => {
                 let mut quote_fields = vec![session.clone().to_string()];
-                for field in fields {
-                    quote_fields.push(field);
-                }
+                quote_fields.extend(fields);
                 quote_fields
             }
             None => {
                 let mut quote_fields = vec![session.clone().to_string()];
-                for field in crate::quote::ALL_QUOTE_FIELDS.iter() {
-                    quote_fields.push(field.clone());
-                }
+                quote_fields.extend(crate::quote::ALL_QUOTE_FIELDS.clone());
                 quote_fields
             }
         };
@@ -120,12 +115,34 @@ impl QuoteSocket {
         };
     }
 
-    pub async fn quote_add_symbol(&mut self, symbol: &str) -> Result<()> {
-        self.send(
-            "quote_add_symbols",
-            vec![self.session.clone(), symbol.to_string()],
-        )
-        .await?;
+    pub async fn set_local(&mut self, local: Vec<String>) -> Result<()> {
+        self.send("set_local", local).await?;
+        Ok(())
+    }
+
+    pub async fn switch_timezone(&mut self, timezone: &str) -> Result<()> {
+        self.send("switch_timezone", vec![timezone]).await?;
+        Ok(())
+    }
+
+    pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
+        let mut payload = vec![self.session.clone()];
+        payload.extend(symbols);
+        self.send("quote_add_symbols", payload).await?;
+        Ok(())
+    }
+
+    pub async fn quote_fast_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
+        let mut payload = vec![self.session.clone()];
+        payload.extend(symbols);
+        self.send("quote_fast_symbols", payload).await?;
+        Ok(())
+    }
+
+    pub async fn quote_remove_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
+        let mut payload = vec![self.session.clone()];
+        payload.extend(symbols);
+        self.send("quote_remove_symbols", payload).await?;
         Ok(())
     }
 

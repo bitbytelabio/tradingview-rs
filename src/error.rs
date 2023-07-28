@@ -11,7 +11,7 @@ pub enum Error {
     #[error("failed to parse the api response")]
     ParseError(#[from] serde_json::Error),
 
-    #[error("failed to convert into int form {}", .0)]
+    #[error("failed to convert into int from {}", .0)]
     TypeConversionError(#[from] std::num::ParseIntError),
 
     #[error("invalid header value")]
@@ -73,16 +73,4 @@ pub enum ClientError {
 
     #[error("No chart token found")]
     NoChartTokenFound,
-}
-
-#[derive(Debug, Error)]
-pub enum SocketError {
-    #[error("unable to establish websocket connection")]
-    SocketConnectionError,
-
-    #[error("unable to parse message")]
-    ParseMessageError,
-
-    #[error("unable to send ping message")]
-    PingError,
 }
