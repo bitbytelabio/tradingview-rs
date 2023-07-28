@@ -26,25 +26,29 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-#[derive(Debug)]
-pub struct QuoteSocket {
+pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     session: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    // callbacks: Option<Box<dyn FnMut(SocketMessage) + Send + Sync + 'static>>,
+    handlers: CallbackFn<'a>,
 }
 
-pub struct Callback {}
+pub struct CallbackFn<'a> {
+    on_data: Option<Box<dyn FnMut(JsonValue) + 'a>>,
+    on_loaded: Option<Box<dyn FnMut(JsonValue) + 'a>>,
+    on_error: Option<Box<dyn FnMut(JsonValue) + 'a>>,
+}
 
-pub struct QuoteSocketBuilder {
+pub struct QuoteSocketBuilder<'a> {
     server: DataServer,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
+    handlers: Option<CallbackFn<'a>>,
 }
 
-impl QuoteSocketBuilder {
+impl<'a> QuoteSocketBuilder<'a> {
     pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
         self.auth_token = Some(auth_token);
         self
@@ -52,6 +56,11 @@ impl QuoteSocketBuilder {
 
     pub fn quote_fields(&mut self, quote_fields: Vec<String>) -> &mut Self {
         self.quote_fields = Some(quote_fields);
+        self
+    }
+
+    pub fn callback(&mut self, handlers: CallbackFn<'a>) -> &mut Self {
+        self.handlers = Some(handlers);
         self
     }
 
@@ -109,16 +118,22 @@ impl QuoteSocketBuilder {
             session,
             messages,
             auth_token,
+            handlers: CallbackFn {
+                on_data: None,
+                on_loaded: None,
+                on_error: None,
+            },
         })
     }
 }
 
-impl QuoteSocket {
-    pub fn new(server: DataServer) -> QuoteSocketBuilder {
+impl<'a> QuoteSocket<'a> {
+    pub fn new(server: DataServer) -> QuoteSocketBuilder<'a> {
         return QuoteSocketBuilder {
             server: server,
             auth_token: None,
             quote_fields: None,
+            handlers: None,
         };
     }
 
@@ -219,7 +234,7 @@ impl QuoteSocket {
         }
     }
 
-    pub async fn event_loop(&mut self) {
+    async fn event_loop(&mut self) {
         while let Some(result) = self.read.next().await {
             match result {
                 Ok(message) => {
@@ -273,25 +288,25 @@ impl QuoteSocket {
         Ok(())
     }
 
-    pub async fn update_session(&mut self) -> Result<&mut Self> {
+    pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
         self.session = gen_session_id("qs");
         self.send("quote_create_session", &[self.session.clone()])
             .await?;
-        Ok(self)
+        Ok(())
     }
 
-    pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<&mut Self> {
+    pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(fields);
         self.send("quote_set_fields", &payload).await?;
-        Ok(self)
+        Ok(())
     }
 
-    pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<&mut Self> {
+    pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_string();
         self.send("set_auth_token", &[self.auth_token.clone()])
             .await?;
-        Ok(self)
+        Ok(())
     }
 }

@@ -4,13 +4,14 @@ use tracing::debug;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let mut socket = tradingview_rs::quote::websocket::QuoteSocket::new(
+    let mut binding = tradingview_rs::quote::websocket::QuoteSocket::new(
         tradingview_rs::socket::DataServer::Data,
-    )
-    // .quote_fields(vec!["lp".to_string()])
-    .build()
-    .await
-    .unwrap();
+    );
+    let mut socket = binding
+        // .quote_fields(vec!["lp".to_string()])
+        .build()
+        .await
+        .unwrap();
 
     socket
         .quote_add_symbols(vec![
