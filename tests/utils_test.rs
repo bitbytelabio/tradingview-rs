@@ -5,7 +5,8 @@ mod utils {
         let current_dir = std::env::current_dir().unwrap().display().to_string();
         println!("Current dir: {}", current_dir);
         let messages =
-            std::fs::read_to_string(format!("{}/tests/socket_messages.txt", current_dir)).unwrap();
+            std::fs::read_to_string(format!("{}/tests/data/socket_messages.txt", current_dir))
+                .unwrap();
         let result = tradingview_rs::utils::parse_packet(messages.as_str());
 
         assert!(result.is_ok());

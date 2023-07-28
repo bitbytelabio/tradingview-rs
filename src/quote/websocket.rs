@@ -1,6 +1,6 @@
 use crate::{
     prelude::*,
-    quote::{model::Quote, QuoteSocketEvent},
+    quote::QuoteSocketEvent,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
@@ -12,6 +12,7 @@ use futures_util::{
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -21,6 +22,7 @@ use tokio_tungstenite::{
     tungstenite::{client::IntoClientRequest, protocol::Message},
     MaybeTlsStream, WebSocketStream,
 };
+
 use tracing::{debug, error, info, warn};
 use url::Url;
 
@@ -68,9 +70,9 @@ impl QuoteSocketBuilder {
         };
 
         Ok(VecDeque::from(vec![
-            SocketMessage::new("set_auth_token", vec![auth_token]).to_message()?,
-            SocketMessage::new("quote_create_session", vec![session]).to_message()?,
-            SocketMessage::new("quote_set_fields", quote_fields).to_message()?,
+            SocketMessage::new("set_auth_token", &[auth_token]).to_message()?,
+            SocketMessage::new("quote_create_session", &[session]).to_message()?,
+            SocketMessage::new("quote_set_fields", &quote_fields).to_message()?,
         ]))
     }
 
@@ -120,40 +122,38 @@ impl QuoteSocket {
         };
     }
 
-    pub async fn set_local(&mut self, local: Vec<String>) -> Result<()> {
+    pub async fn set_local(&mut self, local: &[String]) -> Result<()> {
         self.send("set_local", local).await?;
         Ok(())
     }
 
     pub async fn switch_timezone(&mut self, timezone: &str) -> Result<()> {
-        self.send("switch_timezone", vec![timezone]).await?;
+        self.send("switch_timezone", &[timezone]).await?;
         Ok(())
     }
 
     pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(symbols);
-        self.send("quote_add_symbols", payload).await?;
+        self.send("quote_add_symbols", &payload).await?;
         Ok(())
     }
 
     pub async fn quote_fast_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(symbols);
-        self.send("quote_fast_symbols", payload).await?;
+        self.send("quote_fast_symbols", &payload).await?;
         Ok(())
     }
 
     pub async fn quote_remove_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(symbols);
-        self.send("quote_remove_symbols", payload).await?;
+        self.send("quote_remove_symbols", &payload).await?;
         Ok(())
     }
 
     async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
-        use std::borrow::Cow;
-
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
         const STATUS_KEY: &str = "s";
@@ -243,7 +243,7 @@ impl QuoteSocket {
         self.event_loop().await;
     }
 
-    async fn send<M, P>(&mut self, message: M, payload: Vec<P>) -> Result<()>
+    async fn send<M, P>(&mut self, message: M, payload: &[P]) -> Result<()>
     where
         M: Serialize,
         P: Serialize,
@@ -268,7 +268,7 @@ impl QuoteSocket {
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.send("quote_delete_session", vec![self.session.clone()])
+        self.send("quote_delete_session", &[self.session.clone()])
             .await?;
         Ok(())
     }
@@ -276,7 +276,7 @@ impl QuoteSocket {
     pub async fn update_session(&mut self) -> Result<&mut Self> {
         self.delete_session().await?;
         self.session = gen_session_id("qs");
-        self.send("quote_create_session", vec![self.session.clone()])
+        self.send("quote_create_session", &[self.session.clone()])
             .await?;
         Ok(self)
     }
@@ -284,7 +284,14 @@ impl QuoteSocket {
     pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<&mut Self> {
         let mut payload = vec![self.session.clone()];
         payload.extend(fields);
-        self.send("quote_set_fields", payload).await?;
+        self.send("quote_set_fields", &payload).await?;
+        Ok(self)
+    }
+
+    pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<&mut Self> {
+        self.auth_token = auth_token.to_string();
+        self.send("set_auth_token", &[self.auth_token.clone()])
+            .await?;
         Ok(self)
     }
 }
