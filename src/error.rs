@@ -19,6 +19,12 @@ pub enum Error {
 
     #[error("failed to login")]
     LoginError(#[from] LoginError),
+
+    #[error("failed to capture regex data")]
+    RegexError(#[from] regex::Error),
+
+    #[error("something went wrong with websocket")]
+    WebSocketError(#[from] tokio_tungstenite::tungstenite::Error),
 }
 
 #[derive(Debug, Error)]

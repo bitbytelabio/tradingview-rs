@@ -1,5 +1,6 @@
 use crate::{
     error::SocketError,
+    prelude::*,
     socket::{DataServer, SocketMessage, WebSocketEvent},
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
@@ -48,11 +49,7 @@ impl QuoteSocketBuilder {
         self
     }
 
-    fn init_messages(
-        &self,
-        session: &str,
-        auth_token: &str,
-    ) -> Result<VecDeque<Message>, Box<dyn std::error::Error>> {
+    fn init_messages(&self, session: &str, auth_token: &str) -> Result<VecDeque<Message>> {
         let quote_fields: Vec<String> = match self.quote_fields.clone() {
             Some(fields) => {
                 let mut quote_fields = vec![session.clone().to_string()];
@@ -77,7 +74,7 @@ impl QuoteSocketBuilder {
         ]))
     }
 
-    pub async fn build(&mut self) -> Result<QuoteSocket, Box<dyn std::error::Error>> {
+    pub async fn build(&mut self) -> Result<QuoteSocket> {
         let url = Url::parse(&format!(
             "wss://{server}.tradingview.com/socket.io/websocket",
             server = self.server.to_string()
@@ -89,10 +86,7 @@ impl QuoteSocketBuilder {
         headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
         headers.insert("User-Agent", UA.parse().unwrap());
 
-        let socket = match connect_async(request).await {
-            Ok((socket, _)) => socket,
-            Err(e) => return Err(Box::new(e)),
-        };
+        let (socket, _) = connect_async(request).await?;
 
         info!("WebSocket handshake has been successfully completed");
 
@@ -126,10 +120,7 @@ impl QuoteSocket {
         };
     }
 
-    pub async fn quote_add_symbol(
-        &mut self,
-        symbol: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn quote_add_symbol(&mut self, symbol: &str) -> Result<()> {
         self.send(
             "quote_add_symbols",
             vec![self.session.clone(), symbol.to_string()],
@@ -138,30 +129,15 @@ impl QuoteSocket {
         Ok(())
     }
 
-    async fn handle_message(&mut self, message: Message) -> Result<(), Box<dyn std::error::Error>> {
+    async fn handle_message(&mut self, message: Message) -> Result<()> {
         if message.is_binary() {
             warn!("Binary message received: {:#?}", message);
             return Ok(());
         } else if message.is_text() {
-            let messages = match parse_packet(&message.to_string()) {
-                Ok(msg) => msg,
-                Err(e) => {
-                    error!("Error parsing message: {:#?}", e);
-                    return Err(Box::new(SocketError::ParseMessageError));
-                }
-            };
+            let messages = parse_packet(&message.to_string())?;
             for value in messages {
                 if value.is_number() {
-                    match self.on_ping(&message).await {
-                        Ok(_) => {
-                            debug!("Pong sent");
-                            return Ok(());
-                        }
-                        Err(_) => {
-                            warn!("Error sending pong");
-                            return Err(Box::new(SocketError::PingError));
-                        }
-                    }
+                    self.on_ping(&message).await?;
                 } else if value["m"].is_string() && value["m"] == "qsd" {
                     let quote_data =
                         serde_json::from_value::<crate::model::Quote>(value["p"][1].clone())
@@ -193,11 +169,7 @@ impl QuoteSocket {
         self.event_loop().await;
     }
 
-    async fn send<M, P>(
-        &mut self,
-        message: M,
-        payload: Vec<P>,
-    ) -> Result<(), Box<dyn std::error::Error>>
+    async fn send<M, P>(&mut self, message: M, payload: Vec<P>) -> Result<()>
     where
         M: Serialize,
         P: Serialize,
@@ -208,7 +180,7 @@ impl QuoteSocket {
         Ok(())
     }
 
-    async fn send_queue(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn send_queue(&mut self) -> Result<()> {
         while !self.messages.is_empty() {
             let msg = self.messages.pop_front().unwrap();
             self.write.send(msg).await?;
@@ -216,14 +188,14 @@ impl QuoteSocket {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn close(&mut self) -> Result<()> {
         self.write.close().await?;
         Ok(())
     }
 
     async fn on_connected(&mut self) {}
 
-    async fn on_ping(&mut self, ping: &Message) -> Result<(), Box<dyn std::error::Error>> {
+    async fn on_ping(&mut self, ping: &Message) -> Result<()> {
         self.write.send(ping.clone()).await?;
         Ok(())
     }

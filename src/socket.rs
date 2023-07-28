@@ -1,4 +1,4 @@
-use crate::utils::format_packet;
+use crate::{prelude::*, utils::format_packet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_tungstenite::tungstenite::protocol::Message;
@@ -20,7 +20,7 @@ impl SocketMessage {
         SocketMessage { m, p }
     }
 
-    pub fn to_message(&self) -> Result<Message, Box<dyn std::error::Error>> {
+    pub fn to_message(&self) -> Result<Message> {
         let msg = format_packet(self)?;
         Ok(msg)
     }
