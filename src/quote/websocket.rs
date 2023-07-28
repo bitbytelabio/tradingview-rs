@@ -1,6 +1,7 @@
 use crate::{
+    model::Quote,
     prelude::*,
-    socket::{DataServer, SocketMessage, WebSocketEvent},
+    socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
 };
@@ -9,7 +10,10 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use serde::Serialize;
+
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
@@ -146,35 +150,39 @@ impl QuoteSocket {
         Ok(())
     }
 
-    async fn handle_message(&mut self, message: Message) -> Result<()> {
-        if message.is_binary() {
-            warn!("Binary message received: {:#?}", message);
+    async fn handle_msg(&mut self, message: serde_json::Value) -> Result<()> {
+        if message["m"].is_string() && message["m"] == super::QuoteSocketEvent::Data.to_string() {
+            let quote_data = serde_json::from_value::<Quote>(message["p"][1].clone()).unwrap();
+            info!("Quote data: {:?}", quote_data);
+            // info!("Quote data: {:?}", message["p"][1]);
             return Ok(());
-        } else if message.is_text() {
-            let messages = parse_packet(&message.to_string())?;
-            for value in messages {
-                if value.is_number() {
-                    self.on_ping(&message).await?;
-                } else if value["m"].is_string() && value["m"] == "qsd" {
-                    let quote_data =
-                        serde_json::from_value::<crate::model::Quote>(value["p"][1].clone())
-                            .unwrap();
-                    info!("Quote data: {:?}", quote_data);
-                    return Ok(());
-                }
-                return Ok(());
-            }
-            Ok(())
-        } else {
-            warn!("Unknown message received: {:?}", message);
+        } else if message["m"].is_string()
+            && message["m"] == super::QuoteSocketEvent::Loaded.to_string()
+        {
+            info!("Quote data loaded");
+            return Ok(());
+        } else if message["m"].is_string()
+            && message["m"] == super::QuoteSocketEvent::Error.to_string()
+        {
+            error!("Quote data error");
             return Ok(());
         }
+        Ok(())
     }
 
     pub async fn event_loop(&mut self) {
         while let Some(result) = self.read.next().await {
             match result {
-                Ok(msg) => self.handle_message(msg).await.unwrap(),
+                Ok(message) => {
+                    let values = parse_packet(&message.to_string()).unwrap();
+                    for value in values {
+                        match value {
+                            serde_json::Value::Number(_) => self.on_ping(&message).await.unwrap(),
+                            serde_json::Value::Object(_) => self.handle_msg(value).await.unwrap(),
+                            _ => (),
+                        }
+                    }
+                }
                 Err(e) => {
                     error!("Error reading message: {:#?}", e);
                 }
@@ -210,8 +218,6 @@ impl QuoteSocket {
         Ok(())
     }
 
-    async fn on_connected(&mut self) {}
-
     async fn on_ping(&mut self, ping: &Message) -> Result<()> {
         self.write.send(ping.clone()).await?;
         Ok(())
@@ -221,7 +227,7 @@ impl QuoteSocket {
         todo!()
     }
 
-    async fn event_handler(&mut self) {
+    async fn event_handler(&mut self, event: super::QuoteSocketEvent) {
         todo!()
     }
 
@@ -233,7 +239,17 @@ impl QuoteSocket {
         todo!()
     }
 
-    async fn on_logged(&mut self) {
-        todo!()
+    pub async fn delete_session(&mut self) -> Result<()> {
+        self.send("quote_delete_session", vec![self.session.clone()])
+            .await?;
+        Ok(())
+    }
+
+    pub async fn update_session(&mut self) -> Result<&mut Self> {
+        self.delete_session().await?;
+        self.session = gen_session_id("qs");
+        self.send("quote_create_session", vec![self.session.clone()])
+            .await?;
+        Ok(self)
     }
 }

@@ -54,3 +54,20 @@ lazy_static! {
         "provider_id".to_string(),
     ];
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum QuoteSocketEvent {
+    Data,
+    Loaded,
+    Error,
+}
+
+impl std::fmt::Display for QuoteSocketEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            QuoteSocketEvent::Data => write!(f, "qsd"),
+            QuoteSocketEvent::Loaded => write!(f, "quote_completed"),
+            QuoteSocketEvent::Error => write!(f, "error"),
+        }
+    }
+}

@@ -16,6 +16,8 @@ async fn main() {
         .quote_add_symbols(vec![
             "BINANCE:BTCUSDT".to_string(),
             "BINANCE:ETHUSDT".to_string(),
+            "BITSTAMP:ETHUSD".to_string(),
+            "NASDAQ:TSLA".to_string(),
         ])
         .await
         .unwrap();
