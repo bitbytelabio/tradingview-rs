@@ -9,7 +9,8 @@ use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
+use serde_json::Value as JsonValue;
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,7 +31,6 @@ pub struct QuoteSocket {
     session: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    last_data: Quote,
     // callbacks: Option<Box<dyn FnMut(SocketMessage) + Send + Sync + 'static>>,
 }
 
@@ -107,7 +107,6 @@ impl QuoteSocketBuilder {
             session,
             messages,
             auth_token,
-            last_data: Quote::default(),
         })
     }
 }
@@ -152,38 +151,60 @@ impl QuoteSocket {
         Ok(())
     }
 
-    async fn handle_msg(&mut self, message: serde_json::Value) -> Result<()> {
-        if message["m"].is_string()
-            && message["m"] == QuoteSocketEvent::Data.to_string()
-            && message["p"][1]["s"] == "ok"
-        {
-            self.event_handler(QuoteSocketEvent::Data, message["p"][1].clone())
-                .await?;
-            return Ok(());
-        } else if message["m"].is_string()
-            && message["m"] == super::QuoteSocketEvent::Loaded.to_string()
-        {
-            self.event_handler(QuoteSocketEvent::Loaded, message)
-                .await?;
-            return Ok(());
-        } else if message["m"].is_string()
-            && message["m"] == QuoteSocketEvent::Data.to_string()
-            && message["p"][1]["s"] == QuoteSocketEvent::Error.to_string()
-        {
-            self.event_handler(QuoteSocketEvent::Error, message).await?;
-            return Ok(());
+    async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
+        use std::borrow::Cow;
+
+        const MESSAGE_TYPE_KEY: &str = "m";
+        const PAYLOAD_KEY: usize = 1;
+        const STATUS_KEY: &str = "s";
+        const OK_STATUS: &str = "ok";
+        const ERROR_STATUS: &str = "error";
+        const DATA_EVENT: &str = "qsd";
+        const LOADED_EVENT: &str = "quote_completed";
+
+        let message: JsonValue = serde_json::from_value(message)?;
+
+        let message_type = message
+            .get(MESSAGE_TYPE_KEY)
+            .and_then(|m| m.as_str().map(Cow::Borrowed));
+
+        match message_type.as_ref().map(|s| s.as_ref()) {
+            Some(DATA_EVENT) => {
+                let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
+                let status = payload.and_then(|p| {
+                    p.get(STATUS_KEY)
+                        .and_then(|s| s.as_str().map(Cow::Borrowed))
+                });
+
+                match status.as_ref().map(|s| s.as_ref()) {
+                    Some(OK_STATUS) => {
+                        self.event_handler(QuoteSocketEvent::Data, payload.unwrap().clone())
+                            .await?;
+                        return Ok(());
+                    }
+                    Some(ERROR_STATUS) => {
+                        self.event_handler(QuoteSocketEvent::Error, message.clone())
+                            .await?;
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+            Some(LOADED_EVENT) => {
+                self.event_handler(QuoteSocketEvent::Loaded, message.clone())
+                    .await?;
+                return Ok(());
+            }
+            _ => {}
         }
+
         Ok(())
     }
 
-    async fn event_handler(
-        &mut self,
-        event: QuoteSocketEvent,
-        message: serde_json::Value,
-    ) -> Result<()> {
+    async fn event_handler(&mut self, event: QuoteSocketEvent, message: JsonValue) -> Result<()> {
         match event {
             QuoteSocketEvent::Data => {
-                // let data = serde_json::from_value::<Quote>(message)?;
+                // let data = JsonValue::<Quote>(message)?;
                 // info!("Last quote data: {:?}", self.last_data);
                 // self.last_data = data.clone();
                 // info!("Current quote data: {:?}", data);
@@ -205,8 +226,8 @@ impl QuoteSocket {
                     let values = parse_packet(&message.to_string()).unwrap();
                     for value in values {
                         match value {
-                            serde_json::Value::Number(_) => self.ping(&message).await.unwrap(),
-                            serde_json::Value::Object(_) => self.handle_msg(value).await.unwrap(),
+                            JsonValue::Number(_) => self.ping(&message).await.unwrap(),
+                            JsonValue::Object(_) => self.handle_msg(value).await.unwrap(),
                             _ => (),
                         }
                     }
