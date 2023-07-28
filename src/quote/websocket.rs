@@ -34,33 +34,47 @@ pub struct Callback {}
 pub struct QuoteSocketBuilder {
     server: DataServer,
     auth_token: Option<String>,
+    quote_fields: Option<Vec<String>>,
 }
 
 impl QuoteSocketBuilder {
-    pub fn auth_token(mut self, auth_token: String) -> Self {
+    pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
         self.auth_token = Some(auth_token);
         self
     }
 
-    fn set_quote_fields(session: &str) -> Vec<String> {
-        let mut params = vec![session.to_string()];
-        super::ALL_QUOTE_FIELDS.iter().for_each(|field| {
-            params.push(field.to_string());
-        });
-        params
+    pub fn quote_fields(&mut self, quote_fields: Vec<String>) -> &mut Self {
+        self.quote_fields = Some(quote_fields);
+        self
     }
 
-    fn set_connection_setup_messages(
-        auth_token: &str,
+    fn init_messages(
+        &self,
         session: &str,
+        auth_token: &str,
     ) -> Result<VecDeque<Message>, Box<dyn std::error::Error>> {
-        let messages = vec![
+        let quote_fields: Vec<String> = match self.quote_fields.clone() {
+            Some(fields) => {
+                let mut quote_fields = vec![session.clone().to_string()];
+                for field in fields {
+                    quote_fields.push(field);
+                }
+                quote_fields
+            }
+            None => {
+                let mut quote_fields = vec![session.clone().to_string()];
+                for field in crate::quote::ALL_QUOTE_FIELDS.iter() {
+                    quote_fields.push(field.clone());
+                }
+                quote_fields
+            }
+        };
+
+        Ok(VecDeque::from(vec![
             SocketMessage::new("set_auth_token", vec![auth_token]).to_message()?,
             SocketMessage::new("quote_create_session", vec![session]).to_message()?,
-            SocketMessage::new("quote_set_fields", Self::set_quote_fields(session)).to_message()?,
-        ];
-
-        Ok(VecDeque::from(messages))
+            SocketMessage::new("quote_set_fields", quote_fields).to_message()?,
+        ]))
     }
 
     pub async fn build(&mut self) -> Result<QuoteSocket, Box<dyn std::error::Error>> {
@@ -91,7 +105,7 @@ impl QuoteSocketBuilder {
 
         let session = gen_session_id("qs");
 
-        let messages = Self::set_connection_setup_messages(&auth_token, &session)?;
+        let messages = self.init_messages(&session, &auth_token)?;
 
         Ok(QuoteSocket {
             write,
@@ -108,6 +122,7 @@ impl QuoteSocket {
         return QuoteSocketBuilder {
             server: server,
             auth_token: None,
+            quote_fields: None,
         };
     }
 
@@ -181,11 +196,7 @@ impl QuoteSocket {
         M: Serialize,
         P: Serialize,
     {
-        let msg = match format_packet(SocketMessage::new(message, payload)) {
-            Ok(msg) => msg,
-            Err(e) => return Err(e),
-        };
-
+        let msg = format_packet(SocketMessage::new(message, payload))?;
         self.messages.push_back(msg);
         self.send_queue().await?;
         Ok(())

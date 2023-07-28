@@ -7,6 +7,7 @@ async fn main() {
     let _ = tradingview_rs::quote::websocket::QuoteSocket::new(
         tradingview_rs::socket::DataServer::Data,
     )
+    // .quote_fields(vec!["lp".to_string()])
     .build()
     .await
     .unwrap()
