@@ -102,7 +102,7 @@ impl Client {
                     None => return Err(Box::new(error::ClientError::NoChartTokenFound)),
                 })
             }
-            None => return Err("No token found").unwrap(),
+            None => Err("No token found").unwrap(),
         }
     }
 

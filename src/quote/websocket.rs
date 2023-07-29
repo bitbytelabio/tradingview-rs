@@ -14,7 +14,7 @@ use serde_json::Value as JsonValue;
 
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -23,7 +23,7 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 use url::Url;
 
 pub struct QuoteSocket<'a> {
@@ -76,7 +76,7 @@ impl<'a> QuoteSocketBuilder<'a> {
     pub async fn build(&mut self) -> Result<QuoteSocket> {
         let url = Url::parse(&format!(
             "wss://{server}.tradingview.com/socket.io/websocket",
-            server = self.server.to_string()
+            server = self.server
         ))
         .unwrap();
 
@@ -116,12 +116,12 @@ impl<'a> QuoteSocket<'a> {
     where
         CallbackFn: FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a,
     {
-        return QuoteSocketBuilder {
-            server: server,
+        QuoteSocketBuilder {
+            server,
             auth_token: None,
             quote_fields: None,
             handler: Some(Box::new(handler)),
-        };
+        }
     }
 
     pub async fn set_local(&mut self, local: &[String]) -> Result<()> {
