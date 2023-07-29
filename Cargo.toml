@@ -50,10 +50,4 @@ criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 
 [[example]]
-name = "auth"
-
-[[example]]
-name = "websocket"
-
-[[example]]
-name = "utils"
+name = "quote"
