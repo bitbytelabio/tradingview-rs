@@ -1,6 +1,6 @@
 use crate::{
     prelude::*,
-    quote::{model::Quote, QuoteSocketEvent},
+    quote::QuoteSocketEvent,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
@@ -12,6 +12,7 @@ use futures_util::{
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -21,28 +22,26 @@ use tokio_tungstenite::{
     tungstenite::{client::IntoClientRequest, protocol::Message},
     MaybeTlsStream, WebSocketStream,
 };
+
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-#[derive(Debug)]
-pub struct QuoteSocket {
+pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     session: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    // callbacks: Option<Box<dyn FnMut(SocketMessage) + Send + Sync + 'static>>,
+    handler: Box<dyn FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a>,
 }
-
-pub struct Callback {}
-
-pub struct QuoteSocketBuilder {
+pub struct QuoteSocketBuilder<'a> {
     server: DataServer,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
+    handler: Option<Box<dyn FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a>>,
 }
 
-impl QuoteSocketBuilder {
+impl<'a> QuoteSocketBuilder<'a> {
     pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
         self.auth_token = Some(auth_token);
         self
@@ -68,9 +67,9 @@ impl QuoteSocketBuilder {
         };
 
         Ok(VecDeque::from(vec![
-            SocketMessage::new("set_auth_token", vec![auth_token]).to_message()?,
-            SocketMessage::new("quote_create_session", vec![session]).to_message()?,
-            SocketMessage::new("quote_set_fields", quote_fields).to_message()?,
+            SocketMessage::new("set_auth_token", &[auth_token]).to_message()?,
+            SocketMessage::new("quote_create_session", &[session]).to_message()?,
+            SocketMessage::new("quote_set_fields", &quote_fields).to_message()?,
         ]))
     }
 
@@ -107,53 +106,56 @@ impl QuoteSocketBuilder {
             session,
             messages,
             auth_token,
+            handler: self.handler.take().unwrap(),
         })
     }
 }
 
-impl QuoteSocket {
-    pub fn new(server: DataServer) -> QuoteSocketBuilder {
+impl<'a> QuoteSocket<'a> {
+    pub fn new<CallbackFn>(server: DataServer, handler: CallbackFn) -> QuoteSocketBuilder<'a>
+    where
+        CallbackFn: FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a,
+    {
         return QuoteSocketBuilder {
             server: server,
             auth_token: None,
             quote_fields: None,
+            handler: Some(Box::new(handler)),
         };
     }
 
-    pub async fn set_local(&mut self, local: Vec<String>) -> Result<()> {
+    pub async fn set_local(&mut self, local: &[String]) -> Result<()> {
         self.send("set_local", local).await?;
         Ok(())
     }
 
     pub async fn switch_timezone(&mut self, timezone: &str) -> Result<()> {
-        self.send("switch_timezone", vec![timezone]).await?;
+        self.send("switch_timezone", &[timezone]).await?;
         Ok(())
     }
 
     pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(symbols);
-        self.send("quote_add_symbols", payload).await?;
+        self.send("quote_add_symbols", &payload).await?;
         Ok(())
     }
 
     pub async fn quote_fast_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(symbols);
-        self.send("quote_fast_symbols", payload).await?;
+        self.send("quote_fast_symbols", &payload).await?;
         Ok(())
     }
 
     pub async fn quote_remove_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(symbols);
-        self.send("quote_remove_symbols", payload).await?;
+        self.send("quote_remove_symbols", &payload).await?;
         Ok(())
     }
 
     async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
-        use std::borrow::Cow;
-
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
         const STATUS_KEY: &str = "s";
@@ -178,45 +180,25 @@ impl QuoteSocket {
 
                 match status.as_ref().map(|s| s.as_ref()) {
                     Some(OK_STATUS) => {
-                        self.event_handler(QuoteSocketEvent::Data, payload.unwrap().clone())
-                            .await?;
+                        (self.handler)(QuoteSocketEvent::Data, payload.unwrap().clone())?;
                         return Ok(());
                     }
                     Some(ERROR_STATUS) => {
-                        self.event_handler(QuoteSocketEvent::Error, message.clone())
-                            .await?;
+                        error!("failed to receive quote data: {:?}", payload.unwrap());
+                        (self.handler)(QuoteSocketEvent::Error, message.clone())?;
                         return Ok(());
                     }
                     _ => {}
                 }
             }
             Some(LOADED_EVENT) => {
-                self.event_handler(QuoteSocketEvent::Loaded, message.clone())
-                    .await?;
+                (self.handler)(QuoteSocketEvent::Loaded, message.clone())?;
                 return Ok(());
             }
             _ => {}
         }
 
         Ok(())
-    }
-
-    async fn event_handler(&mut self, event: QuoteSocketEvent, message: JsonValue) -> Result<()> {
-        match event {
-            QuoteSocketEvent::Data => {
-                // let data = JsonValue::<Quote>(message)?;
-                // info!("Last quote data: {:?}", self.last_data);
-                // self.last_data = data.clone();
-                // info!("Current quote data: {:?}", data);
-                info!("Quote data loaded {}", message);
-                Ok(())
-            }
-            QuoteSocketEvent::Loaded => {
-                info!("Quote data loaded {}", message);
-                Ok(())
-            }
-            QuoteSocketEvent::Error => Ok(()),
-        }
     }
 
     pub async fn event_loop(&mut self) {
@@ -239,11 +221,7 @@ impl QuoteSocket {
         }
     }
 
-    pub async fn load(&mut self) {
-        self.event_loop().await;
-    }
-
-    async fn send<M, P>(&mut self, message: M, payload: Vec<P>) -> Result<()>
+    async fn send<M, P>(&mut self, message: M, payload: &[P]) -> Result<()>
     where
         M: Serialize,
         P: Serialize,
@@ -268,23 +246,30 @@ impl QuoteSocket {
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.send("quote_delete_session", vec![self.session.clone()])
+        self.send("quote_delete_session", &[self.session.clone()])
             .await?;
         Ok(())
     }
 
-    pub async fn update_session(&mut self) -> Result<&mut Self> {
+    pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
         self.session = gen_session_id("qs");
-        self.send("quote_create_session", vec![self.session.clone()])
+        self.send("quote_create_session", &[self.session.clone()])
             .await?;
-        Ok(self)
+        Ok(())
     }
 
-    pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<&mut Self> {
+    pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<()> {
         let mut payload = vec![self.session.clone()];
         payload.extend(fields);
-        self.send("quote_set_fields", payload).await?;
-        Ok(self)
+        self.send("quote_set_fields", &payload).await?;
+        Ok(())
+    }
+
+    pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
+        self.auth_token = auth_token.to_string();
+        self.send("set_auth_token", &[self.auth_token.clone()])
+            .await?;
+        Ok(())
     }
 }
