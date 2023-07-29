@@ -32,13 +32,13 @@ pub struct QuoteSocket<'a> {
     session: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    handler: Box<dyn FnMut(QuoteSocketEvent) -> Result<()> + 'a>,
+    handler: Box<dyn FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a>,
 }
 pub struct QuoteSocketBuilder<'a> {
     server: DataServer,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
-    handler: Option<Box<dyn FnMut(QuoteSocketEvent) -> Result<()> + 'a>>,
+    handler: Option<Box<dyn FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a>>,
 }
 
 impl<'a> QuoteSocketBuilder<'a> {
@@ -114,7 +114,7 @@ impl<'a> QuoteSocketBuilder<'a> {
 impl<'a> QuoteSocket<'a> {
     pub fn new<CallbackFn>(server: DataServer, handler: CallbackFn) -> QuoteSocketBuilder<'a>
     where
-        CallbackFn: FnMut(QuoteSocketEvent) -> Result<()> + 'a,
+        CallbackFn: FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a,
     {
         return QuoteSocketBuilder {
             server: server,
@@ -180,19 +180,19 @@ impl<'a> QuoteSocket<'a> {
 
                 match status.as_ref().map(|s| s.as_ref()) {
                     Some(OK_STATUS) => {
-                        (self.handler)(QuoteSocketEvent::Data(payload.unwrap().clone()))?;
+                        (self.handler)(QuoteSocketEvent::Data, payload.unwrap().clone())?;
                         return Ok(());
                     }
                     Some(ERROR_STATUS) => {
                         error!("failed to receive quote data: {:?}", payload.unwrap());
-                        (self.handler)(QuoteSocketEvent::Error(message.clone()))?;
+                        (self.handler)(QuoteSocketEvent::Error, message.clone())?;
                         return Ok(());
                     }
                     _ => {}
                 }
             }
             Some(LOADED_EVENT) => {
-                (self.handler)(QuoteSocketEvent::Loaded(message.clone()))?;
+                (self.handler)(QuoteSocketEvent::Loaded, message.clone())?;
                 return Ok(());
             }
             _ => {}

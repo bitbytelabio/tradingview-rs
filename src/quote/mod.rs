@@ -56,7 +56,7 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum QuoteSocketEvent {
-    Data(serde_json::Value),
-    Loaded(serde_json::Value),
-    Error(serde_json::Value),
+    Data,
+    Loaded,
+    Error,
 }
