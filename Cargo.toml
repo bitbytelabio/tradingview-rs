@@ -38,13 +38,6 @@ futures-util = { version = "0.3", default-features = false, features = [
     "std",
 ] }
 
-# futures-channel = "0.3"
-# rayon = { version = "1.7" }
-# log = "0.4"
-# env_logger = "0.10"
-# http = "^0.2"
-
-
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"

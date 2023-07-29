@@ -18,12 +18,6 @@ This is a data source library for algorithmic trading written in Rust. It is cur
 - [ ] Interact with public chats
 - [ ] Get Screener top values
 - [ ] Get Calendar
-- [ ] Kafka support with RedPanda as storage backend
-- [ ] Stream ETL with Meilisearch
-- [ ] Polars support
-- [ ] Rest API
-- [ ] gRPC API
-- [ ] Desktop chart drawing
 
 ## Getting Started
 
