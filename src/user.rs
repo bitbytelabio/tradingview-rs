@@ -40,7 +40,7 @@ pub struct User {
     pub is_pro: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct UserBuilder {
     id: Option<u32>,
     username: Option<String>,
@@ -110,18 +110,7 @@ impl UserBuilder {
 
 impl User {
     pub fn new() -> UserBuilder {
-        return UserBuilder {
-            id: None,
-            username: None,
-            password: None,
-            totp_secret: None,
-            private_channel: None,
-            is_pro: None,
-            auth_token: None,
-            session_hash: None,
-            session: None,
-            signature: None,
-        };
+        return UserBuilder::default();
     }
 
     pub async fn login(&mut self) -> Result<Self> {
