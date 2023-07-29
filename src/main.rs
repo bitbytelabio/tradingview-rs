@@ -4,26 +4,26 @@ use tracing::debug;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let mut binding = tradingview_rs::quote::websocket::QuoteSocket::new(
-        tradingview_rs::socket::DataServer::Data,
-    );
-    let mut socket = binding
-        // .quote_fields(vec!["lp".to_string()])
-        .build()
-        .await
-        .unwrap();
+    // let mut binding = tradingview_rs::quote::websocket::QuoteSocket::new(
+    //     tradingview_rs::socket::DataServer::Data,
+    // );
+    // let mut socket = binding
+    //     // .quote_fields(vec!["lp".to_string()])
+    //     .build()
+    //     .await
+    //     .unwrap();
 
-    socket
-        .quote_add_symbols(vec![
-            "BINANCE:BTCUSDT".to_string(),
-            "BINANCE:ETHUSDT".to_string(),
-            "BITSTAMP:ETHUSD".to_string(),
-            "NASDAQ:TSLA".to_string(),
-        ])
-        .await
-        .unwrap();
+    // socket
+    //     .quote_add_symbols(vec![
+    //         "BINANCE:BTCUSDT".to_string(),
+    //         "BINANCE:ETHUSDT".to_string(),
+    //         "BITSTAMP:ETHUSD".to_string(),
+    //         "NASDAQ:TSLA".to_string(),
+    //     ])
+    //     .await
+    //     .unwrap();
 
-    socket.load().await;
+    // socket.load().await;
 
     // use tradingview_rs::user::*;
     // // let user = User::new().build();

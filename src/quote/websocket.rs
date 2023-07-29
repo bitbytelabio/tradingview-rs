@@ -32,20 +32,13 @@ pub struct QuoteSocket<'a> {
     session: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    handlers: CallbackFn<'a>,
+    handler: Box<dyn FnMut(QuoteSocketEvent) -> Result<()> + 'a>,
 }
-
-pub struct CallbackFn<'a> {
-    on_data: Option<Box<dyn FnMut(JsonValue) + 'a>>,
-    on_loaded: Option<Box<dyn FnMut(JsonValue) + 'a>>,
-    on_error: Option<Box<dyn FnMut(JsonValue) + 'a>>,
-}
-
 pub struct QuoteSocketBuilder<'a> {
     server: DataServer,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
-    handlers: Option<CallbackFn<'a>>,
+    handler: Option<Box<dyn FnMut(QuoteSocketEvent) -> Result<()> + 'a>>,
 }
 
 impl<'a> QuoteSocketBuilder<'a> {
@@ -56,11 +49,6 @@ impl<'a> QuoteSocketBuilder<'a> {
 
     pub fn quote_fields(&mut self, quote_fields: Vec<String>) -> &mut Self {
         self.quote_fields = Some(quote_fields);
-        self
-    }
-
-    pub fn callback(&mut self, handlers: CallbackFn<'a>) -> &mut Self {
-        self.handlers = Some(handlers);
         self
     }
 
@@ -118,22 +106,21 @@ impl<'a> QuoteSocketBuilder<'a> {
             session,
             messages,
             auth_token,
-            handlers: CallbackFn {
-                on_data: None,
-                on_loaded: None,
-                on_error: None,
-            },
+            handler: self.handler.take().unwrap(),
         })
     }
 }
 
 impl<'a> QuoteSocket<'a> {
-    pub fn new(server: DataServer) -> QuoteSocketBuilder<'a> {
+    pub fn new<CallbackFn>(server: DataServer, handler: CallbackFn) -> QuoteSocketBuilder<'a>
+    where
+        CallbackFn: FnMut(QuoteSocketEvent) -> Result<()> + 'a,
+    {
         return QuoteSocketBuilder {
             server: server,
             auth_token: None,
             quote_fields: None,
-            handlers: None,
+            handler: Some(Box::new(handler)),
         };
     }
 
@@ -193,21 +180,19 @@ impl<'a> QuoteSocket<'a> {
 
                 match status.as_ref().map(|s| s.as_ref()) {
                     Some(OK_STATUS) => {
-                        self.event_handler(QuoteSocketEvent::Data, payload.unwrap().clone())
-                            .await?;
+                        (self.handler)(QuoteSocketEvent::Data(payload.unwrap().clone()))?;
                         return Ok(());
                     }
                     Some(ERROR_STATUS) => {
-                        self.event_handler(QuoteSocketEvent::Error, message.clone())
-                            .await?;
+                        error!("failed to receive quote data: {:?}", payload.unwrap());
+                        (self.handler)(QuoteSocketEvent::Error(message.clone()))?;
                         return Ok(());
                     }
                     _ => {}
                 }
             }
             Some(LOADED_EVENT) => {
-                self.event_handler(QuoteSocketEvent::Loaded, message.clone())
-                    .await?;
+                (self.handler)(QuoteSocketEvent::Loaded(message.clone()))?;
                 return Ok(());
             }
             _ => {}
@@ -216,25 +201,7 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
-    async fn event_handler(&mut self, event: QuoteSocketEvent, message: JsonValue) -> Result<()> {
-        match event {
-            QuoteSocketEvent::Data => {
-                // let data = JsonValue::<Quote>(message)?;
-                // info!("Last quote data: {:?}", self.last_data);
-                // self.last_data = data.clone();
-                // info!("Current quote data: {:?}", data);
-                info!("Quote data loaded {}", message);
-                Ok(())
-            }
-            QuoteSocketEvent::Loaded => {
-                info!("Quote data loaded {}", message);
-                Ok(())
-            }
-            QuoteSocketEvent::Error => Ok(()),
-        }
-    }
-
-    async fn event_loop(&mut self) {
+    pub async fn event_loop(&mut self) {
         while let Some(result) = self.read.next().await {
             match result {
                 Ok(message) => {
@@ -252,10 +219,6 @@ impl<'a> QuoteSocket<'a> {
                 }
             }
         }
-    }
-
-    pub async fn load(&mut self) {
-        self.event_loop().await;
     }
 
     async fn send<M, P>(&mut self, message: M, payload: &[P]) -> Result<()>
