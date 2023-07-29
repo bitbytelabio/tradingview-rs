@@ -51,3 +51,6 @@ anyhow = "1"
 
 [[example]]
 name = "quote"
+
+[[example]]
+name = "user"

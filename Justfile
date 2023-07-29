@@ -7,18 +7,19 @@ test-user:
 	@cargo test -p tradingview-rs --test user_test
 
 test-all:
-	@cargo test --verbose --all-features
+	@cargo test --all-features
 
 clippy:
-	@cargo clippy --verbose --all-features
+	@cargo clippy --all-features
 
 format:
 	@cargo fmt --all -- --check
 
 checks: build test-all clippy format
-	@echo "### Don't forget to add untracked files! ###"
 	@git status
-	@echo "### Awesome work! 😍 ###"""
 
-examples:
-	cargo run --package datafeed --example auth
+quote-example:
+	cargo run --package tradingview-rs --example quote
+
+user-example:
+	cargo run --package tradingview-rs --example user
