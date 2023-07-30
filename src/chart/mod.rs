@@ -1,5 +1,3 @@
-use phf::phf_map;
-
 mod graphic_parser;
 mod study;
 pub mod websocket;
@@ -7,11 +5,25 @@ pub mod websocket;
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChartEvent {}
 
-static CHART_TYPES: phf::Map<&'static str, &'static str> = phf_map! {
-    "HeikinAshi"=>"BarSetHeikenAshi@tv-basicstudies-60!",
-    "Renko"=> "BarSetRenko@tv-prostudies-40!",
-    "LineBreak"=> "BarSetPriceBreak@tv-prostudies-34!",
-    "Kagi"=> "BarSetKagi@tv-prostudies-34!",
-    "PointAndFigure"=> "BarSetPnF@tv-prostudies-34!",
-    "Range"=> "BarSetRange@tv-basicstudies-72!",
-};
+pub enum ChartType {
+    HeikinAshi,
+    Renko,
+    LineBreak,
+    Kagi,
+    PointAndFigure,
+    Range,
+}
+
+impl std::fmt::Display for ChartType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chart_type = match self {
+            ChartType::HeikinAshi => "BarSetHeikenAshi@tv-basicstudies-60!",
+            ChartType::Renko => "BarSetRenko@tv-prostudies-40!",
+            ChartType::LineBreak => "BarSetPriceBreak@tv-prostudies-34!",
+            ChartType::Kagi => "BarSetKagi@tv-prostudies-34!",
+            ChartType::PointAndFigure => "BarSetPnF@tv-prostudies-34!",
+            ChartType::Range => "BarSetRange@tv-basicstudies-72!",
+        };
+        write!(f, "{}", chart_type)
+    }
+}

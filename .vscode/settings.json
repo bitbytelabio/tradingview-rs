@@ -8,6 +8,8 @@
     "BTCUSDT",
     "Deque",
     "javastudies",
+    "Kagi",
+    "HeikinAshi",
     "KHTML",
     "logoid",
     "LSIN",
@@ -21,6 +23,7 @@
     "prodata",
     "rchp",
     "Referer",
+    "Renko",
     "reqwest",
     "rustls",
     "sessionid",
@@ -34,6 +37,9 @@
     "uacq",
     "UPCOM",
     "widgetdata",
-    "XETR"
+    "XETR",
+    "basicstudies",
+    "HeikenAshi",
+    "prostudies"
   ],
 }

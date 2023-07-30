@@ -6,25 +6,14 @@ use crate::{
     UA,
 };
 
-use futures_util::{
-    stream::{SplitSink, SplitStream},
-    SinkExt, StreamExt,
-};
-use serde::Serialize;
+use futures_util::stream::{SplitSink, SplitStream};
+
 use serde_json::Value as JsonValue;
 
-use std::borrow::Cow;
 use std::collections::VecDeque;
 
 use tokio::net::TcpStream;
-use tokio_tungstenite::{
-    connect_async,
-    tungstenite::{client::IntoClientRequest, protocol::Message},
-    MaybeTlsStream, WebSocketStream,
-};
-
-use tracing::{error, info};
-use url::Url;
+use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 
 pub struct ChartSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
@@ -41,6 +30,7 @@ pub struct ChartSocketBuilder<'a> {
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
     handler: Option<Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>>,
+    relay_mode: bool,
 }
 
 impl<'a> ChartSocketBuilder<'a> {
@@ -48,6 +38,22 @@ impl<'a> ChartSocketBuilder<'a> {
         self.auth_token = Some(auth_token);
         self
     }
+
+    pub async fn build(&mut self) -> ChartSocket {
+        let session = gen_session_id("cs");
+        let relay_session = gen_session_id("rs");
+        todo!()
+    }
 }
 
-impl<'a> ChartSocket<'a> {}
+impl<'a> ChartSocket<'a> {
+    pub fn new(server: DataServer) -> ChartSocketBuilder<'a> {
+        ChartSocketBuilder {
+            server,
+            auth_token: None,
+            quote_fields: None,
+            handler: None,
+            relay_mode: false,
+        }
+    }
+}
