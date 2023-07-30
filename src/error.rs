@@ -25,6 +25,9 @@ pub enum Error {
 
     #[error("something went wrong with websocket")]
     WebSocketError(#[from] tokio_tungstenite::tungstenite::Error),
+
+    #[error("No chart token found")]
+    NoChartTokenFound,
 }
 
 #[derive(Debug, Error)]
@@ -61,16 +64,4 @@ pub enum LoginError {
 
     #[error("can not parse auth token")]
     ParseAuthTokenError,
-}
-
-#[derive(Debug, Error)]
-pub enum ClientError {
-    #[error("Empty message")]
-    EmptyMessage,
-
-    #[error("No token found")]
-    NoTokenFound,
-
-    #[error("No chart token found")]
-    NoChartTokenFound,
 }

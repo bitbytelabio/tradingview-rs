@@ -1,5 +1,5 @@
-use crate::model::Indicator;
-use crate::{error, user::User};
+use crate::{model::Indicator, prelude::*, user::User};
+use reqwest::Response;
 
 #[derive(Debug)]
 pub struct Client {
@@ -56,7 +56,7 @@ impl Client {
         Self { user }
     }
 
-    async fn get(&self, url: &str) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
+    async fn get(&self, url: &str) -> Result<Response> {
         let cookie = format!(
             "sessionid={}; sessionid_sign={};",
             self.user.session, self.user.signature
@@ -67,11 +67,7 @@ impl Client {
         Ok(response)
     }
 
-    async fn post<T: serde::Serialize>(
-        &self,
-        url: &str,
-        body: T,
-    ) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
+    async fn post<T: serde::Serialize>(&self, url: &str, body: T) -> Result<Response> {
         let cookie = format!(
             "sessionid={}; sessionid_sign={};",
             self.user.session, self.user.signature
@@ -82,10 +78,38 @@ impl Client {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_chart_token(
-        &self,
-        layout_id: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    async fn fetch_scan_data(&self, tickers: &[&str], scan_type: &str, columns: &[&str]) {
+        let resp = self
+            .post(
+                &format!(
+                    "https://scanner.tradingview.com/${scan_type}/scan",
+                    scan_type = scan_type
+                ),
+                serde_json::json!({
+                    "symbols": {
+                        "tickers": tickers
+                    },
+                    "columns": columns
+                }),
+            )
+            .await;
+
+        match resp {
+            Ok(resp) => {
+                let data: serde_json::Value = resp.json().await.unwrap();
+                println!("{:#?}", data);
+            }
+            Err(e) => {
+                println!("{:#?}", e);
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub async fn get_technical_analysis(&self) {}
+
+    #[tracing::instrument(skip(self))]
+    pub async fn get_chart_token(&self, layout_id: &str) -> Result<String> {
         let data: serde_json::Value = self
             .get(&format!(
                 "https://www.tradingview.com/chart-token/?image_url={}&user_id={}",
@@ -99,7 +123,7 @@ impl Client {
             Some(token) => {
                 return Ok(match token.as_str() {
                     Some(token) => token.to_string(),
-                    None => return Err(Box::new(error::ClientError::NoChartTokenFound)),
+                    None => return Err(Error::NoChartTokenFound),
                 })
             }
             None => Err("No token found").unwrap(),
@@ -112,7 +136,7 @@ impl Client {
         layout_id: &str,
         symbol: &str,
         chart_id: T,
-    ) -> Result<serde_json::Value, Box<dyn std::error::Error>>
+    ) -> Result<serde_json::Value>
     where
         T: std::fmt::Display + std::fmt::Debug,
     {
@@ -129,9 +153,7 @@ impl Client {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_private_indicators(
-        &self,
-    ) -> Result<Vec<Indicator>, Box<dyn std::error::Error>> {
+    pub async fn get_private_indicators(&self) -> Result<Vec<Indicator>> {
         let indicators = self
             .get("https://pine-facade.tradingview.com/pine-facade/list?filter=saved")
             .await?
@@ -141,9 +163,7 @@ impl Client {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_builtin_indicators(
-        &self,
-    ) -> Result<Vec<Indicator>, Box<dyn std::error::Error>> {
+    pub async fn get_builtin_indicators(&self) -> Result<Vec<Indicator>> {
         let indicator_types = vec!["standard", "candlestick", "fundamental"];
         let mut indicators: Vec<Indicator> = vec![];
         for indicator_type in indicator_types {
@@ -160,10 +180,7 @@ impl Client {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_indicator_data(
-        &self,
-        indicator: &Indicator,
-    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    pub async fn get_indicator_data(&self, indicator: &Indicator) -> Result<serde_json::Value> {
         let url = format!(
             "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
             indicator.id, indicator.version
@@ -172,21 +189,21 @@ impl Client {
         Ok(data)
     }
 
-    #[tracing::instrument(skip(self))]
-    pub async fn fetch_scan_data(
-        &self,
-        tickers: Vec<&str>,
-        scan_type: &str,
-        columns: Vec<&str>,
-    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        let url = format!("https://scanner.tradingview.com/{}/scan", scan_type);
-        let body = serde_json::json!({
-            "symbols": {
-                "tickers": tickers
-            },
-            "columns": columns
-        });
-        let data: serde_json::Value = self.post(&url, body).await?.json().await?;
-        Ok(data)
-    }
+    // #[tracing::instrument(skip(self))]
+    // pub async fn fetch_scan_data(
+    //     &self,
+    //     tickers: Vec<&str>,
+    //     scan_type: &str,
+    //     columns: Vec<&str>,
+    // ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    //     let url = format!("https://scanner.tradingview.com/{}/scan", scan_type);
+    //     let body = serde_json::json!({
+    //         "symbols": {
+    //             "tickers": tickers
+    //         },
+    //         "columns": columns
+    //     });
+    //     let data: serde_json::Value = self.post(&url, body).await?.json().await?;
+    //     Ok(data)
+    // }
 }

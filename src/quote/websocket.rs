@@ -28,7 +28,7 @@ use url::Url;
 pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    session: String,
+    quote_session_id: String,
     messages: VecDeque<Message>,
     auth_token: String,
     handler: Box<dyn FnMut(QuoteEvent, JsonValue) -> Result<()> + 'a>,
@@ -95,14 +95,14 @@ impl<'a> QuoteSocketBuilder<'a> {
             None => "unauthorized_user_token".to_string(),
         };
 
-        let session = gen_session_id("qs");
+        let quote_session_id = gen_session_id("qs");
 
-        let messages = self.init_messages(&session, &auth_token)?;
+        let messages = self.init_messages(&quote_session_id, &auth_token)?;
 
         Ok(QuoteSocket {
             write,
             read,
-            session,
+            quote_session_id,
             messages,
             auth_token,
             handler: self.handler.take().unwrap(),
@@ -128,27 +128,27 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
-    pub async fn switch_timezone(&mut self, timezone: &str) -> Result<()> {
+    pub async fn set_timezone(&mut self, timezone: &str) -> Result<()> {
         self.send("switch_timezone", &[timezone]).await?;
         Ok(())
     }
 
     pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.session.clone()];
+        let mut payload = vec![self.quote_session_id.clone()];
         payload.extend(symbols);
         self.send("quote_add_symbols", &payload).await?;
         Ok(())
     }
 
     pub async fn quote_fast_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.session.clone()];
+        let mut payload = vec![self.quote_session_id.clone()];
         payload.extend(symbols);
         self.send("quote_fast_symbols", &payload).await?;
         Ok(())
     }
 
     pub async fn quote_remove_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.session.clone()];
+        let mut payload = vec![self.quote_session_id.clone()];
         payload.extend(symbols);
         self.send("quote_remove_symbols", &payload).await?;
         Ok(())
@@ -162,6 +162,7 @@ impl<'a> QuoteSocket<'a> {
         const ERROR_STATUS: &str = "error";
         const DATA_EVENT: &str = "qsd";
         const LOADED_EVENT: &str = "quote_completed";
+        const ERROR_EVENT: &str = "critical_error";
 
         let message: JsonValue = serde_json::from_value(message)?;
 
@@ -192,6 +193,10 @@ impl<'a> QuoteSocket<'a> {
             }
             Some(LOADED_EVENT) => {
                 (self.handler)(QuoteEvent::Loaded, message.clone())?;
+                return Ok(());
+            }
+            Some(ERROR_EVENT) => {
+                (self.handler)(QuoteEvent::Error, message.clone())?;
                 return Ok(());
             }
             _ => {}
@@ -245,21 +250,21 @@ impl<'a> QuoteSocket<'a> {
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.send("quote_delete_session", &[self.session.clone()])
+        self.send("quote_delete_session", &[self.quote_session_id.clone()])
             .await?;
         Ok(())
     }
 
     pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
-        self.session = gen_session_id("qs");
-        self.send("quote_create_session", &[self.session.clone()])
+        self.quote_session_id = gen_session_id("qs");
+        self.send("quote_create_session", &[self.quote_session_id.clone()])
             .await?;
         Ok(())
     }
 
     pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.session.clone()];
+        let mut payload = vec![self.quote_session_id.clone()];
         payload.extend(fields);
         self.send("quote_set_fields", &payload).await?;
         Ok(())
