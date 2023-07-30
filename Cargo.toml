@@ -37,6 +37,7 @@ futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
+phf = { version = "0.11", features = ["macros"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

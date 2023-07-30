@@ -1,6 +1,6 @@
 use crate::{
     prelude::*,
-    quote::QuoteSocketEvent,
+    quote::QuoteEvent,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
     UA,
@@ -14,7 +14,6 @@ use serde_json::Value as JsonValue;
 
 use std::borrow::Cow;
 use std::collections::VecDeque;
-
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -32,13 +31,13 @@ pub struct QuoteSocket<'a> {
     session: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    handler: Box<dyn FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a>,
+    handler: Box<dyn FnMut(QuoteEvent, JsonValue) -> Result<()> + 'a>,
 }
 pub struct QuoteSocketBuilder<'a> {
     server: DataServer,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
-    handler: Option<Box<dyn FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a>>,
+    handler: Option<Box<dyn FnMut(QuoteEvent, JsonValue) -> Result<()> + 'a>>,
 }
 
 impl<'a> QuoteSocketBuilder<'a> {
@@ -114,7 +113,7 @@ impl<'a> QuoteSocketBuilder<'a> {
 impl<'a> QuoteSocket<'a> {
     pub fn new<CallbackFn>(server: DataServer, handler: CallbackFn) -> QuoteSocketBuilder<'a>
     where
-        CallbackFn: FnMut(QuoteSocketEvent, JsonValue) -> Result<()> + 'a,
+        CallbackFn: FnMut(QuoteEvent, JsonValue) -> Result<()> + 'a,
     {
         QuoteSocketBuilder {
             server,
@@ -180,19 +179,19 @@ impl<'a> QuoteSocket<'a> {
 
                 match status.as_ref().map(|s| s.as_ref()) {
                     Some(OK_STATUS) => {
-                        (self.handler)(QuoteSocketEvent::Data, payload.unwrap().clone())?;
+                        (self.handler)(QuoteEvent::Data, payload.unwrap().clone())?;
                         return Ok(());
                     }
                     Some(ERROR_STATUS) => {
                         error!("failed to receive quote data: {:?}", payload.unwrap());
-                        (self.handler)(QuoteSocketEvent::Error, message.clone())?;
+                        (self.handler)(QuoteEvent::Error, message.clone())?;
                         return Ok(());
                     }
                     _ => {}
                 }
             }
             Some(LOADED_EVENT) => {
-                (self.handler)(QuoteSocketEvent::Loaded, message.clone())?;
+                (self.handler)(QuoteEvent::Loaded, message.clone())?;
                 return Ok(());
             }
             _ => {}
