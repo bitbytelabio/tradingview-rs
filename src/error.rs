@@ -43,6 +43,9 @@ pub enum Error {
 
     #[error("Symbols not specified")]
     SymbolsNotSpecified,
+
+    #[error("No search data found")]
+    NoSearchDataFound,
 }
 
 #[derive(Debug, Error)]

@@ -6,6 +6,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
     let session = env::var("TV_SESSION").unwrap();
     let signature = env::var("TV_SIGNATURE").unwrap();
 
@@ -17,5 +18,7 @@ async fn main() {
 
     let client = Client::new(user);
 
-    client.get_ta("HOSE", &["FPT", "HVN", "VNM"]).await;
+    // client.get_ta("HOSE", &["FPT", "HVN", "VNM"]).await;
+    // let rsp = client.search_symbol().await;
+    // println!("{:#?}", rsp);
 }

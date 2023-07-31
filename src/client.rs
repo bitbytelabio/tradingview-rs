@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    model::{Indicator, SimpleTA},
+    model::{Indicator, SimpleTA, Symbol, SymbolSearch},
     prelude::*,
     user::User,
 };
@@ -76,12 +76,6 @@ fn get_screener(exchange: &str) -> Result<Screener> {
 pub struct Client {
     user: User,
 }
-
-struct ClientBuilder {
-    user: Option<User>,
-}
-
-impl ClientBuilder {}
 
 impl Client {
     pub fn new(user: User) -> Self {
@@ -209,6 +203,36 @@ impl Client {
                     return Err(e);
                 }
             },
+        }
+    }
+
+    pub async fn search_symbol(
+        &self,
+        search: &str,
+        exchange: &str,
+        search_type: &str,
+        start: u64,
+        country: &str,
+    ) -> Result<SymbolSearch> {
+        let search_data: SymbolSearch = self
+            .get(&format!(
+                "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&hl=1&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
+                search = search,
+                exchange = exchange,
+                search_type = search_type,
+                start = start,
+                country = country
+            ))
+            .await?
+            .json()
+            .await?;
+        Ok(search_data)
+    }
+
+    pub async fn list_symbols(&self, market_type: Option<&str>) -> Result<serde_json::Value> {
+        match market_type {
+            Some(s) => todo!(),
+            None => todo!(),
         }
     }
 
