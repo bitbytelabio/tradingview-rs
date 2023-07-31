@@ -110,7 +110,7 @@ impl UserBuilder {
 
 impl User {
     pub fn new() -> UserBuilder {
-        return UserBuilder::default();
+        UserBuilder::default()
     }
 
     pub async fn login(&mut self) -> Result<Self> {
@@ -151,14 +151,14 @@ impl User {
 
         let user: User;
 
-        if response["error"] == "".to_owned() {
+        if response["error"] == *"" {
             debug!("User data: {:#?}", response);
             warn!("2FA is not enabled for this account");
             info!("User is logged in successfully");
             let login_resp: LoginUserResponse = serde_json::from_value(response)?;
 
             user = login_resp.user;
-        } else if response["error"] == "2FA_required".to_owned() {
+        } else if response["error"] == *"2FA_required" {
             if self.totp_secret.is_empty() {
                 error!("2FA is enabled for this account, but no TOTP secret was provided");
                 return Err(Error::LoginError(LoginError::OTPSecretNotFound));
@@ -220,9 +220,9 @@ impl User {
             .await?;
 
         if response.status().is_success() {
-            return Ok(response);
+            Ok(response)
         } else {
-            return Err(Error::LoginError(LoginError::InvalidOTPSecret));
+            Err(Error::LoginError(LoginError::InvalidOTPSecret))
         }
     }
 
@@ -298,11 +298,11 @@ impl User {
             };
 
             Ok(User {
-                auth_token: auth_token,
-                id: id,
-                username: username,
-                session_hash: session_hash,
-                private_channel: private_channel,
+                auth_token,
+                id,
+                username,
+                session_hash,
+                private_channel,
                 is_pro: self.is_pro,
                 session: self.session.clone(),
                 signature: self.signature.clone(),
