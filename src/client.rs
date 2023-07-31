@@ -229,13 +229,32 @@ impl Client {
         Ok(search_data)
     }
 
-    pub async fn list_symbols(&self, market_type: Option<&str>) -> Result<serde_json::Value> {
+    pub async fn list_symbols(&self, market_type: Option<&str>) -> Result<Vec<Symbol>> {
         match market_type {
-            Some(s) => todo!(),
-            None => todo!(),
+            Some(s) => {
+                let search_symbol = self.search_symbol("", "", s, 0, "").await?;
+                let remaining = search_symbol.remaining;
+                let mut symbols = search_symbol.symbols;
+                for i in (50..remaining).step_by(50) {
+                    let search_symbol = self.search_symbol("", "", s, i, "").await?;
+                    symbols.extend(search_symbol.symbols);
+                }
+                Ok(symbols)
+            }
+            None => {
+                let search_symbol = self.search_symbol("", "", "", 0, "").await?;
+                let remaining = search_symbol.remaining;
+                let mut symbols = search_symbol.symbols;
+                for i in (50..remaining).step_by(50) {
+                    let search_symbol = self.search_symbol("", "", "", i, "").await?;
+                    symbols.extend(search_symbol.symbols);
+                }
+                Ok(symbols)
+            }
         }
     }
 
+    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
     pub async fn get_chart_token(&self, layout_id: &str) -> Result<String> {
         let data: serde_json::Value = self
@@ -258,6 +277,7 @@ impl Client {
         }
     }
 
+    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
     pub async fn get_drawing<T>(
         &self,
@@ -280,6 +300,7 @@ impl Client {
         Ok(self.get(&url).await?.json().await?)
     }
 
+    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
     pub async fn get_private_indicators(&self) -> Result<Vec<Indicator>> {
         let indicators = self
@@ -290,6 +311,7 @@ impl Client {
         Ok(indicators)
     }
 
+    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
     pub async fn get_builtin_indicators(&self) -> Result<Vec<Indicator>> {
         let indicator_types = vec!["standard", "candlestick", "fundamental"];
@@ -307,6 +329,7 @@ impl Client {
         Ok(indicators)
     }
 
+    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
     pub async fn get_indicator_data(&self, indicator: &Indicator) -> Result<serde_json::Value> {
         let url = format!(

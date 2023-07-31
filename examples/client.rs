@@ -18,6 +18,9 @@ async fn main() {
 
     let client = Client::new(user);
 
+    let symbols = client.list_symbols(None).await.unwrap();
+    println!("{:#?}", symbols);
+
     // client.get_ta("HOSE", &["FPT", "HVN", "VNM"]).await;
     // let rsp = client.search_symbol().await;
     // println!("{:#?}", rsp);

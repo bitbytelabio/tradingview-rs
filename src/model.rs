@@ -30,13 +30,16 @@ pub struct SymbolSearch {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Symbol {
     pub symbol: String,
+    #[serde(default)] 
     pub description: String,
-    #[serde(rename(deserialize = "type"))]
+    #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
+    #[serde(default)]
     pub exchange: String,
+    #[serde(default)]
     pub currency_code: String,
-    #[serde(rename(deserialize = "provider_id"))]
+    #[serde(default, rename(deserialize = "provider_id"))]
     pub data_provider: String,
-    #[serde(rename(deserialize = "country"))]
+    #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
 }
