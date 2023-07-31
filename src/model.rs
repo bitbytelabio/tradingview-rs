@@ -13,3 +13,9 @@ pub struct Indicator {
     #[serde(flatten, rename(deserialize = "extra"))]
     pub info: HashMap<String, Value>,
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct SimpleTA {
+    pub name: String,
+    pub data: HashMap<String, HashMap<String, f64>>,
+}

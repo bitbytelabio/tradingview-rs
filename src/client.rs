@@ -1,10 +1,13 @@
-use crate::{model::Indicator, prelude::*, user::User};
+use std::collections::HashMap;
+
+use crate::{
+    model::{Indicator, SimpleTA},
+    prelude::*,
+    user::User,
+};
 use reqwest::Response;
 
-#[derive(Debug)]
-pub struct Client {
-    user: User,
-}
+const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
 
 #[derive(Debug, PartialEq)]
 pub enum Screener {
@@ -25,10 +28,32 @@ pub enum Screener {
     Other(String),
 }
 
+impl std::fmt::Display for Screener {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Screener::America => write!(f, "america"),
+            Screener::Australia => write!(f, "australia"),
+            Screener::Canada => write!(f, "canada"),
+            Screener::Egypt => write!(f, "egypt"),
+            Screener::Germany => write!(f, "germany"),
+            Screener::India => write!(f, "india"),
+            Screener::Israel => write!(f, "israel"),
+            Screener::Italy => write!(f, "italy"),
+            Screener::Luxembourg => write!(f, "luxembourg"),
+            Screener::Poland => write!(f, "poland"),
+            Screener::Sweden => write!(f, "sweden"),
+            Screener::Turkey => write!(f, "turkey"),
+            Screener::UK => write!(f, "uk"),
+            Screener::Vietnam => write!(f, "vietnam"),
+            Screener::Other(s) => write!(f, "{}", s.to_lowercase()),
+        }
+    }
+}
+
 #[tracing::instrument]
-fn get_screener(exchange: &str) -> Screener {
+fn get_screener(exchange: &str) -> Result<Screener> {
     let e = exchange.to_uppercase();
-    match e.as_str() {
+    let screener = match e.as_str() {
         "NASDAQ" | "NYSE" | "NYSE ARCA" | "OTC" => Screener::America,
         "ASX" => Screener::Australia,
         "TSX" | "TSXV" | "CSE" | "NEO" => Screener::Canada,
@@ -43,17 +68,24 @@ fn get_screener(exchange: &str) -> Screener {
         "BIST" => Screener::Turkey,
         "LSE" | "LSIN" => Screener::UK,
         "HNX" | "HOSE" | "UPCOM" => Screener::Vietnam,
-        _ => Screener::Other(exchange.to_lowercase()),
-    }
+        _ => return Err(Error::InvalidExchange),
+    };
+    Ok(screener)
 }
 
-struct ClientBuilder;
+pub struct Client {
+    user: User,
+}
+
+struct ClientBuilder {
+    user: Option<User>,
+}
 
 impl ClientBuilder {}
 
 impl Client {
     pub fn new(user: User) -> Self {
-        Self { user }
+        Self { user: user }
     }
 
     async fn get(&self, url: &str) -> Result<Response> {
@@ -63,7 +95,6 @@ impl Client {
         );
         let client: reqwest::Client = crate::utils::build_request(Some(&cookie))?;
         let response = client.get(url).send().await?;
-        // let data: serde_json::Value = response.json().await?;
         Ok(response)
     }
 
@@ -78,12 +109,17 @@ impl Client {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn fetch_scan_data(&self, tickers: &[&str], scan_type: &str, columns: &[&str]) {
-        let resp = self
+    async fn fetch_scan_data(
+        &self,
+        tickers: Vec<String>,
+        screener: Screener,
+        columns: Vec<String>,
+    ) -> Result<serde_json::Value> {
+        let resp_body: serde_json::Value = self
             .post(
                 &format!(
-                    "https://scanner.tradingview.com/${scan_type}/scan",
-                    scan_type = scan_type
+                    "https://scanner.tradingview.com/{screener}/scan",
+                    screener = screener.to_string()
                 ),
                 serde_json::json!({
                     "symbols": {
@@ -92,21 +128,89 @@ impl Client {
                     "columns": columns
                 }),
             )
-            .await;
+            .await?
+            .json()
+            .await?;
 
-        match resp {
-            Ok(resp) => {
-                let data: serde_json::Value = resp.json().await.unwrap();
-                println!("{:#?}", data);
+        let data = resp_body.get("data");
+        match data {
+            Some(data) => {
+                return Ok(data.clone());
             }
-            Err(e) => {
-                println!("{:#?}", e);
-            }
+            None => return Err(Error::NoScanDataFound),
         }
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_technical_analysis(&self) {}
+    pub async fn get_ta(&self, exchange: &str, symbols: &[&str]) -> Result<Vec<SimpleTA>> {
+        if exchange.is_empty() {
+            return Err(Error::ExchangeNotSpecified);
+        } else if symbols.is_empty() {
+            return Err(Error::SymbolsNotSpecified);
+        }
+        let symbols = symbols
+            .iter()
+            .map(|s| format!("{}:{}", exchange, s))
+            .collect::<Vec<String>>();
+
+        let screener = get_screener(exchange)?;
+        let cols: Vec<String> = vec!["1", "5", "15", "60", "240", "1D", "1W", "1M"]
+            .iter()
+            .map(|t| {
+                INDICATORS
+                    .iter()
+                    .map(|i| {
+                        if t != &"1D" {
+                            format!("{}|{}", i, t)
+                        } else {
+                            i.to_string()
+                        }
+                    })
+                    .collect::<Vec<String>>()
+            })
+            .flatten()
+            .collect();
+
+        match self.fetch_scan_data(symbols, screener, cols.clone()).await {
+            Ok(data) => {
+                let mut advices: Vec<SimpleTA> = vec![];
+
+                data.as_array().unwrap_or(&vec![]).iter().for_each(|s| {
+                    let mut advice = SimpleTA::default();
+                    advice.name = s["s"].as_str().unwrap_or("").to_string();
+                    s["d"]
+                        .as_array()
+                        .unwrap_or(&vec![])
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, val)| {
+                            let (name, period) =
+                                cols[i].split_once('|').unwrap_or((cols[i].as_str(), ""));
+                            let p_name = if period.is_empty() { "1D" } else { period };
+                            let name = name.split('.').last().unwrap_or(name);
+                            let val =
+                                (val.as_f64().unwrap_or(0.0) * 1000.0 / 500.0).round() / 1000.0;
+                            advice
+                                .data
+                                .entry(p_name.to_string())
+                                .or_insert_with(HashMap::new)
+                                .insert(name.to_string(), val);
+                        });
+                    advices.push(advice);
+                });
+                println!("{:#?}", advices);
+                Ok(advices)
+            }
+            Err(e) => match e {
+                Error::NoScanDataFound => {
+                    return Err(Error::SymbolsNotInSameExchange);
+                }
+                _ => {
+                    return Err(e);
+                }
+            },
+        }
+    }
 
     #[tracing::instrument(skip(self))]
     pub async fn get_chart_token(&self, layout_id: &str) -> Result<String> {
@@ -188,22 +292,4 @@ impl Client {
         let data: serde_json::Value = self.get(&url).await?.json().await?;
         Ok(data)
     }
-
-    // #[tracing::instrument(skip(self))]
-    // pub async fn fetch_scan_data(
-    //     &self,
-    //     tickers: Vec<&str>,
-    //     scan_type: &str,
-    //     columns: Vec<&str>,
-    // ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    //     let url = format!("https://scanner.tradingview.com/{}/scan", scan_type);
-    //     let body = serde_json::json!({
-    //         "symbols": {
-    //             "tickers": tickers
-    //         },
-    //         "columns": columns
-    //     });
-    //     let data: serde_json::Value = self.post(&url, body).await?.json().await?;
-    //     Ok(data)
-    // }
 }

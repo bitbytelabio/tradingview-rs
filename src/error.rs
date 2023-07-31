@@ -28,6 +28,21 @@ pub enum Error {
 
     #[error("No chart token found")]
     NoChartTokenFound,
+
+    #[error("No scan data found")]
+    NoScanDataFound,
+
+    #[error("Symbols may not in the same exchange")]
+    SymbolsNotInSameExchange,
+
+    #[error("Exchange not specified")]
+    ExchangeNotSpecified,
+
+    #[error("Exchange is invalid")]
+    InvalidExchange,
+
+    #[error("Symbols not specified")]
+    SymbolsNotSpecified,
 }
 
 #[derive(Debug, Error)]
