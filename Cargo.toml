@@ -38,6 +38,7 @@ futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
+futures = "^0.3"
 
 rayon = { version = "1.5" }
 

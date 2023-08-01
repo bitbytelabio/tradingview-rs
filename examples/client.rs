@@ -1,5 +1,6 @@
 use std::env;
-use tradingview_rs::{client::Client, user::User};
+use std::sync::Arc;
+use tradingview_rs::user::User;
 
 use tradingview_rs::error::Error;
 type Result<T> = std::result::Result<T, Error>;
@@ -17,10 +18,21 @@ async fn main() {
         .await
         .unwrap();
 
-    let client = Client::new(user);
+    // let client = Client::new(user);
 
-    let symbols = client.list_symbols(None).await.unwrap();
-    println!("{:#?}", symbols.len());
+    // let user_clone = user;
+    // let search_type = Arc::new("".to_owned());
+
+    match tradingview_rs::client::list_symbols(&user, None).await {
+        Ok(symbols) => {
+            println!("{:#?}", symbols.len());
+        }
+        Err(e) => {
+            error!("{:#?}", e);
+        }
+    }
+
+    // println!("{:#?}", symbols.len());
 
     // let chart_token = client.get_chart_token("jUwT1z48").await.unwrap();
     // print!("{:#?}", chart_token);
