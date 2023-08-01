@@ -38,9 +38,6 @@ futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
-futures = "^0.3"
-
-rayon = { version = "1.5" }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
