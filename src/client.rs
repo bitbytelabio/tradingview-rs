@@ -6,7 +6,7 @@ use crate::{
     user::User,
 };
 use reqwest::Response;
-use tokio::task::JoinHandle;
+use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::{debug, warn};
 
 const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
@@ -230,13 +230,20 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
+    // Set the maximum number of tasks running concurrently here (e.g., 10).
+    let max_concurrent_tasks = 10;
+    let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
+
     let mut tasks: Vec<JoinHandle<Result<Vec<Symbol>>>> = vec![];
 
     for i in (50..remaining).step_by(50) {
         let user_clone = Arc::clone(&user);
         let search_type_clone = Arc::clone(&search_type);
+        let semaphore_clone = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
+            // Acquire the semaphore permit before running the task.
+            let _permit = semaphore_clone.acquire().await.unwrap();
             let resp = search_symbol(&user_clone, "", "", &search_type_clone, i, "").await?;
             Ok(resp.symbols)
         });
@@ -251,22 +258,6 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
 
     Ok(symbols)
 }
-
-// #[tracing::instrument(skip(client))]
-// pub async fn list_symbols(client: Arc<User>, market_type: Arc<String>) -> Result<Vec<Symbol>> {
-//     let search_type = Arc::clone(&market_type);
-//     let user = Arc::clone(&client);
-
-//     let search_symbol_reps = search_symbol(&user, "", "", &search_type, 0, "").await?;
-//     let remaining = search_symbol_reps.remaining;
-//     let mut symbols = search_symbol_reps.symbols;
-
-//     // for i in (50..remaining).step_by(50) {
-//     //     let search_symbol = search_symbol(&user, "", "", search_type, i, "").await?;
-//     //     symbols.extend(search_symbol.symbols);
-//     // }
-//     Ok(symbols.to_vec())
-// }
 
 #[tracing::instrument(skip(client))]
 pub async fn get_chart_token(client: &User, layout_id: &str) -> Result<String> {
