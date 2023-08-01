@@ -20,7 +20,7 @@ pub struct LoginUserResponse {
     user: User,
 }
 
-#[derive(Default, Debug, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Deserialize, PartialEq)]
 pub struct User {
     pub id: u32,
     pub username: String,

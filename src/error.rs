@@ -49,6 +49,9 @@ pub enum Error {
 
     #[error("Inexistent or unsupported indicator {}", .0)]
     IndicatorDataNotFound(String),
+
+    #[error("Tokio task join error")]
+    TokioJoinError(#[from] tokio::task::JoinError),
 }
 
 #[derive(Debug, Error)]
