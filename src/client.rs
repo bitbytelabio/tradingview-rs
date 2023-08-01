@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use crate::{
-    model::{Indicator, SimpleTA, Symbol, SymbolSearch},
+    model::{IndicatorInfo, IndicatorMetadata, SimpleTA, Symbol, SymbolSearch},
     prelude::*,
     user::User,
 };
 use reqwest::Response;
+use tracing::{debug, warn};
 
 const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
 
@@ -254,7 +255,6 @@ impl Client {
         }
     }
 
-    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
     pub async fn get_chart_token(&self, layout_id: &str) -> Result<String> {
         let data: serde_json::Value = self
@@ -277,7 +277,6 @@ impl Client {
         }
     }
 
-    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
     pub async fn get_drawing<T>(
         &self,
@@ -288,9 +287,10 @@ impl Client {
     where
         T: std::fmt::Display + std::fmt::Debug,
     {
-        let token = self.get_chart_token(layout_id).await.unwrap();
+        let token = self.get_chart_token(layout_id).await?;
+        debug!("Chart token: {}", token);
         let url = format!(
-            "https://charts-storage.tradingview.com/charts-storage/layout/{layout_id}/sources?chart_id={chart_id}&jwt={token}&symbol={symbol}",
+            "https://charts-storage.tradingview.com/charts-storage/get/layout/{layout_id}/sources?chart_id={chart_id}&jwt={token}&symbol={symbol}",
             layout_id = layout_id,
             chart_id = chart_id,
             token = token,
@@ -300,43 +300,57 @@ impl Client {
         Ok(self.get(&url).await?.json().await?)
     }
 
-    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
-    pub async fn get_private_indicators(&self) -> Result<Vec<Indicator>> {
+    pub async fn get_private_indicators(&self) -> Result<Vec<IndicatorInfo>> {
         let indicators = self
             .get("https://pine-facade.tradingview.com/pine-facade/list?filter=saved")
             .await?
-            .json::<Vec<Indicator>>()
+            .json::<Vec<IndicatorInfo>>()
             .await?;
         Ok(indicators)
     }
 
-    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
-    pub async fn get_builtin_indicators(&self) -> Result<Vec<Indicator>> {
+    pub async fn get_builtin_indicators(&self) -> Result<Vec<IndicatorInfo>> {
         let indicator_types = vec!["standard", "candlestick", "fundamental"];
-        let mut indicators: Vec<Indicator> = vec![];
+        let mut indicators: Vec<IndicatorInfo> = vec![];
         for indicator_type in indicator_types {
             let url = format!(
                 "https://pine-facade.tradingview.com/pine-facade/list/?filter={}",
                 indicator_type
             );
 
-            let mut data = self.get(&url).await?.json::<Vec<Indicator>>().await?;
+            let mut data = self.get(&url).await?.json::<Vec<IndicatorInfo>>().await?;
 
             indicators.append(&mut data);
         }
         Ok(indicators)
     }
 
-    ///TODO: Implement this
     #[tracing::instrument(skip(self))]
-    pub async fn get_indicator_data(&self, indicator: &Indicator) -> Result<serde_json::Value> {
+    pub async fn get_indicator_metadata(
+        &self,
+        indicator: &IndicatorInfo,
+    ) -> Result<IndicatorMetadata> {
+        use urlencoding::encode;
         let url = format!(
             "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
-            indicator.id, indicator.version
+            encode(&indicator.id),
+            encode(&indicator.version)
         );
+        debug!("URL: {}", url);
         let data: serde_json::Value = self.get(&url).await?.json().await?;
-        Ok(data)
+
+        if !data["success"].as_bool().unwrap_or(false)
+            || !data["result"]["metaInfo"]["inputs"].is_array()
+        {
+            return Err(Error::IndicatorDataNotFound(
+                data["reason"].as_str().unwrap_or_default().to_string(),
+            ));
+        }
+
+        let result: IndicatorMetadata = serde_json::from_value(data["result"].clone())?;
+
+        Ok(result)
     }
 }

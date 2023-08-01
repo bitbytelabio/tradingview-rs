@@ -23,6 +23,7 @@ reqwest = { version = "0.11", features = [
 ] }
 lazy_static = "^1.4"
 url = "^2"
+urlencoding = "^2"
 rand = "^0.8"
 regex = "^1"
 google-authenticator = "^0.4"
@@ -37,6 +38,8 @@ futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
+
+rayon = { version = "1.5" }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

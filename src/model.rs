@@ -1,10 +1,16 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Indicator {
+    pub info: IndicatorInfo,
+    pub metadata: IndicatorMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct IndicatorInfo {
     #[serde(rename(deserialize = "scriptName"))]
     pub name: String,
     #[serde(rename(deserialize = "scriptIdPart"))]
@@ -12,6 +18,41 @@ pub struct Indicator {
     pub version: String,
     #[serde(flatten, rename(deserialize = "extra"))]
     pub info: HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct IndicatorMetadata {
+    #[serde(rename(deserialize = "IL"))]
+    pub il: String,
+    #[serde(rename(deserialize = "ilTemplate"))]
+    pub il_template: String,
+    #[serde(rename(deserialize = "metaInfo"))]
+    pub metainfo: IndicatorMetaInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct IndicatorMetaInfo {
+    pub id: String,
+
+    #[serde(default, rename(deserialize = "_metainfoVersion"))]
+    pub version: i32,
+
+    #[serde(rename(deserialize = "scriptIdPart"))]
+    pub pine_id: String,
+
+    #[serde(default)]
+    pub description: String,
+
+    pub inputs: Vec<HashMap<String, Value>>,
+
+    #[serde(default)]
+    pub is_hidden_study: bool,
+
+    #[serde(default)]
+    pub is_price_study: bool,
+
+    #[serde(rename(deserialize = "defaults"))]
+    pub default: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -30,7 +71,7 @@ pub struct SymbolSearch {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Symbol {
     pub symbol: String,
-    #[serde(default)] 
+    #[serde(default)]
     pub description: String,
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,

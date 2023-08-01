@@ -46,6 +46,9 @@ pub enum Error {
 
     #[error("No search data found")]
     NoSearchDataFound,
+
+    #[error("Inexistent or unsupported indicator {}", .0)]
+    IndicatorDataNotFound(String),
 }
 
 #[derive(Debug, Error)]
