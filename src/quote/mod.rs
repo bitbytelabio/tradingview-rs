@@ -55,7 +55,7 @@ lazy_static! {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum QuoteSocketEvent {
+pub enum QuoteEvent {
     Data,
     Loaded,
     Error,

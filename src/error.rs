@@ -25,6 +25,30 @@ pub enum Error {
 
     #[error("something went wrong with websocket")]
     WebSocketError(#[from] tokio_tungstenite::tungstenite::Error),
+
+    #[error("No chart token found")]
+    NoChartTokenFound,
+
+    #[error("No scan data found")]
+    NoScanDataFound,
+
+    #[error("Symbols may not in the same exchange")]
+    SymbolsNotInSameExchange,
+
+    #[error("Exchange not specified")]
+    ExchangeNotSpecified,
+
+    #[error("Exchange is invalid")]
+    InvalidExchange,
+
+    #[error("Symbols not specified")]
+    SymbolsNotSpecified,
+
+    #[error("No search data found")]
+    NoSearchDataFound,
+
+    #[error("Inexistent or unsupported indicator {}", .0)]
+    IndicatorDataNotFound(String),
 }
 
 #[derive(Debug, Error)]
@@ -61,16 +85,4 @@ pub enum LoginError {
 
     #[error("can not parse auth token")]
     ParseAuthTokenError,
-}
-
-#[derive(Debug, Error)]
-pub enum ClientError {
-    #[error("Empty message")]
-    EmptyMessage,
-
-    #[error("No token found")]
-    NoTokenFound,
-
-    #[error("No chart token found")]
-    NoChartTokenFound,
 }

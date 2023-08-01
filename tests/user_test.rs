@@ -10,7 +10,7 @@ mod user {
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
         let result = User::new().credentials("", "").build().await;
-        assert!(!result.is_err());
+        assert!(result.is_ok());
         assert_eq!(result.unwrap(), empty_user);
     }
 
@@ -24,7 +24,7 @@ mod user {
 
         let result = User::new().credentials(&username, &password).build().await;
 
-        assert!(!result.is_err());
+        assert!(result.is_ok());
         let user = result.unwrap();
         assert_ne!(user, empty_user);
         assert!(!user.auth_token.is_empty());
@@ -65,7 +65,7 @@ mod user {
             .build()
             .await;
 
-        assert!(!result.is_err());
+        assert!(result.is_ok());
         let user = result.unwrap();
         assert_ne!(user, empty_user);
         assert!(!user.auth_token.is_empty());
@@ -86,7 +86,7 @@ mod user {
 
         let result = User::new().session(&session, &signature).build().await;
 
-        assert!(!result.is_err());
+        assert!(result.is_ok());
         let user = result.unwrap();
         assert_ne!(user, empty_user);
         assert!(!user.auth_token.is_empty());

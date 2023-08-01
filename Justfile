@@ -23,3 +23,6 @@ quote-example:
 
 user-example:
 	cargo run --package tradingview-rs --example user
+
+client-example:
+	cargo run --package tradingview-rs --example client

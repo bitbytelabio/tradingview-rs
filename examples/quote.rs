@@ -1,7 +1,8 @@
 use serde_json::Value;
 use tracing::info;
-use tradingview_rs::quote::{websocket::QuoteSocket, QuoteSocketEvent};
-use tradingview_rs::{prelude::*, socket::DataServer};
+use tradingview_rs::quote::{websocket::QuoteSocket, QuoteEvent};
+use tradingview_rs::socket::DataServer;
+type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
 
 #[tokio::main]
 async fn main() {
@@ -23,15 +24,15 @@ async fn main() {
     socket.event_loop().await;
 }
 
-fn event_handler(event: QuoteSocketEvent, data: Value) -> Result<()> {
+fn event_handler(event: QuoteEvent, data: Value) -> Result<()> {
     match event {
-        QuoteSocketEvent::Data => {
+        QuoteEvent::Data => {
             info!("data: {:#?}", data);
         }
-        QuoteSocketEvent::Loaded => {
+        QuoteEvent::Loaded => {
             info!("loaded: {:#?}", data);
         }
-        QuoteSocketEvent::Error => todo!(),
+        QuoteEvent::Error => todo!(),
     }
     Ok(())
 }

@@ -83,3 +83,9 @@ where
     debug!("Formatted packet: {}", formatted_message);
     Ok(Message::Text(formatted_message))
 }
+
+pub fn clean_em_tags(text: &str) -> Result<String> {
+    let regex = Regex::new(r"<[^>]*>")?;
+    let cleaned_text = regex.replace_all(text, "");
+    Ok(cleaned_text.to_string())
+}
