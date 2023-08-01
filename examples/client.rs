@@ -19,8 +19,8 @@ async fn main() {
 
     let client = Client::new(user);
 
-    // let symbols = client.list_symbols(None).await.unwrap();
-    // println!("{:#?}", symbols);
+    let symbols = client.list_symbols(None).await.unwrap();
+    println!("{:#?}", symbols.len());
 
     // let chart_token = client.get_chart_token("jUwT1z48").await.unwrap();
     // print!("{:#?}", chart_token);
@@ -36,17 +36,17 @@ async fn main() {
 
     // println!("{:#?}", resp);
 
-    let indicators = client.get_builtin_indicators().await.unwrap();
-    for indicator in indicators {
-        let resp = client.get_indicator_metadata(&indicator).await;
+    // let indicators = client.get_builtin_indicators().await.unwrap();
+    // for indicator in indicators {
+    //     let resp = client.get_indicator_metadata(&indicator).await;
 
-        match resp {
-            Ok(resp) => {
-                println!("{:#?}", resp);
-            }
-            Err(e) => {
-                error!("{:#?}", e);
-            }
-        }
-    }
+    //     match resp {
+    //         Ok(resp) => {
+    //             println!("{:#?}", resp);
+    //         }
+    //         Err(e) => {
+    //             error!("{:#?}", e);
+    //         }
+    //     }
+    // }
 }

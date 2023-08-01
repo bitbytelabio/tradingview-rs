@@ -231,28 +231,15 @@ impl Client {
     }
 
     pub async fn list_symbols(&self, market_type: Option<&str>) -> Result<Vec<Symbol>> {
-        match market_type {
-            Some(s) => {
-                let search_symbol = self.search_symbol("", "", s, 0, "").await?;
-                let remaining = search_symbol.remaining;
-                let mut symbols = search_symbol.symbols;
-                for i in (50..remaining).step_by(50) {
-                    let search_symbol = self.search_symbol("", "", s, i, "").await?;
-                    symbols.extend(search_symbol.symbols);
-                }
-                Ok(symbols)
-            }
-            None => {
-                let search_symbol = self.search_symbol("", "", "", 0, "").await?;
-                let remaining = search_symbol.remaining;
-                let mut symbols = search_symbol.symbols;
-                for i in (50..remaining).step_by(50) {
-                    let search_symbol = self.search_symbol("", "", "", i, "").await?;
-                    symbols.extend(search_symbol.symbols);
-                }
-                Ok(symbols)
-            }
+        let search_type = market_type.unwrap_or("");
+        let search_symbol = self.search_symbol("", "", search_type, 0, "").await?;
+        let remaining = search_symbol.remaining;
+        let mut symbols = search_symbol.symbols;
+        for i in (50..remaining).step_by(50) {
+            let search_symbol = self.search_symbol("", "", search_type, i, "").await?;
+            symbols.extend(search_symbol.symbols);
         }
+        Ok(symbols)
     }
 
     #[tracing::instrument(skip(self))]
