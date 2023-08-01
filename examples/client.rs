@@ -1,5 +1,5 @@
 use std::env;
-use std::sync::Arc;
+
 use tradingview_rs::user::User;
 
 use tradingview_rs::error::Error;

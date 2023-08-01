@@ -106,7 +106,7 @@ async fn fetch_scan_data(
         client,
         &format!(
             "https://scanner.tradingview.com/{screener}/scan",
-            screener = screener.to_string()
+            screener = screener
         ),
         serde_json::json!({
             "symbols": {
@@ -122,9 +122,9 @@ async fn fetch_scan_data(
     let data = resp_body.get("data");
     match data {
         Some(data) => {
-            return Ok(data.clone());
+            Ok(data.clone())
         }
-        None => return Err(Error::NoScanDataFound),
+        None => Err(Error::NoScanDataFound),
     }
 }
 
@@ -143,7 +143,7 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
     let screener = get_screener(exchange)?;
     let cols: Vec<String> = vec!["1", "5", "15", "60", "240", "1D", "1W", "1M"]
         .iter()
-        .map(|t| {
+        .flat_map(|t| {
             INDICATORS
                 .iter()
                 .map(|i| {
@@ -155,7 +155,6 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
                 })
                 .collect::<Vec<String>>()
         })
-        .flatten()
         .collect();
 
     match fetch_scan_data(client, symbols, screener, cols.clone()).await {
@@ -189,10 +188,10 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
         }
         Err(e) => match e {
             Error::NoScanDataFound => {
-                return Err(Error::SymbolsNotInSameExchange);
+                Err(Error::SymbolsNotInSameExchange)
             }
             _ => {
-                return Err(e);
+                Err(e)
             }
         },
     }
