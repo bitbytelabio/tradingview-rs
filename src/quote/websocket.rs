@@ -22,7 +22,7 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use url::Url;
 
 pub struct QuoteSocket<'a> {
@@ -51,7 +51,7 @@ impl<'a> QuoteSocketBuilder<'a> {
         self
     }
 
-    fn init_messages(&self, session: &str, auth_token: &str) -> Result<VecDeque<Message>> {
+    fn initial_messages(&self, session: &str, auth_token: &str) -> Result<VecDeque<Message>> {
         let quote_fields: Vec<String> = match self.quote_fields.clone() {
             Some(fields) => {
                 let mut quote_fields = vec![session.clone().to_string()];
@@ -84,9 +84,18 @@ impl<'a> QuoteSocketBuilder<'a> {
         headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
         headers.insert("User-Agent", UA.parse().unwrap());
 
-        let (socket, _) = connect_async(request).await?;
-
-        info!("WebSocket handshake has been successfully completed");
+        let socket: WebSocketStream<MaybeTlsStream<TcpStream>> = match connect_async(request).await
+        {
+            Ok(answer) => {
+                info!("WebSocket handshake has been successfully completed");
+                debug!("WebSocket handshake response: {:?}", answer.1);
+                answer.0
+            }
+            Err(e) => {
+                error!("Failed to connect: {}", e);
+                return Err(Error::WebSocketError(e));
+            }
+        };
 
         let (write, read) = socket.split();
 
@@ -97,7 +106,7 @@ impl<'a> QuoteSocketBuilder<'a> {
 
         let quote_session_id = gen_session_id("qs");
 
-        let messages = self.init_messages(&quote_session_id, &auth_token)?;
+        let messages = self.initial_messages(&quote_session_id, &auth_token)?;
 
         Ok(QuoteSocket {
             write,
@@ -121,16 +130,6 @@ impl<'a> QuoteSocket<'a> {
             quote_fields: None,
             handler: Some(Box::new(handler)),
         }
-    }
-
-    pub async fn set_local(&mut self, local: &[String]) -> Result<()> {
-        self.send("set_local", local).await?;
-        Ok(())
-    }
-
-    pub async fn set_timezone(&mut self, timezone: &str) -> Result<()> {
-        self.send("switch_timezone", &[timezone]).await?;
-        Ok(())
     }
 
     pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {

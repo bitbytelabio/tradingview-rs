@@ -27,3 +27,54 @@ impl std::fmt::Display for ChartType {
         write!(f, "{}", chart_type)
     }
 }
+
+pub enum Interval {
+    OneSecond,
+    FiveSeconds,
+    TenSeconds,
+    FifteenSeconds,
+    ThirtySeconds,
+    OneMinute,
+    ThreeMinutes,
+    FiveMinutes,
+    FifteenMinutes,
+    ThirtyMinutes,
+    FortyFiveMinutes,
+    OneHour,
+    TwoHours,
+    FourHours,
+    Daily,
+    Weekly,
+    Monthly,
+    Quarterly,
+    SixMonths,
+    Yearly,
+}
+
+impl std::fmt::Display for Interval {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let time_interval = match self {
+            Interval::OneSecond => "1S",
+            Interval::FiveSeconds => "5S",
+            Interval::TenSeconds => "10S",
+            Interval::FifteenSeconds => "15S",
+            Interval::ThirtySeconds => "30S",
+            Interval::OneMinute => "1",
+            Interval::ThreeMinutes => "3",
+            Interval::FiveMinutes => "5",
+            Interval::FifteenMinutes => "15",
+            Interval::ThirtyMinutes => "30",
+            Interval::FortyFiveMinutes => "45",
+            Interval::OneHour => "1H",
+            Interval::TwoHours => "2H",
+            Interval::FourHours => "4H",
+            Interval::Daily => "1D",
+            Interval::Weekly => "1W",
+            Interval::Monthly => "1M",
+            Interval::Quarterly => "3M",
+            Interval::SixMonths => "6M",
+            Interval::Yearly => "12M",
+        };
+        write!(f, "{}", time_interval)
+    }
+}
