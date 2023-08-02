@@ -121,9 +121,7 @@ async fn fetch_scan_data(
 
     let data = resp_body.get("data");
     match data {
-        Some(data) => {
-            Ok(data.clone())
-        }
+        Some(data) => Ok(data.clone()),
         None => Err(Error::NoScanDataFound),
     }
 }
@@ -162,8 +160,10 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
             let mut advices: Vec<SimpleTA> = vec![];
 
             data.as_array().unwrap_or(&vec![]).iter().for_each(|s| {
-                let mut advice = SimpleTA::default();
-                advice.name = s["s"].as_str().unwrap_or("").to_string();
+                let mut advice = SimpleTA {
+                    name: s["s"].as_str().unwrap_or("").to_string(),
+                    ..Default::default()
+                };
                 s["d"]
                     .as_array()
                     .unwrap_or(&vec![])
@@ -187,12 +187,8 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
             Ok(advices)
         }
         Err(e) => match e {
-            Error::NoScanDataFound => {
-                Err(Error::SymbolsNotInSameExchange)
-            }
-            _ => {
-                Err(e)
-            }
+            Error::NoScanDataFound => Err(Error::SymbolsNotInSameExchange),
+            _ => Err(e),
         },
     }
 }
