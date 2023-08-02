@@ -10,7 +10,7 @@ test-all:
 	@cargo test --all-features
 
 clippy:
-	@cargo clippy --all-features
+	@cargo clippy --all-features --fix -- -D warnings
 
 format:
 	@cargo fmt --all -- --check

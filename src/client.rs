@@ -106,7 +106,7 @@ async fn fetch_scan_data(
         client,
         &format!(
             "https://scanner.tradingview.com/{screener}/scan",
-            screener = screener.to_string()
+            screener = screener
         ),
         serde_json::json!({
             "symbols": {
@@ -121,10 +121,8 @@ async fn fetch_scan_data(
 
     let data = resp_body.get("data");
     match data {
-        Some(data) => {
-            return Ok(data.clone());
-        }
-        None => return Err(Error::NoScanDataFound),
+        Some(data) => Ok(data.clone()),
+        None => Err(Error::NoScanDataFound),
     }
 }
 
@@ -143,7 +141,7 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
     let screener = get_screener(exchange)?;
     let cols: Vec<String> = vec!["1", "5", "15", "60", "240", "1D", "1W", "1M"]
         .iter()
-        .map(|t| {
+        .flat_map(|t| {
             INDICATORS
                 .iter()
                 .map(|i| {
@@ -155,7 +153,6 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
                 })
                 .collect::<Vec<String>>()
         })
-        .flatten()
         .collect();
 
     match fetch_scan_data(client, symbols, screener, cols.clone()).await {
@@ -163,8 +160,10 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
             let mut advices: Vec<SimpleTA> = vec![];
 
             data.as_array().unwrap_or(&vec![]).iter().for_each(|s| {
-                let mut advice = SimpleTA::default();
-                advice.name = s["s"].as_str().unwrap_or("").to_string();
+                let mut advice = SimpleTA {
+                    name: s["s"].as_str().unwrap_or("").to_string(),
+                    ..Default::default()
+                };
                 s["d"]
                     .as_array()
                     .unwrap_or(&vec![])
@@ -188,12 +187,8 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
             Ok(advices)
         }
         Err(e) => match e {
-            Error::NoScanDataFound => {
-                return Err(Error::SymbolsNotInSameExchange);
-            }
-            _ => {
-                return Err(e);
-            }
+            Error::NoScanDataFound => Err(Error::SymbolsNotInSameExchange),
+            _ => Err(e),
         },
     }
 }

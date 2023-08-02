@@ -2,13 +2,12 @@ use crate::{
     chart::ChartEvent,
     prelude::*,
     socket::{DataServer, SocketMessage},
-    utils::{format_packet, gen_session_id, parse_packet},
-    UA,
+    utils::{format_packet, gen_session_id},
 };
 
 use futures_util::{
     stream::{SplitSink, SplitStream},
-    SinkExt, StreamExt,
+    SinkExt,
 };
 
 use serde::Serialize;
@@ -44,8 +43,8 @@ impl<'a> ChartSocketBuilder<'a> {
     }
 
     pub async fn build(&mut self) -> ChartSocket {
-        let session = gen_session_id("cs");
-        let replay_session = gen_session_id("rs");
+        let _session = gen_session_id("cs");
+        let _replay_session = gen_session_id("rs");
         todo!()
     }
 }
