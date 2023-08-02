@@ -78,3 +78,9 @@ impl std::fmt::Display for Interval {
         write!(f, "{}", time_interval)
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
+pub struct ChartSymbolInit {
+    pub adjustment: String,
+    pub symbol: String,
+}

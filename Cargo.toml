@@ -47,4 +47,10 @@ anyhow = "1"
 name = "quote"
 
 [[example]]
+name = "chart"
+
+[[example]]
+name = "client"
+
+[[example]]
 name = "user"

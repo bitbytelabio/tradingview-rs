@@ -23,28 +23,27 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
-pub struct ChartSocket<'a> {
+pub struct ChartSocket {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
+    // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
 }
 
-pub struct ChartSocketBuilder<'a> {
+pub struct ChartSocketBuilder {
     server: DataServer,
     auth_token: Option<String>,
-    quote_fields: Option<Vec<String>>,
-    handler: Option<Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>>,
+    // handler: Option<Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>>,
     relay_mode: bool,
 }
 
-impl<'a> ChartSocketBuilder<'a> {
+impl ChartSocketBuilder {
     pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
         self.auth_token = Some(auth_token);
         self
@@ -106,18 +105,17 @@ impl<'a> ChartSocketBuilder<'a> {
             replay_session_id,
             messages,
             auth_token,
-            handler: self.handler.take().unwrap(),
+            // handler: self.handler.take().unwrap(),
         })
     }
 }
 
-impl<'a> ChartSocket<'a> {
-    pub fn new(server: DataServer) -> ChartSocketBuilder<'a> {
+impl ChartSocket {
+    pub fn new(server: DataServer) -> ChartSocketBuilder {
         ChartSocketBuilder {
             server,
             auth_token: None,
-            quote_fields: None,
-            handler: None,
+            // handler: None,
             relay_mode: false,
         }
     }
@@ -135,8 +133,50 @@ impl<'a> ChartSocket<'a> {
     }
 
     pub async fn set_timezone(&mut self, timezone: &str) -> Result<()> {
-        self.send("switch_timezone", &[timezone]).await?;
+        self.send(
+            "switch_timezone",
+            &[self.chart_session_id.clone(), timezone.to_string()],
+        )
+        .await?;
         Ok(())
+    }
+
+    pub async fn event_loop(&mut self) {
+        self.send(
+            "resolve_symbol",
+            &[
+                self.chart_session_id.clone(),
+                "sds_sym_1".to_string(),
+                format!(
+                    "={}",
+                    serde_json::to_string(&super::ChartSymbolInit {
+                        adjustment: "splits".to_string(),
+                        symbol: "BINANCE:BTCUSDT".to_string(),
+                    })
+                    .unwrap()
+                ),
+            ],
+        )
+        .await
+        .unwrap();
+
+        self.send(
+            "create_series",
+            &[
+                JsonValue::from(self.chart_session_id.clone()),
+                JsonValue::from("sds_1"),
+                JsonValue::from("s1"),
+                JsonValue::from("sds_sym_1"),
+                JsonValue::from("1D"),
+                JsonValue::from(5000),
+            ],
+        )
+        .await
+        .unwrap();
+
+        while let Some(result) = self.read.next().await {
+            warn!("Received a message from the server {:?}", result.unwrap());
+        }
     }
 
     async fn delete_chart_session_id(&mut self) -> Result<()> {
