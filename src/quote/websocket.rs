@@ -22,7 +22,7 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 pub struct QuoteSocket<'a> {
@@ -211,8 +211,18 @@ impl<'a> QuoteSocket<'a> {
                     let values = parse_packet(&message.to_string()).unwrap();
                     for value in values {
                         match value {
-                            JsonValue::Number(_) => self.ping(&message).await.unwrap(),
-                            JsonValue::Object(_) => self.handle_msg(value).await.unwrap(),
+                            JsonValue::Number(_) => match self.ping(&message).await {
+                                Ok(_) => debug!("ping sent"),
+                                Err(e) => {
+                                    warn!("ping failed with: {:#?}", e);
+                                }
+                            },
+                            JsonValue::Object(_) => match self.handle_msg(value).await {
+                                Ok(_) => debug!("message is being processed... "),
+                                Err(e) => {
+                                    error!("unable to handle message, with: {:#?}", e);
+                                }
+                            },
                             _ => (),
                         }
                     }

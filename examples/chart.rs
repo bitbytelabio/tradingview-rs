@@ -5,7 +5,7 @@ use tradingview_rs::socket::DataServer;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let mut binding = ChartSocket::new(DataServer::ProData);
+    let mut binding = ChartSocket::new(DataServer::Data);
     let mut socket = binding.build().await.unwrap();
 
     socket.event_loop().await;

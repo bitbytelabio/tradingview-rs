@@ -14,7 +14,7 @@ use futures_util::{
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
-use std::{collections::VecDeque, sync::Arc};
+use std::{borrow::Cow, collections::VecDeque, sync::Arc};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -141,6 +141,34 @@ impl ChartSocket {
         Ok(())
     }
 
+    async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
+        const MESSAGE_TYPE_KEY: &str = "m";
+
+        const DATA_EVENT_1: &str = "timescale_update";
+        const DATA_EVENT_2: &str = "du";
+
+        const LOADED_EVENT: &str = "symbol_resolved";
+        const ERROR_EVENT: &str = "critical_error";
+
+        let message: JsonValue = serde_json::from_value(message)?;
+
+        let message_type = message
+            .get(MESSAGE_TYPE_KEY)
+            .and_then(|m| m.as_str().map(Cow::Borrowed));
+
+        match message_type.as_ref().map(|s| s.as_ref()) {
+            Some(DATA_EVENT_1) => {
+                warn!("received data: {:#?}", message);
+            }
+            Some(DATA_EVENT_2) => {
+                warn!("received data: {:#?}", message);
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
     pub async fn event_loop(&mut self) {
         self.send(
             "resolve_symbol",
@@ -175,17 +203,41 @@ impl ChartSocket {
         .unwrap();
 
         while let Some(result) = self.read.next().await {
-            warn!("Received a message from the server {:?}", result.unwrap());
+            match result {
+                Ok(message) => {
+                    let values = parse_packet(&message.to_string()).unwrap();
+                    for value in values {
+                        match value {
+                            JsonValue::Number(_) => match self.ping(&message).await {
+                                Ok(_) => debug!("ping sent"),
+                                Err(e) => {
+                                    warn!("ping failed with: {:#?}", e);
+                                }
+                            },
+                            JsonValue::Object(_) => match self.handle_msg(value).await {
+                                Ok(_) => debug!("message is being processed... "),
+                                Err(e) => {
+                                    error!("unable to handle message, with: {:#?}", e);
+                                }
+                            },
+                            _ => (),
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Error reading message: {:#?}", e);
+                }
+            }
         }
     }
 
-    async fn delete_chart_session_id(&mut self) -> Result<()> {
+    async fn _delete_chart_session_id(&mut self) -> Result<()> {
         self.send("chart_delete_session", &[self.chart_session_id.clone()])
             .await?;
         Ok(())
     }
 
-    async fn delete_replay_session_id(&mut self) -> Result<()> {
+    async fn _delete_replay_session_id(&mut self) -> Result<()> {
         self.send("replay_delete_session", &[self.chart_session_id.clone()])
             .await?;
         Ok(())
