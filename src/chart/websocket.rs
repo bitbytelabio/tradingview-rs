@@ -11,7 +11,7 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 use std::{
@@ -30,13 +30,34 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 use url::Url;
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ChartSymbolInit {
+    pub adjustment: String,
+    pub symbol: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ChartDataPoint {
+    #[serde(rename = "i")]
+    pub version: u32,
+    #[serde(rename = "v")]
+    pub value: [f64; 6],
+}
+
+#[derive(Default)]
+struct ChartSeriesId {
+    id: String,
+    symbol_id: String,
+    symbol: String,
+}
+
 pub struct ChartSocket {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
-    chart_series: HashMap<String, String>,
+    chart_series_id: ChartSeriesId,
     current_series: usize,
     auth_token: String,
     // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
@@ -111,7 +132,7 @@ impl ChartSocketBuilder {
             replay_session_id,
             messages,
             auth_token,
-            chart_series: HashMap::new(),
+            chart_series_id: ChartSeriesId::default(),
             current_series: 0,
             // handler: self.handler.take().unwrap(),
         })
@@ -157,11 +178,10 @@ impl ChartSocket {
 
         const LOADED_EVENT: &str = "symbol_resolved";
         const ERROR_EVENT: &str = "critical_error";
-        // let series_id = self.chart_series.get("sds_0").unwrap();
 
-        fn on_data(message: &JsonValue) {
+        fn on_data(message: &JsonValue, series_id: &str) {
             let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-            let data = payload.and_then(|p| p.get("sds_0").and_then(|s| s.get("s")));
+            let data = payload.and_then(|p| p.get(series_id).and_then(|s| s.get("s")));
             // match data {
             //     Some(d) => {
             //         for x in d.as_array().unwrap().into_iter() {
@@ -182,10 +202,10 @@ impl ChartSocket {
 
         match message_type.as_ref().map(|s| s.as_ref()) {
             Some(DATA_EVENT_1) => {
-                on_data(&message);
+                on_data(&message, self.chart_series_id.id.as_str());
             }
             Some(DATA_EVENT_2) => {
-                on_data(&message);
+                on_data(&message, self.chart_series_id.id.as_str());
             }
             _ => {}
         }
@@ -236,9 +256,12 @@ impl ChartSocket {
         let series_id = format!("sds_{}", self.current_series);
         let series_symbol_id = format!("sds_sym_{}", self.current_series);
         self.current_series += 1;
-        self.chart_series
-            .insert(series_id.clone(), series_symbol_id.clone());
-        let symbol_init = super::ChartSymbolInit {
+        self.chart_series_id = ChartSeriesId {
+            id: series_id.clone(),
+            symbol_id: series_symbol_id.clone(),
+            symbol: symbol.to_string(),
+        };
+        let symbol_init = ChartSymbolInit {
             adjustment: "splits".to_string(),
             symbol: symbol.to_string(),
         };
