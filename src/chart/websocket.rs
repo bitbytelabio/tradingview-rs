@@ -1,5 +1,5 @@
 use crate::{
-    chart::ChartEvent,
+    chart::Interval,
     prelude::*,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
@@ -12,13 +12,9 @@ use futures_util::{
 };
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
+use serde_json::Value;
 
-use std::{
-    borrow::Cow,
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
+use std::collections::{HashMap, VecDeque};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -30,25 +26,22 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct ChartSymbolInit {
-    pub adjustment: String,
-    pub symbol: String,
-}
+use rayon::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct ChartDataPoint {
+struct ChartDataPoint {
     #[serde(rename = "i")]
-    pub version: u32,
+    pub id: u32,
     #[serde(rename = "v")]
     pub value: [f64; 6],
 }
 
 #[derive(Default)]
-struct ChartSeriesId {
+struct ChartSeries {
     id: String,
     symbol_id: String,
     symbol: String,
+    interval: Interval,
 }
 
 pub struct ChartSocket {
@@ -57,16 +50,17 @@ pub struct ChartSocket {
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
-    chart_series_id: ChartSeriesId,
+    chart_series: Vec<ChartSeries>,
     current_series: usize,
     auth_token: String,
-    // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
+    replay_mode: bool,
+    // handler: Box<dyn FnMut(ChartEvent, Value) -> Result<()> + 'a>,
 }
 
 pub struct ChartSocketBuilder {
     server: DataServer,
     auth_token: Option<String>,
-    // handler: Option<Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>>,
+    // handler: Option<Box<dyn FnMut(ChartEvent, Value) -> Result<()> + 'a>>,
     relay_mode: bool,
 }
 
@@ -132,8 +126,9 @@ impl ChartSocketBuilder {
             replay_session_id,
             messages,
             auth_token,
-            chart_series_id: ChartSeriesId::default(),
+            chart_series: Vec::new(),
             current_series: 0,
+            replay_mode: self.relay_mode,
             // handler: self.handler.take().unwrap(),
         })
     }
@@ -170,51 +165,59 @@ impl ChartSocket {
         Ok(())
     }
 
-    async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
+    async fn handle_msg(&mut self, message: Value) -> Result<()> {
+        // Define constants
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
-        const DATA_EVENT_1: &str = "timescale_update";
-        const DATA_EVENT_2: &str = "du";
+        // Check the message type
+        if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
+            match message_type {
+                "timescale_update" => {
+                    // Handle timescale update message
+                    if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
+                        // Iterate through chart series
+                        for s in &self.chart_series {
+                            if let Some(data) = payload
+                                .get(&s.id)
+                                .and_then(|s| s.get("s").and_then(|a| a.as_array()))
+                            {
+                                // Iterate through data points
+                                data.par_iter().for_each(|v| {
+                                    let data_point: ChartDataPoint =
+                                        serde_json::from_value(v.clone()).unwrap();
+                                    // Process the data point
+                                    debug!("data point: {:#?}", data_point);
+                                });
+                            }
+                        }
+                    }
+                }
+                "du" => {}
 
-        const LOADED_EVENT: &str = "symbol_resolved";
-        const ERROR_EVENT: &str = "critical_error";
+                "series_loading" => {}
+                "series_completed" => {}
 
-        fn on_data(message: &JsonValue, series_id: &str) {
-            let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-            let data = payload.and_then(|p| p.get(series_id).and_then(|s| s.get("s")));
-            // match data {
-            //     Some(d) => {
-            //         for x in d.as_array().unwrap().into_iter() {
-            //             let v: super::ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
-            //             info!("v: {:#?}", v);
-            //         }
-            //     }
-            //     None => todo!(),
-            // }
-            info!("data: {:#?}", payload);
-        }
+                "symbol_resolved" => {}
 
-        let message: JsonValue = serde_json::from_value(message)?;
+                "critical_error" => {}
+                "series_error" => {}
+                "symbol_error" => {}
 
-        let message_type = message
-            .get(MESSAGE_TYPE_KEY)
-            .and_then(|m| m.as_str().map(Cow::Borrowed));
-
-        match message_type.as_ref().map(|s| s.as_ref()) {
-            Some(DATA_EVENT_1) => {
-                on_data(&message, self.chart_series_id.id.as_str());
+                "replay_ok" => {}
+                "replay_instance_id" => {}
+                "replay_point" => {}
+                "replay_resolutions" => {}
+                "replay_data_end" => {}
+                _ => {
+                    debug!("unhandled message: {:#?}", message)
+                }
             }
-            Some(DATA_EVENT_2) => {
-                on_data(&message, self.chart_series_id.id.as_str());
-            }
-            _ => {}
         }
-
         Ok(())
     }
 
     pub async fn event_loop(&mut self) {
-        self.create_series("BINANCE:BTCUSDT", super::Interval::FiveMinutes, 10)
+        self.create_series("BINANCE:BTCUSDT", Interval::FiveMinutes, None, 10)
             .await
             .unwrap();
 
@@ -224,13 +227,13 @@ impl ChartSocket {
                     let values = parse_packet(&message.to_string()).unwrap();
                     for value in values {
                         match value {
-                            JsonValue::Number(_) => match self.ping(&message).await {
+                            Value::Number(_) => match self.ping(&message).await {
                                 Ok(_) => debug!("ping sent"),
                                 Err(e) => {
                                     warn!("ping failed with: {:#?}", e);
                                 }
                             },
-                            JsonValue::Object(_) => match self.handle_msg(value).await {
+                            Value::Object(_) => match self.handle_msg(value).await {
                                 Ok(()) => {}
                                 Err(e) => {
                                     error!("unable to handle message, with: {:#?}", e);
@@ -250,35 +253,45 @@ impl ChartSocket {
     pub async fn create_series(
         &mut self,
         symbol: &str,
-        interval: super::Interval,
-        dp_num: u64,
+        interval: Interval,
+        currency: Option<String>,
+        bars: u64,
     ) -> Result<()> {
         let series_id = format!("sds_{}", self.current_series);
         let series_symbol_id = format!("sds_sym_{}", self.current_series);
         self.current_series += 1;
-        self.chart_series_id = ChartSeriesId {
+
+        self.chart_series.push(ChartSeries {
             id: series_id.clone(),
             symbol_id: series_symbol_id.clone(),
             symbol: symbol.to_string(),
-        };
-        let symbol_init = ChartSymbolInit {
-            adjustment: "splits".to_string(),
-            symbol: symbol.to_string(),
-        };
+            interval,
+        });
+
+        let mut symbol_init: HashMap<String, String> = HashMap::new();
+        symbol_init.insert("adjustment".to_string(), "splits".to_string());
+        symbol_init.insert("symbol".to_string(), symbol.to_string());
+        match currency {
+            Some(c) => {
+                symbol_init.insert("currency-id".to_string(), c);
+            }
+            None => {}
+        }
         let symbol_init_json = serde_json::to_value(&symbol_init)?;
         let resolve_args = &[
             self.chart_session_id.clone(),
             series_symbol_id.clone(),
             format!("={}", symbol_init_json),
         ];
+
         self.send("resolve_symbol", resolve_args).await?;
         let create_series_args = &[
-            JsonValue::from(self.chart_session_id.clone()),
-            JsonValue::from(series_id),
-            JsonValue::from("s1"),
-            JsonValue::from(series_symbol_id.clone()),
-            JsonValue::from(interval.to_string()),
-            JsonValue::from(dp_num),
+            Value::from(self.chart_session_id.clone()),
+            Value::from(series_id),
+            Value::from("s1"),
+            Value::from(series_symbol_id.clone()),
+            Value::from(interval.to_string()),
+            Value::from(bars),
         ];
         self.send("create_series", create_series_args).await?;
         Ok(())

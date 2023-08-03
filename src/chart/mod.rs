@@ -1,9 +1,17 @@
+use crate::error::TradingViewError;
+
 mod graphic_parser;
 mod study;
 pub mod websocket;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum ChartEvent {}
+#[derive(Debug)]
+pub enum ChartEvent {
+    Data,
+    DataUpdate,
+    SeriesLoading,
+    SeriesCompleted,
+    Error(TradingViewError),
+}
 
 pub enum ChartType {
     HeikinAshi,
@@ -28,6 +36,7 @@ impl std::fmt::Display for ChartType {
     }
 }
 
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub enum Interval {
     OneSecond,
     FiveSeconds,
@@ -43,6 +52,7 @@ pub enum Interval {
     OneHour,
     TwoHours,
     FourHours,
+    #[default]
     Daily,
     Weekly,
     Monthly,

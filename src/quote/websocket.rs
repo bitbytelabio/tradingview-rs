@@ -1,4 +1,5 @@
 use crate::{
+    error::TradingViewError,
     prelude::*,
     quote::QuoteEvent,
     socket::{DataServer, SocketMessage},
@@ -10,9 +11,7 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use serde::Serialize;
-use serde_json::Value as JsonValue;
-
-use std::borrow::Cow;
+use serde_json::Value;
 use std::collections::VecDeque;
 
 use tokio::net::TcpStream;
@@ -31,13 +30,13 @@ pub struct QuoteSocket<'a> {
     quote_session_id: String,
     messages: VecDeque<Message>,
     auth_token: String,
-    handler: Box<dyn FnMut(QuoteEvent, JsonValue) -> Result<()> + 'a>,
+    handler: Box<dyn FnMut(QuoteEvent, Value) -> Result<()> + 'a>,
 }
 pub struct QuoteSocketBuilder<'a> {
     server: DataServer,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
-    handler: Option<Box<dyn FnMut(QuoteEvent, JsonValue) -> Result<()> + 'a>>,
+    handler: Option<Box<dyn FnMut(QuoteEvent, Value) -> Result<()> + 'a>>,
 }
 
 impl<'a> QuoteSocketBuilder<'a> {
@@ -122,7 +121,7 @@ impl<'a> QuoteSocketBuilder<'a> {
 impl<'a> QuoteSocket<'a> {
     pub fn new<CallbackFn>(server: DataServer, handler: CallbackFn) -> QuoteSocketBuilder<'a>
     where
-        CallbackFn: FnMut(QuoteEvent, JsonValue) -> Result<()> + 'a,
+        CallbackFn: FnMut(QuoteEvent, Value) -> Result<()> + 'a,
     {
         QuoteSocketBuilder {
             server,
@@ -153,7 +152,7 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
-    async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
+    async fn handle_msg(&mut self, message: Value) -> Result<()> {
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
         const STATUS_KEY: &str = "s";
@@ -162,45 +161,43 @@ impl<'a> QuoteSocket<'a> {
         const DATA_EVENT: &str = "qsd";
         const LOADED_EVENT: &str = "quote_completed";
         const ERROR_EVENT: &str = "critical_error";
-
-        let message: JsonValue = serde_json::from_value(message)?;
-
-        let message_type = message
-            .get(MESSAGE_TYPE_KEY)
-            .and_then(|m| m.as_str().map(Cow::Borrowed));
-
-        match message_type.as_ref().map(|s| s.as_ref()) {
-            Some(DATA_EVENT) => {
-                let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-                let status = payload.and_then(|p| {
-                    p.get(STATUS_KEY)
-                        .and_then(|s| s.as_str().map(Cow::Borrowed))
-                });
-
-                match status.as_ref().map(|s| s.as_ref()) {
-                    Some(OK_STATUS) => {
-                        (self.handler)(QuoteEvent::Data, payload.unwrap().clone())?;
-                        return Ok(());
+        if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
+            match message_type {
+                DATA_EVENT => {
+                    if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
+                        if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
+                            match status {
+                                OK_STATUS => {
+                                    (self.handler)(QuoteEvent::Data, payload.clone())?;
+                                    return Ok(());
+                                }
+                                ERROR_STATUS => {
+                                    error!("failed to receive quote data: {:?}", payload);
+                                    (self.handler)(
+                                        QuoteEvent::Error(TradingViewError::QuoteDataError),
+                                        message.clone(),
+                                    )?;
+                                    return Ok(());
+                                }
+                                _ => {}
+                            }
+                        }
                     }
-                    Some(ERROR_STATUS) => {
-                        error!("failed to receive quote data: {:?}", payload.unwrap());
-                        (self.handler)(QuoteEvent::Error, message.clone())?;
-                        return Ok(());
-                    }
-                    _ => {}
                 }
+                LOADED_EVENT => {
+                    (self.handler)(QuoteEvent::Loaded, message.clone())?;
+                    return Ok(());
+                }
+                ERROR_EVENT => {
+                    (self.handler)(
+                        QuoteEvent::Error(TradingViewError::CriticalError),
+                        message.clone(),
+                    )?;
+                    return Ok(());
+                }
+                _ => {}
             }
-            Some(LOADED_EVENT) => {
-                (self.handler)(QuoteEvent::Loaded, message.clone())?;
-                return Ok(());
-            }
-            Some(ERROR_EVENT) => {
-                (self.handler)(QuoteEvent::Error, message.clone())?;
-                return Ok(());
-            }
-            _ => {}
         }
-
         Ok(())
     }
 
@@ -211,13 +208,13 @@ impl<'a> QuoteSocket<'a> {
                     let values = parse_packet(&message.to_string()).unwrap();
                     for value in values {
                         match value {
-                            JsonValue::Number(_) => match self.ping(&message).await {
+                            Value::Number(_) => match self.ping(&message).await {
                                 Ok(()) => debug!("ping sent"),
                                 Err(e) => {
                                     warn!("ping failed with: {:#?}", e);
                                 }
                             },
-                            JsonValue::Object(_) => match self.handle_msg(value).await {
+                            Value::Object(_) => match self.handle_msg(value).await {
                                 Ok(()) => {}
                                 Err(e) => {
                                     error!("unable to handle message, with: {:#?}", e);

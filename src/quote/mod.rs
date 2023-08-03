@@ -1,6 +1,6 @@
 pub mod websocket;
+use crate::error::TradingViewError;
 use lazy_static::lazy_static;
-
 lazy_static! {
     pub static ref ALL_QUOTE_FIELDS: Vec<String> = vec![
         "base-currency-logoid".to_string(),
@@ -56,9 +56,9 @@ lazy_static! {
     ];
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug)]
 pub enum QuoteEvent {
     Data,
     Loaded,
-    Error,
+    Error(TradingViewError),
 }
