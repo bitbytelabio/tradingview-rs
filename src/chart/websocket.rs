@@ -238,36 +238,26 @@ impl ChartSocket {
         self.current_series += 1;
         self.chart_series
             .insert(series_id.clone(), series_symbol_id.clone());
-
-        self.send(
-            "resolve_symbol",
-            &[
-                self.chart_session_id.clone(),
-                series_symbol_id.clone(),
-                format!(
-                    "={}",
-                    serde_json::to_string(&super::ChartSymbolInit {
-                        adjustment: "splits".to_string(),
-                        symbol: symbol.to_string(),
-                    })?
-                ),
-            ],
-        )
-        .await?;
-
-        self.send(
-            "create_series",
-            &[
-                JsonValue::from(self.chart_session_id.clone()),
-                JsonValue::from(series_id),
-                JsonValue::from("s1"),
-                JsonValue::from(series_symbol_id.clone()),
-                JsonValue::from(interval.to_string()),
-                JsonValue::from(dp_num),
-            ],
-        )
-        .await?;
-
+        let symbol_init = super::ChartSymbolInit {
+            adjustment: "splits".to_string(),
+            symbol: symbol.to_string(),
+        };
+        let symbol_init_json = serde_json::to_value(&symbol_init)?;
+        let resolve_args = &[
+            self.chart_session_id.clone(),
+            series_symbol_id.clone(),
+            format!("={}", symbol_init_json),
+        ];
+        self.send("resolve_symbol", resolve_args).await?;
+        let create_series_args = &[
+            JsonValue::from(self.chart_session_id.clone()),
+            JsonValue::from(series_id),
+            JsonValue::from("s1"),
+            JsonValue::from(series_symbol_id.clone()),
+            JsonValue::from(interval.to_string()),
+            JsonValue::from(dp_num),
+        ];
+        self.send("create_series", create_series_args).await?;
         Ok(())
     }
 
