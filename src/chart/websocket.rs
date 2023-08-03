@@ -12,13 +12,9 @@ use futures_util::{
 };
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
+use serde_json::Value;
 
-use std::{
-    borrow::Cow,
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
+use std::collections::VecDeque;
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -64,13 +60,13 @@ pub struct ChartSocket {
     current_series: usize,
     auth_token: String,
     replay_mode: bool,
-    // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
+    // handler: Box<dyn FnMut(ChartEvent, Value) -> Result<()> + 'a>,
 }
 
 pub struct ChartSocketBuilder {
     server: DataServer,
     auth_token: Option<String>,
-    // handler: Option<Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>>,
+    // handler: Option<Box<dyn FnMut(ChartEvent, Value) -> Result<()> + 'a>>,
     relay_mode: bool,
 }
 
@@ -175,7 +171,7 @@ impl ChartSocket {
         Ok(())
     }
 
-    async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
+    async fn handle_msg(&mut self, message: Value) -> Result<()> {
         // Define constants
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
@@ -237,13 +233,13 @@ impl ChartSocket {
                     let values = parse_packet(&message.to_string()).unwrap();
                     for value in values {
                         match value {
-                            JsonValue::Number(_) => match self.ping(&message).await {
+                            Value::Number(_) => match self.ping(&message).await {
                                 Ok(_) => debug!("ping sent"),
                                 Err(e) => {
                                     warn!("ping failed with: {:#?}", e);
                                 }
                             },
-                            JsonValue::Object(_) => match self.handle_msg(value).await {
+                            Value::Object(_) => match self.handle_msg(value).await {
                                 Ok(()) => {}
                                 Err(e) => {
                                     error!("unable to handle message, with: {:#?}", e);
@@ -287,12 +283,12 @@ impl ChartSocket {
         ];
         self.send("resolve_symbol", resolve_args).await?;
         let create_series_args = &[
-            JsonValue::from(self.chart_session_id.clone()),
-            JsonValue::from(series_id),
-            JsonValue::from("s1"),
-            JsonValue::from(series_symbol_id.clone()),
-            JsonValue::from(interval.to_string()),
-            JsonValue::from(dp_num),
+            Value::from(self.chart_session_id.clone()),
+            Value::from(series_id),
+            Value::from("s1"),
+            Value::from(series_symbol_id.clone()),
+            Value::from(interval.to_string()),
+            Value::from(dp_num),
         ];
         self.send("create_series", create_series_args).await?;
         Ok(())

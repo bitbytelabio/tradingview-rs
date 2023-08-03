@@ -62,6 +62,8 @@ pub enum TradingViewError {
     SymbolError,
     #[error("Critical error")]
     CriticalError,
+    #[error("Quote Data error")]
+    QuoteDataError,
 }
 
 #[derive(Debug, Error)]

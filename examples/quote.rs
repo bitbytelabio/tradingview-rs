@@ -44,7 +44,7 @@ fn event_handler(event: QuoteEvent, data: Value) -> Result<()> {
         QuoteEvent::Loaded => {
             info!("loaded: {:#?}", data);
         }
-        QuoteEvent::Error => todo!(),
+        QuoteEvent::Error(_) => todo!(),
     }
     Ok(())
 }
