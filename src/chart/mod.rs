@@ -1,9 +1,17 @@
+use crate::error::TradingViewError;
+
 mod graphic_parser;
 mod study;
 pub mod websocket;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum ChartEvent {}
+#[derive(Debug)]
+pub enum ChartEvent {
+    Data,
+    DataUpdate,
+    SeriesLoading,
+    SeriesCompleted,
+    Error(TradingViewError),
+}
 
 pub enum ChartType {
     HeikinAshi,

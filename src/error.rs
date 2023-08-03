@@ -55,6 +55,16 @@ pub enum Error {
 }
 
 #[derive(Debug, Error)]
+pub enum TradingViewError {
+    #[error("Series error")]
+    SeriesError,
+    #[error("Symbol error")]
+    SymbolError,
+    #[error("Critical error")]
+    CriticalError,
+}
+
+#[derive(Debug, Error)]
 pub enum LoginError {
     #[error("username or password is empty")]
     EmptyCredentials,

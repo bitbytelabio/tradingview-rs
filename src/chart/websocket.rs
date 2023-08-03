@@ -41,7 +41,7 @@ struct ChartSymbolInit {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct ChartDataPoint {
     #[serde(rename = "i")]
-    pub version: u32,
+    pub id: u32,
     #[serde(rename = "v")]
     pub value: [f64; 6],
 }
@@ -63,6 +63,7 @@ pub struct ChartSocket {
     chart_series: Vec<ChartSeries>,
     current_series: usize,
     auth_token: String,
+    replay_mode: bool,
     // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
 }
 
@@ -137,6 +138,7 @@ impl ChartSocketBuilder {
             auth_token,
             chart_series: Vec::new(),
             current_series: 0,
+            replay_mode: self.relay_mode,
             // handler: self.handler.take().unwrap(),
         })
     }
@@ -174,45 +176,51 @@ impl ChartSocket {
     }
 
     async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
+        // Define constants
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
-        let message: JsonValue = serde_json::from_value(message)?;
+        // Check the message type
         if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
             match message_type {
                 "timescale_update" => {
+                    // Handle timescale update message
                     if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
+                        // Iterate through chart series
                         for s in &self.chart_series {
                             if let Some(data) = payload
                                 .get(&s.id)
-                                .and_then(|s| s.get("s").and_then(|d| d.as_array()))
+                                .and_then(|s| s.get("s").and_then(|a| a.as_array()))
                             {
-                                data.par_iter().for_each(|x| {
-                                    let v: ChartDataPoint =
-                                        serde_json::from_value(x.clone()).unwrap();
-                                    info!("v: {:#?}", v);
+                                // Iterate through data points
+                                data.par_iter().for_each(|v| {
+                                    let data_point: ChartDataPoint =
+                                        serde_json::from_value(v.clone()).unwrap();
+                                    // Process the data point
+                                    debug!("data point: {:#?}", data_point);
                                 });
-                            } else {
-                                todo!();
                             }
                         }
                     }
                 }
-                "du" => {
-                    // on_data(&message, self.chart_series_id.id.as_str());
+                "du" => {}
+
+                "series_loading" => {}
+                "series_completed" => {}
+
+                "symbol_resolved" => {}
+
+                "critical_error" => {}
+                "series_error" => {}
+                "symbol_error" => {}
+
+                "replay_ok" => {}
+                "replay_instance_id" => {}
+                "replay_point" => {}
+                "replay_resolutions" => {}
+                "replay_data_end" => {}
+                _ => {
+                    debug!("unhandled message: {:#?}", message)
                 }
-                "symbol_resolved" => {
-                    warn!("loaded: {:#?}", message);
-                }
-                "critical_error" => {
-                    error!("error: {:#?}", message);
-                }
-                "series_error" => {
-                    error!("series error: {:#?}", message);
-                }
-                "symbol_error" => {
-                    error!("symbol error: {:#?}", message);
-                }
-                _ => {}
             }
         }
         Ok(())
