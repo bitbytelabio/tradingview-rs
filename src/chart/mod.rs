@@ -28,6 +28,7 @@ impl std::fmt::Display for ChartType {
     }
 }
 
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub enum Interval {
     OneSecond,
     FiveSeconds,
@@ -43,6 +44,7 @@ pub enum Interval {
     OneHour,
     TwoHours,
     FourHours,
+    #[default]
     Daily,
     Weekly,
     Monthly,

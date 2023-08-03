@@ -30,6 +30,8 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 use url::Url;
 
+use rayon::prelude::*;
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ChartSymbolInit {
     pub adjustment: String,
@@ -49,6 +51,7 @@ struct ChartSeries {
     id: String,
     symbol_id: String,
     symbol: String,
+    interval: super::Interval,
 }
 
 pub struct ChartSocket {
@@ -57,7 +60,7 @@ pub struct ChartSocket {
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
-    chart_series: ChartSeries,
+    chart_series: Vec<ChartSeries>,
     current_series: usize,
     auth_token: String,
     // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
@@ -132,7 +135,7 @@ impl ChartSocketBuilder {
             replay_session_id,
             messages,
             auth_token,
-            chart_series: ChartSeries::default(),
+            chart_series: Vec::new(),
             current_series: 0,
             // handler: self.handler.take().unwrap(),
         })
@@ -188,21 +191,27 @@ impl ChartSocket {
         match message_type.as_ref().map(|s| s.as_ref()) {
             Some(DATA_LOAD_EVENT) => {
                 let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-                let data = payload
-                    .and_then(|p| p.get(self.chart_series.id.clone()).and_then(|s| s.get("s")));
-                match data {
-                    Some(d) => {
-                        for x in d.as_array().unwrap().into_iter() {
-                            let v: ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
-                            info!("v: {:#?}", v);
+                self.chart_series.par_iter().for_each(|s| {
+                    let data = payload.and_then(|p| p.get(s.id.clone()).and_then(|s| s.get("s")));
+                    match data {
+                        Some(d) => {
+                            for x in d.as_array().unwrap().into_iter() {
+                                let v: ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
+                                info!("v: {:#?}", v);
+                            }
                         }
+                        None => todo!(),
                     }
-                    None => todo!(),
-                }
-                info!("data: {:#?}", payload);
+                });
             }
             Some(DATA_UPDATE_EVENT) => {
                 // on_data(&message, self.chart_series_id.id.as_str());
+            }
+            Some(LOADED_EVENT) => {
+                warn!("loaded: {:#?}", message);
+            }
+            Some(ERROR_EVENT) => {
+                error!("error: {:#?}", message);
             }
             _ => {}
         }
@@ -253,11 +262,12 @@ impl ChartSocket {
         let series_id = format!("sds_{}", self.current_series);
         let series_symbol_id = format!("sds_sym_{}", self.current_series);
         self.current_series += 1;
-        self.chart_series = ChartSeries {
+        self.chart_series.push(ChartSeries {
             id: series_id.clone(),
             symbol_id: series_symbol_id.clone(),
             symbol: symbol.to_string(),
-        };
+            interval: interval.clone(),
+        });
         let symbol_init = ChartSymbolInit {
             adjustment: "splits".to_string(),
             symbol: symbol.to_string(),
