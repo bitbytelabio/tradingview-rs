@@ -11,10 +11,14 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt::Display,
+};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -48,12 +52,15 @@ pub struct ChartSocket {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     chart_session_id: String,
+
     replay_session_id: String,
+    replay_series_id: String,
+    replay_mode: bool,
+
     messages: VecDeque<Message>,
     chart_series: Vec<ChartSeries>,
     current_series: usize,
     auth_token: String,
-    replay_mode: bool,
     // handler: Box<dyn FnMut(ChartEvent, Value) -> Result<()> + 'a>,
 }
 
@@ -129,6 +136,7 @@ impl ChartSocketBuilder {
             chart_series: Vec::new(),
             current_series: 0,
             replay_mode: self.relay_mode,
+            replay_series_id: "".to_string(),
             // handler: self.handler.take().unwrap(),
         })
     }
@@ -165,31 +173,81 @@ impl ChartSocket {
         Ok(())
     }
 
+    fn gen_replay_series_id() -> String {
+        let rng = rand::thread_rng();
+        let result: String = rng
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(12)
+            .map(char::from)
+            .collect();
+        result
+    }
+
+    pub async fn create_replay_series(
+        &mut self,
+        symbol: &str,
+        interval: Interval,
+        currency: Option<String>,
+        timestamps: i64,
+    ) -> Result<()> {
+        self.replay_series_id = Self::gen_replay_series_id();
+
+        self.send("replay_create_session", &[self.replay_session_id.clone()])
+            .await?;
+
+        self.send(
+            "replay_add_series",
+            &[
+                self.replay_session_id.clone(),
+                self.replay_series_id.clone(),
+                Self::symbol_init(symbol, currency)?,
+                interval.to_string(),
+            ],
+        )
+        .await?;
+
+        self.send(
+            "replay_reset",
+            &[
+                Value::from(self.replay_session_id.clone()),
+                Value::from(self.replay_series_id.clone()),
+                Value::from(timestamps),
+            ],
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn handle_msg(&mut self, message: Value) -> Result<()> {
-        // Define constants
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
-        // Check the message type
+
         if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
             match message_type {
                 "timescale_update" => {
-                    // Handle timescale update message
                     if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
-                        // Iterate through chart series
-                        for s in &self.chart_series {
+                        self.chart_series.par_iter_mut().for_each(|series| {
                             if let Some(data) = payload
-                                .get(&s.id)
+                                .get(&series.id)
                                 .and_then(|s| s.get("s").and_then(|a| a.as_array()))
                             {
-                                // Iterate through data points
                                 data.par_iter().for_each(|v| {
                                     let data_point: ChartDataPoint =
-                                        serde_json::from_value(v.clone()).unwrap();
-                                    // Process the data point
+                                        match serde_json::from_value(v.clone()) {
+                                            Ok(d) => d,
+                                            Err(e) => {
+                                                error!(
+                                                    "unable to parse data point, with: {:#?}",
+                                                    e
+                                                );
+                                                return;
+                                            }
+                                        };
                                     debug!("data point: {:#?}", data_point);
                                 });
                             }
-                        }
+                        });
                     }
                 }
                 "du" => {}
@@ -217,7 +275,7 @@ impl ChartSocket {
     }
 
     pub async fn event_loop(&mut self) {
-        self.create_series("BINANCE:BTCUSDT", Interval::FiveMinutes, None, 10)
+        self.create_chart_series("BINANCE:BTCUSDT", Interval::FiveMinutes, None, 10)
             .await
             .unwrap();
 
@@ -250,7 +308,21 @@ impl ChartSocket {
         }
     }
 
-    pub async fn create_series(
+    fn symbol_init(symbol: &str, currency: Option<String>) -> Result<String> {
+        let mut symbol_init: HashMap<String, String> = HashMap::new();
+        symbol_init.insert("adjustment".to_string(), "splits".to_string());
+        symbol_init.insert("symbol".to_string(), symbol.to_string());
+        match currency {
+            Some(c) => {
+                symbol_init.insert("currency-id".to_string(), c);
+            }
+            None => {}
+        }
+        let symbol_init_json = serde_json::to_value(&symbol_init)?;
+        Ok(format!("={}", symbol_init_json))
+    }
+
+    pub async fn create_chart_series(
         &mut self,
         symbol: &str,
         interval: Interval,
@@ -268,23 +340,13 @@ impl ChartSocket {
             interval,
         });
 
-        let mut symbol_init: HashMap<String, String> = HashMap::new();
-        symbol_init.insert("adjustment".to_string(), "splits".to_string());
-        symbol_init.insert("symbol".to_string(), symbol.to_string());
-        match currency {
-            Some(c) => {
-                symbol_init.insert("currency-id".to_string(), c);
-            }
-            None => {}
-        }
-        let symbol_init_json = serde_json::to_value(&symbol_init)?;
         let resolve_args = &[
             self.chart_session_id.clone(),
             series_symbol_id.clone(),
-            format!("={}", symbol_init_json),
+            Self::symbol_init(symbol, currency)?,
         ];
-
         self.send("resolve_symbol", resolve_args).await?;
+
         let create_series_args = &[
             Value::from(self.chart_session_id.clone()),
             Value::from(series_id),
