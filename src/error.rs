@@ -23,7 +23,7 @@ pub enum Error {
     #[error("failed to capture regex data")]
     RegexError(#[from] regex::Error),
 
-    #[error("something went wrong with websocket")]
+    #[error("Can not establish websocket connection")]
     WebSocketError(#[from] tokio_tungstenite::tungstenite::Error),
 
     #[error("No chart token found")]

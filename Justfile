@@ -21,6 +21,9 @@ checks: build test-all clippy format
 quote-example:
 	cargo run --package tradingview-rs --example quote
 
+chart-example:
+	cargo run --package tradingview-rs --example chart
+
 user-example:
 	cargo run --package tradingview-rs --example user
 

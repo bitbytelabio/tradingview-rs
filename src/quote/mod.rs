@@ -51,6 +51,8 @@ lazy_static! {
         "timezone".to_string(),
         "country_code".to_string(),
         "provider_id".to_string(),
+        "bid_size".to_string(),
+        "ask_size".to_string(),
     ];
 }
 
