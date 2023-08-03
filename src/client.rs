@@ -225,8 +225,8 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
-    // Set the maximum number of tasks running concurrently here (e.g., 10).
-    let max_concurrent_tasks = 10;
+    // Set the maximum number of tasks running concurrently here (e.g., 15).
+    let max_concurrent_tasks = 15;
     let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
     let mut tasks: Vec<JoinHandle<Result<Vec<Symbol>>>> = vec![];

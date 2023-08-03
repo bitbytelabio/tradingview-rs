@@ -212,13 +212,13 @@ impl<'a> QuoteSocket<'a> {
                     for value in values {
                         match value {
                             JsonValue::Number(_) => match self.ping(&message).await {
-                                Ok(_) => debug!("ping sent"),
+                                Ok(()) => debug!("ping sent"),
                                 Err(e) => {
                                     warn!("ping failed with: {:#?}", e);
                                 }
                             },
                             JsonValue::Object(_) => match self.handle_msg(value).await {
-                                Ok(_) => debug!("message is being processed... "),
+                                Ok(()) => {}
                                 Err(e) => {
                                     error!("unable to handle message, with: {:#?}", e);
                                 }

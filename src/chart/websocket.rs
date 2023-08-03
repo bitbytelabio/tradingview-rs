@@ -32,6 +32,8 @@ pub struct ChartSocket {
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
+    series_id: Vec<String>,
+    series_symbol_id: Vec<String>,
     auth_token: String,
     // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
 }
@@ -105,6 +107,8 @@ impl ChartSocketBuilder {
             replay_session_id,
             messages,
             auth_token,
+            series_id: vec![],
+            series_symbol_id: vec![],
             // handler: self.handler.take().unwrap(),
         })
     }
@@ -143,12 +147,18 @@ impl ChartSocket {
 
     async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
         const MESSAGE_TYPE_KEY: &str = "m";
-
+        const PAYLOAD_KEY: usize = 1;
         const DATA_EVENT_1: &str = "timescale_update";
         const DATA_EVENT_2: &str = "du";
 
         const LOADED_EVENT: &str = "symbol_resolved";
         const ERROR_EVENT: &str = "critical_error";
+
+        fn on_data(message: &JsonValue) {
+            let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
+            let data = payload.and_then(|p| p.get("sds_1").and_then(|s| s.get("s")));
+            info!("data: {:#?}", data);
+        }
 
         let message: JsonValue = serde_json::from_value(message)?;
 
@@ -158,10 +168,10 @@ impl ChartSocket {
 
         match message_type.as_ref().map(|s| s.as_ref()) {
             Some(DATA_EVENT_1) => {
-                warn!("received data: {:#?}", message);
+                on_data(&message);
             }
             Some(DATA_EVENT_2) => {
-                warn!("received data: {:#?}", message);
+                on_data(&message);
             }
             _ => {}
         }
@@ -196,7 +206,7 @@ impl ChartSocket {
                 JsonValue::from("s1"),
                 JsonValue::from("sds_sym_1"),
                 JsonValue::from("1D"),
-                JsonValue::from(5000),
+                JsonValue::from(10),
             ],
         )
         .await
@@ -215,7 +225,7 @@ impl ChartSocket {
                                 }
                             },
                             JsonValue::Object(_) => match self.handle_msg(value).await {
-                                Ok(_) => debug!("message is being processed... "),
+                                Ok(()) => {}
                                 Err(e) => {
                                     error!("unable to handle message, with: {:#?}", e);
                                 }
