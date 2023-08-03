@@ -1,5 +1,5 @@
-use crate::error::TradingViewError;
 use crate::{
+    error::TradingViewError,
     prelude::*,
     quote::QuoteEvent,
     socket::{DataServer, SocketMessage},

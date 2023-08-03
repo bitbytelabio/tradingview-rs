@@ -1,5 +1,5 @@
 use crate::{
-    chart::ChartEvent,
+    chart::Interval,
     prelude::*,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
@@ -14,7 +14,7 @@ use futures_util::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -29,12 +29,6 @@ use url::Url;
 use rayon::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct ChartSymbolInit {
-    pub adjustment: String,
-    pub symbol: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct ChartDataPoint {
     #[serde(rename = "i")]
     pub id: u32,
@@ -47,7 +41,7 @@ struct ChartSeries {
     id: String,
     symbol_id: String,
     symbol: String,
-    interval: super::Interval,
+    interval: Interval,
 }
 
 pub struct ChartSocket {
@@ -223,7 +217,7 @@ impl ChartSocket {
     }
 
     pub async fn event_loop(&mut self) {
-        self.create_series("BINANCE:BTCUSDT", super::Interval::FiveMinutes, 10)
+        self.create_series("BINANCE:BTCUSDT", Interval::FiveMinutes, None, 10)
             .await
             .unwrap();
 
@@ -259,28 +253,37 @@ impl ChartSocket {
     pub async fn create_series(
         &mut self,
         symbol: &str,
-        interval: super::Interval,
-        dp_num: u64,
+        interval: Interval,
+        currency: Option<String>,
+        bars: u64,
     ) -> Result<()> {
         let series_id = format!("sds_{}", self.current_series);
         let series_symbol_id = format!("sds_sym_{}", self.current_series);
         self.current_series += 1;
+
         self.chart_series.push(ChartSeries {
             id: series_id.clone(),
             symbol_id: series_symbol_id.clone(),
             symbol: symbol.to_string(),
-            interval: interval.clone(),
+            interval,
         });
-        let symbol_init = ChartSymbolInit {
-            adjustment: "splits".to_string(),
-            symbol: symbol.to_string(),
-        };
+
+        let mut symbol_init: HashMap<String, String> = HashMap::new();
+        symbol_init.insert("adjustment".to_string(), "splits".to_string());
+        symbol_init.insert("symbol".to_string(), symbol.to_string());
+        match currency {
+            Some(c) => {
+                symbol_init.insert("currency-id".to_string(), c);
+            }
+            None => {}
+        }
         let symbol_init_json = serde_json::to_value(&symbol_init)?;
         let resolve_args = &[
             self.chart_session_id.clone(),
             series_symbol_id.clone(),
             format!("={}", symbol_init_json),
         ];
+
         self.send("resolve_symbol", resolve_args).await?;
         let create_series_args = &[
             Value::from(self.chart_session_id.clone()),
@@ -288,7 +291,7 @@ impl ChartSocket {
             Value::from("s1"),
             Value::from(series_symbol_id.clone()),
             Value::from(interval.to_string()),
-            Value::from(dp_num),
+            Value::from(bars),
         ];
         self.send("create_series", create_series_args).await?;
         Ok(())

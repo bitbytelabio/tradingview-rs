@@ -1,6 +1,6 @@
 use std::env;
-use tradingview_rs::chart::{websocket::ChartSocket, ChartEvent};
-use tradingview_rs::socket::{self, DataServer};
+use tradingview_rs::chart::websocket::ChartSocket;
+use tradingview_rs::socket::DataServer;
 use tradingview_rs::user::User;
 
 #[tokio::main]
