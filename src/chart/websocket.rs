@@ -176,11 +176,15 @@ impl ChartSocket {
     async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
+
         const DATA_LOAD_EVENT: &str = "timescale_update";
         const DATA_UPDATE_EVENT: &str = "du";
 
         const LOADED_EVENT: &str = "symbol_resolved";
-        const ERROR_EVENT: &str = "critical_error";
+
+        const CRITICAL_ERROR_EVENT: &str = "critical_error";
+        const SERIES_ERROR_EVENT: &str = "series_error";
+        const SYMBOL_ERROR_EVENT: &str = "symbol_error";
 
         let message: JsonValue = serde_json::from_value(message)?;
 
@@ -210,8 +214,14 @@ impl ChartSocket {
             Some(LOADED_EVENT) => {
                 warn!("loaded: {:#?}", message);
             }
-            Some(ERROR_EVENT) => {
+            Some(CRITICAL_ERROR_EVENT) => {
                 error!("error: {:#?}", message);
+            }
+            Some(SERIES_ERROR_EVENT) => {
+                error!("series error: {:#?}", message);
+            }
+            Some(SYMBOL_ERROR_EVENT) => {
+                error!("symbol error: {:#?}", message);
             }
             _ => {}
         }
