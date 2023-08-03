@@ -3,13 +3,11 @@ extern crate regex;
 
 pub mod chart;
 pub mod client;
-pub mod config;
 pub mod error;
 pub mod model;
 mod prelude;
 pub mod quote;
 pub mod socket;
-pub mod symbol;
 pub mod user;
 pub mod utils;
 

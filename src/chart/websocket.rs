@@ -14,7 +14,11 @@ use futures_util::{
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
-use std::{borrow::Cow, collections::VecDeque, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -32,8 +36,8 @@ pub struct ChartSocket {
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
-    series_id: Vec<String>,
-    series_symbol_id: Vec<String>,
+    chart_series: HashMap<String, String>,
+    current_series: usize,
     auth_token: String,
     // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
 }
@@ -107,8 +111,8 @@ impl ChartSocketBuilder {
             replay_session_id,
             messages,
             auth_token,
-            series_id: vec![],
-            series_symbol_id: vec![],
+            chart_series: HashMap::new(),
+            current_series: 0,
             // handler: self.handler.take().unwrap(),
         })
     }
@@ -153,11 +157,21 @@ impl ChartSocket {
 
         const LOADED_EVENT: &str = "symbol_resolved";
         const ERROR_EVENT: &str = "critical_error";
+        // let series_id = self.chart_series.get("sds_0").unwrap();
 
         fn on_data(message: &JsonValue) {
             let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-            let data = payload.and_then(|p| p.get("sds_1").and_then(|s| s.get("s")));
-            info!("data: {:#?}", data);
+            let data = payload.and_then(|p| p.get("sds_0").and_then(|s| s.get("s")));
+            // match data {
+            //     Some(d) => {
+            //         for x in d.as_array().unwrap().into_iter() {
+            //             let v: super::ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
+            //             info!("v: {:#?}", v);
+            //         }
+            //     }
+            //     None => todo!(),
+            // }
+            info!("data: {:#?}", payload);
         }
 
         let message: JsonValue = serde_json::from_value(message)?;
@@ -180,37 +194,9 @@ impl ChartSocket {
     }
 
     pub async fn event_loop(&mut self) {
-        self.send(
-            "resolve_symbol",
-            &[
-                self.chart_session_id.clone(),
-                "sds_sym_1".to_string(),
-                format!(
-                    "={}",
-                    serde_json::to_string(&super::ChartSymbolInit {
-                        adjustment: "splits".to_string(),
-                        symbol: "BINANCE:BTCUSDT".to_string(),
-                    })
-                    .unwrap()
-                ),
-            ],
-        )
-        .await
-        .unwrap();
-
-        self.send(
-            "create_series",
-            &[
-                JsonValue::from(self.chart_session_id.clone()),
-                JsonValue::from("sds_1"),
-                JsonValue::from("s1"),
-                JsonValue::from("sds_sym_1"),
-                JsonValue::from("1D"),
-                JsonValue::from(10),
-            ],
-        )
-        .await
-        .unwrap();
+        self.create_series("BINANCE:BTCUSDT", super::Interval::FiveMinutes, 10)
+            .await
+            .unwrap();
 
         while let Some(result) = self.read.next().await {
             match result {
@@ -239,6 +225,50 @@ impl ChartSocket {
                 }
             }
         }
+    }
+
+    pub async fn create_series(
+        &mut self,
+        symbol: &str,
+        interval: super::Interval,
+        dp_num: u64,
+    ) -> Result<()> {
+        let series_id = format!("sds_{}", self.current_series);
+        let series_symbol_id = format!("sds_sym_{}", self.current_series);
+        self.current_series += 1;
+        self.chart_series
+            .insert(series_id.clone(), series_symbol_id.clone());
+
+        self.send(
+            "resolve_symbol",
+            &[
+                self.chart_session_id.clone(),
+                series_symbol_id.clone(),
+                format!(
+                    "={}",
+                    serde_json::to_string(&super::ChartSymbolInit {
+                        adjustment: "splits".to_string(),
+                        symbol: symbol.to_string(),
+                    })?
+                ),
+            ],
+        )
+        .await?;
+
+        self.send(
+            "create_series",
+            &[
+                JsonValue::from(self.chart_session_id.clone()),
+                JsonValue::from(series_id),
+                JsonValue::from("s1"),
+                JsonValue::from(series_symbol_id.clone()),
+                JsonValue::from(interval.to_string()),
+                JsonValue::from(dp_num),
+            ],
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn _delete_chart_session_id(&mut self) -> Result<()> {

@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 mod graphic_parser;
 mod study;
 pub mod websocket;
@@ -79,8 +80,26 @@ impl std::fmt::Display for Interval {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ChartSymbolInit {
     pub adjustment: String,
     pub symbol: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ChartDataPoint {
+    #[serde(rename = "i")]
+    pub version: u32,
+    #[serde(rename = "v")]
+    pub value: [f64; 6],
+}
+
+#[derive(Serialize, Debug, PartialEq, Clone)]
+pub struct OHLCV {
+    pub time: f64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
 }
