@@ -33,13 +33,13 @@ use url::Url;
 use rayon::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct ChartSymbolInit {
+struct ChartSymbolInit {
     pub adjustment: String,
     pub symbol: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct ChartDataPoint {
+struct ChartDataPoint {
     #[serde(rename = "i")]
     pub version: u32,
     #[serde(rename = "v")]
@@ -176,56 +176,45 @@ impl ChartSocket {
     async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
-
-        const DATA_LOAD_EVENT: &str = "timescale_update";
-        const DATA_UPDATE_EVENT: &str = "du";
-
-        const LOADED_EVENT: &str = "symbol_resolved";
-
-        const CRITICAL_ERROR_EVENT: &str = "critical_error";
-        const SERIES_ERROR_EVENT: &str = "series_error";
-        const SYMBOL_ERROR_EVENT: &str = "symbol_error";
-
         let message: JsonValue = serde_json::from_value(message)?;
-
-        let message_type = message
-            .get(MESSAGE_TYPE_KEY)
-            .and_then(|m| m.as_str().map(Cow::Borrowed));
-
-        match message_type.as_ref().map(|s| s.as_ref()) {
-            Some(DATA_LOAD_EVENT) => {
-                let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-                self.chart_series.par_iter().for_each(|s| {
-                    let data = payload.and_then(|p| p.get(s.id.clone()).and_then(|s| s.get("s")));
-                    match data {
-                        Some(d) => {
-                            for x in d.as_array().unwrap().into_iter() {
-                                let v: ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
-                                info!("v: {:#?}", v);
+        if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
+            match message_type {
+                "timescale_update" => {
+                    if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
+                        for s in &self.chart_series {
+                            if let Some(data) = payload
+                                .get(&s.id)
+                                .and_then(|s| s.get("s").and_then(|d| d.as_array()))
+                            {
+                                data.par_iter().for_each(|x| {
+                                    let v: ChartDataPoint =
+                                        serde_json::from_value(x.clone()).unwrap();
+                                    info!("v: {:#?}", v);
+                                });
+                            } else {
+                                todo!();
                             }
                         }
-                        None => todo!(),
                     }
-                });
+                }
+                "du" => {
+                    // on_data(&message, self.chart_series_id.id.as_str());
+                }
+                "symbol_resolved" => {
+                    warn!("loaded: {:#?}", message);
+                }
+                "critical_error" => {
+                    error!("error: {:#?}", message);
+                }
+                "series_error" => {
+                    error!("series error: {:#?}", message);
+                }
+                "symbol_error" => {
+                    error!("symbol error: {:#?}", message);
+                }
+                _ => {}
             }
-            Some(DATA_UPDATE_EVENT) => {
-                // on_data(&message, self.chart_series_id.id.as_str());
-            }
-            Some(LOADED_EVENT) => {
-                warn!("loaded: {:#?}", message);
-            }
-            Some(CRITICAL_ERROR_EVENT) => {
-                error!("error: {:#?}", message);
-            }
-            Some(SERIES_ERROR_EVENT) => {
-                error!("series error: {:#?}", message);
-            }
-            Some(SYMBOL_ERROR_EVENT) => {
-                error!("symbol error: {:#?}", message);
-            }
-            _ => {}
         }
-
         Ok(())
     }
 
