@@ -2,7 +2,7 @@ use crate::{
     chart::Interval,
     prelude::*,
     socket::{DataServer, SocketMessage},
-    utils::{format_packet, gen_session_id, parse_packet},
+    utils::{format_packet, gen_id, gen_session_id, parse_packet},
     UA,
 };
 
@@ -15,10 +15,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use std::{
-    collections::{HashMap, VecDeque},
-    fmt::Display,
-};
+use std::collections::{HashMap, VecDeque};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -51,8 +48,8 @@ struct ChartSeries {
 pub struct ChartSocket {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    chart_session_id: String,
 
+    chart_session_id: String,
     replay_session_id: String,
     replay_series_id: String,
     replay_mode: bool,
@@ -173,16 +170,6 @@ impl ChartSocket {
         Ok(())
     }
 
-    fn gen_replay_series_id() -> String {
-        let rng = rand::thread_rng();
-        let result: String = rng
-            .sample_iter(&rand::distributions::Alphanumeric)
-            .take(12)
-            .map(char::from)
-            .collect();
-        result
-    }
-
     pub async fn create_replay_series(
         &mut self,
         symbol: &str,
@@ -190,7 +177,7 @@ impl ChartSocket {
         currency: Option<String>,
         timestamps: i64,
     ) -> Result<()> {
-        self.replay_series_id = Self::gen_replay_series_id();
+        self.replay_series_id = gen_id();
 
         self.send("replay_create_session", &[self.replay_session_id.clone()])
             .await?;
