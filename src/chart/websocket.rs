@@ -45,7 +45,7 @@ pub struct ChartDataPoint {
 }
 
 #[derive(Default)]
-struct ChartSeriesId {
+struct ChartSeries {
     id: String,
     symbol_id: String,
     symbol: String,
@@ -57,7 +57,7 @@ pub struct ChartSocket {
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
-    chart_series_id: ChartSeriesId,
+    chart_series: ChartSeries,
     current_series: usize,
     auth_token: String,
     // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
@@ -132,7 +132,7 @@ impl ChartSocketBuilder {
             replay_session_id,
             messages,
             auth_token,
-            chart_series_id: ChartSeriesId::default(),
+            chart_series: ChartSeries::default(),
             current_series: 0,
             // handler: self.handler.take().unwrap(),
         })
@@ -173,26 +173,11 @@ impl ChartSocket {
     async fn handle_msg(&mut self, message: JsonValue) -> Result<()> {
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
-        const DATA_EVENT_1: &str = "timescale_update";
-        const DATA_EVENT_2: &str = "du";
+        const DATA_LOAD_EVENT: &str = "timescale_update";
+        const DATA_UPDATE_EVENT: &str = "du";
 
         const LOADED_EVENT: &str = "symbol_resolved";
         const ERROR_EVENT: &str = "critical_error";
-
-        fn on_data(message: &JsonValue, series_id: &str) {
-            let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-            let data = payload.and_then(|p| p.get(series_id).and_then(|s| s.get("s")));
-            // match data {
-            //     Some(d) => {
-            //         for x in d.as_array().unwrap().into_iter() {
-            //             let v: super::ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
-            //             info!("v: {:#?}", v);
-            //         }
-            //     }
-            //     None => todo!(),
-            // }
-            info!("data: {:#?}", payload);
-        }
 
         let message: JsonValue = serde_json::from_value(message)?;
 
@@ -201,11 +186,23 @@ impl ChartSocket {
             .and_then(|m| m.as_str().map(Cow::Borrowed));
 
         match message_type.as_ref().map(|s| s.as_ref()) {
-            Some(DATA_EVENT_1) => {
-                on_data(&message, self.chart_series_id.id.as_str());
+            Some(DATA_LOAD_EVENT) => {
+                let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
+                let data = payload
+                    .and_then(|p| p.get(self.chart_series.id.clone()).and_then(|s| s.get("s")));
+                match data {
+                    Some(d) => {
+                        for x in d.as_array().unwrap().into_iter() {
+                            let v: ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
+                            info!("v: {:#?}", v);
+                        }
+                    }
+                    None => todo!(),
+                }
+                info!("data: {:#?}", payload);
             }
-            Some(DATA_EVENT_2) => {
-                on_data(&message, self.chart_series_id.id.as_str());
+            Some(DATA_UPDATE_EVENT) => {
+                // on_data(&message, self.chart_series_id.id.as_str());
             }
             _ => {}
         }
@@ -256,7 +253,7 @@ impl ChartSocket {
         let series_id = format!("sds_{}", self.current_series);
         let series_symbol_id = format!("sds_sym_{}", self.current_series);
         self.current_series += 1;
-        self.chart_series_id = ChartSeriesId {
+        self.chart_series = ChartSeries {
             id: series_id.clone(),
             symbol_id: series_symbol_id.clone(),
             symbol: symbol.to_string(),
