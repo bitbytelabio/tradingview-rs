@@ -11,10 +11,14 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use std::{borrow::Cow, collections::VecDeque, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -26,14 +30,35 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 use url::Url;
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ChartSymbolInit {
+    pub adjustment: String,
+    pub symbol: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ChartDataPoint {
+    #[serde(rename = "i")]
+    pub version: u32,
+    #[serde(rename = "v")]
+    pub value: [f64; 6],
+}
+
+#[derive(Default)]
+struct ChartSeriesId {
+    id: String,
+    symbol_id: String,
+    symbol: String,
+}
+
 pub struct ChartSocket {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     chart_session_id: String,
     replay_session_id: String,
     messages: VecDeque<Message>,
-    series_id: Vec<String>,
-    series_symbol_id: Vec<String>,
+    chart_series_id: ChartSeriesId,
+    current_series: usize,
     auth_token: String,
     // handler: Box<dyn FnMut(ChartEvent, JsonValue) -> Result<()> + 'a>,
 }
@@ -107,8 +132,8 @@ impl ChartSocketBuilder {
             replay_session_id,
             messages,
             auth_token,
-            series_id: vec![],
-            series_symbol_id: vec![],
+            chart_series_id: ChartSeriesId::default(),
+            current_series: 0,
             // handler: self.handler.take().unwrap(),
         })
     }
@@ -154,10 +179,19 @@ impl ChartSocket {
         const LOADED_EVENT: &str = "symbol_resolved";
         const ERROR_EVENT: &str = "critical_error";
 
-        fn on_data(message: &JsonValue) {
+        fn on_data(message: &JsonValue, series_id: &str) {
             let payload = message.get("p").and_then(|p| p.get(PAYLOAD_KEY));
-            let data = payload.and_then(|p| p.get("sds_1").and_then(|s| s.get("s")));
-            info!("data: {:#?}", data);
+            let data = payload.and_then(|p| p.get(series_id).and_then(|s| s.get("s")));
+            // match data {
+            //     Some(d) => {
+            //         for x in d.as_array().unwrap().into_iter() {
+            //             let v: super::ChartDataPoint = serde_json::from_value(x.clone()).unwrap();
+            //             info!("v: {:#?}", v);
+            //         }
+            //     }
+            //     None => todo!(),
+            // }
+            info!("data: {:#?}", payload);
         }
 
         let message: JsonValue = serde_json::from_value(message)?;
@@ -168,10 +202,10 @@ impl ChartSocket {
 
         match message_type.as_ref().map(|s| s.as_ref()) {
             Some(DATA_EVENT_1) => {
-                on_data(&message);
+                on_data(&message, self.chart_series_id.id.as_str());
             }
             Some(DATA_EVENT_2) => {
-                on_data(&message);
+                on_data(&message, self.chart_series_id.id.as_str());
             }
             _ => {}
         }
@@ -180,37 +214,9 @@ impl ChartSocket {
     }
 
     pub async fn event_loop(&mut self) {
-        self.send(
-            "resolve_symbol",
-            &[
-                self.chart_session_id.clone(),
-                "sds_sym_1".to_string(),
-                format!(
-                    "={}",
-                    serde_json::to_string(&super::ChartSymbolInit {
-                        adjustment: "splits".to_string(),
-                        symbol: "BINANCE:BTCUSDT".to_string(),
-                    })
-                    .unwrap()
-                ),
-            ],
-        )
-        .await
-        .unwrap();
-
-        self.send(
-            "create_series",
-            &[
-                JsonValue::from(self.chart_session_id.clone()),
-                JsonValue::from("sds_1"),
-                JsonValue::from("s1"),
-                JsonValue::from("sds_sym_1"),
-                JsonValue::from("1D"),
-                JsonValue::from(10),
-            ],
-        )
-        .await
-        .unwrap();
+        self.create_series("BINANCE:BTCUSDT", super::Interval::FiveMinutes, 10)
+            .await
+            .unwrap();
 
         while let Some(result) = self.read.next().await {
             match result {
@@ -239,6 +245,43 @@ impl ChartSocket {
                 }
             }
         }
+    }
+
+    pub async fn create_series(
+        &mut self,
+        symbol: &str,
+        interval: super::Interval,
+        dp_num: u64,
+    ) -> Result<()> {
+        let series_id = format!("sds_{}", self.current_series);
+        let series_symbol_id = format!("sds_sym_{}", self.current_series);
+        self.current_series += 1;
+        self.chart_series_id = ChartSeriesId {
+            id: series_id.clone(),
+            symbol_id: series_symbol_id.clone(),
+            symbol: symbol.to_string(),
+        };
+        let symbol_init = ChartSymbolInit {
+            adjustment: "splits".to_string(),
+            symbol: symbol.to_string(),
+        };
+        let symbol_init_json = serde_json::to_value(&symbol_init)?;
+        let resolve_args = &[
+            self.chart_session_id.clone(),
+            series_symbol_id.clone(),
+            format!("={}", symbol_init_json),
+        ];
+        self.send("resolve_symbol", resolve_args).await?;
+        let create_series_args = &[
+            JsonValue::from(self.chart_session_id.clone()),
+            JsonValue::from(series_id),
+            JsonValue::from("s1"),
+            JsonValue::from(series_symbol_id.clone()),
+            JsonValue::from(interval.to_string()),
+            JsonValue::from(dp_num),
+        ];
+        self.send("create_series", create_series_args).await?;
+        Ok(())
     }
 
     async fn _delete_chart_session_id(&mut self) -> Result<()> {
