@@ -39,13 +39,17 @@ pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {
 }
 
 pub fn gen_session_id(session_type: &str) -> String {
+    session_type.to_owned() + "_" + &gen_id()
+}
+
+pub fn gen_id() -> String {
     let rng = rand::thread_rng();
     let result: String = rng
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(12)
         .map(char::from)
         .collect();
-    session_type.to_owned() + "_" + &result
+    result
 }
 
 pub fn parse_packet(message: &str) -> Result<Vec<Value>> {

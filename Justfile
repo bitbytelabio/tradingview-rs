@@ -29,3 +29,6 @@ user-example:
 
 client-example:
 	cargo run --package tradingview-rs --example client
+
+lines-of-code:
+	@git ls-files | grep '\.rs' | xargs wc -l
