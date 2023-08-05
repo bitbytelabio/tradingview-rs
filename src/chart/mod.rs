@@ -1,7 +1,7 @@
 use crate::error::TradingViewError;
 
-mod graphic_parser;
-mod study;
+pub mod graphic_parser;
+pub mod study;
 pub mod websocket;
 
 #[derive(Debug)]
