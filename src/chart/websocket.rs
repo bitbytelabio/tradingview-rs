@@ -11,7 +11,6 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -165,6 +164,44 @@ impl ChartSocket {
         self.send(
             "switch_timezone",
             &[self.chart_session_id.clone(), timezone.to_string()],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn replay_step(&mut self, step: u64) -> Result<()> {
+        self.send(
+            "replay_step",
+            &[
+                Value::from(self.replay_session_id.clone()),
+                Value::from(self.replay_series_id.clone()),
+                Value::from(step),
+            ],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn replay_start(&mut self, interval: Interval) -> Result<()> {
+        self.send(
+            "replay_start",
+            &[
+                Value::from(self.replay_session_id.clone()),
+                Value::from(self.replay_series_id.clone()),
+                Value::from(interval.to_string()),
+            ],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn replay_stop(&mut self) -> Result<()> {
+        self.send(
+            "replay_stop",
+            &[
+                Value::from(self.replay_session_id.clone()),
+                Value::from(self.replay_series_id.clone()),
+            ],
         )
         .await?;
         Ok(())
