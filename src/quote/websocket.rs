@@ -12,7 +12,7 @@ use futures_util::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::{HashMap, VecDeque};
+use std::{borrow::Cow, collections::VecDeque};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -166,14 +166,14 @@ impl<'a> QuoteSocket<'a> {
             match message_type {
                 DATA_EVENT => {
                     if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
-                        self.handle_data_event(payload.clone())?;
+                        self.handle_data_event(Cow::Borrowed(payload))?;
                     }
                 }
                 LOADED_EVENT => {
-                    self.handle_loaded_event(message)?;
+                    self.handle_loaded_event(Cow::Borrowed(&message))?;
                 }
                 ERROR_EVENT => {
-                    self.handle_error_event(message)?;
+                    self.handle_error_event(Cow::Borrowed(&message))?;
                 }
                 _ => {}
             }
@@ -181,17 +181,19 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
-    fn handle_data_event(&mut self, payload: Value) -> Result<()> {
-        const STATUS_KEY: &str = "s";
+    fn handle_data_event(&mut self, payload: Cow<'_, Value>) -> Result<()> {
         if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
             match status {
                 OK_STATUS => {
-                    (self.handler)(QuoteEvent::Data, payload.clone())?;
+                    (self.handler)(QuoteEvent::Data, payload.clone().into_owned())?;
                     return Ok(());
                 }
                 ERROR_STATUS => {
                     error!("failed to receive quote data: {:?}", payload);
-                    (self.handler)(QuoteEvent::Error(TradingViewError::QuoteDataError), payload)?;
+                    (self.handler)(
+                        QuoteEvent::Error(TradingViewError::QuoteDataError),
+                        payload.into_owned(),
+                    )?;
                     return Ok(());
                 }
                 _ => {}
@@ -200,13 +202,16 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
-    fn handle_loaded_event(&mut self, message: Value) -> Result<()> {
-        (self.handler)(QuoteEvent::Loaded, message)?;
+    fn handle_loaded_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
+        (self.handler)(QuoteEvent::Loaded, message.into_owned())?;
         Ok(())
     }
 
-    fn handle_error_event(&mut self, message: Value) -> Result<()> {
-        (self.handler)(QuoteEvent::Error(TradingViewError::CriticalError), message)?;
+    fn handle_error_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
+        (self.handler)(
+            QuoteEvent::Error(TradingViewError::CriticalError),
+            message.into_owned(),
+        )?;
         Ok(())
     }
 
