@@ -1,5 +1,6 @@
 use crate::{
     chart::Interval,
+    payload,
     prelude::*,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_id, gen_session_id, parse_packet},
@@ -80,8 +81,8 @@ impl ChartSocketBuilder {
 
     fn initial_messages(&self, session: &str, auth_token: &str) -> Result<VecDeque<Message>> {
         Ok(VecDeque::from(vec![
-            SocketMessage::new("set_auth_token", &[auth_token]).to_message()?,
-            SocketMessage::new("chart_create_session", &[session]).to_message()?,
+            SocketMessage::new("set_auth_token", payload!(auth_token)).to_message()?,
+            SocketMessage::new("chart_create_session", payload!(session)).to_message()?,
         ]))
     }
 
@@ -147,13 +148,13 @@ impl ChartSocket {
     }
 
     pub async fn set_local(&mut self, local: &[String]) -> Result<()> {
-        self.send("set_local", local).await?;
+        self.send("set_local", payload!(local)).await?;
         Ok(())
     }
 
     pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_string();
-        self.send("set_auth_token", &[self.auth_token.clone()])
+        self.send("set_auth_token", payload!(self.auth_token.clone()))
             .await?;
         Ok(())
     }
@@ -161,7 +162,7 @@ impl ChartSocket {
     pub async fn set_timezone(&mut self, timezone: &str) -> Result<()> {
         self.send(
             "switch_timezone",
-            &[self.chart_session_id.clone(), timezone.to_string()],
+            payload!(self.chart_session_id.clone(), timezone.to_string()),
         )
         .await?;
         Ok(())
@@ -170,11 +171,11 @@ impl ChartSocket {
     pub async fn replay_step(&mut self, step: u64) -> Result<()> {
         self.send(
             "replay_step",
-            &[
-                Value::from(self.replay_session_id.clone()),
-                Value::from(self.replay_series_id.clone()),
-                Value::from(step),
-            ],
+            payload!(
+                self.replay_session_id.clone(),
+                self.replay_series_id.clone(),
+                step
+            ),
         )
         .await?;
         Ok(())
@@ -183,11 +184,11 @@ impl ChartSocket {
     pub async fn replay_start(&mut self, interval: Interval) -> Result<()> {
         self.send(
             "replay_start",
-            &[
-                Value::from(self.replay_session_id.clone()),
-                Value::from(self.replay_series_id.clone()),
-                Value::from(interval.to_string()),
-            ],
+            payload!(
+                self.replay_session_id.clone(),
+                self.replay_series_id.clone(),
+                interval.to_string()
+            ),
         )
         .await?;
         Ok(())
@@ -196,10 +197,10 @@ impl ChartSocket {
     pub async fn replay_stop(&mut self) -> Result<()> {
         self.send(
             "replay_stop",
-            &[
-                Value::from(self.replay_session_id.clone()),
-                Value::from(self.replay_series_id.clone()),
-            ],
+            payload!(
+                self.replay_session_id.clone(),
+                self.replay_series_id.clone()
+            ),
         )
         .await?;
         Ok(())
@@ -214,27 +215,30 @@ impl ChartSocket {
     ) -> Result<()> {
         self.replay_series_id = gen_id();
 
-        self.send("replay_create_session", &[self.replay_session_id.clone()])
-            .await?;
+        self.send(
+            "replay_create_session",
+            payload!(self.replay_session_id.clone()),
+        )
+        .await?;
 
         self.send(
             "replay_add_series",
-            &[
+            payload!(
                 self.replay_session_id.clone(),
                 self.replay_series_id.clone(),
                 Self::symbol_init(symbol, currency)?,
-                interval.to_string(),
-            ],
+                interval.to_string()
+            ),
         )
         .await?;
 
         self.send(
             "replay_reset",
-            &[
-                Value::from(self.replay_session_id.clone()),
-                Value::from(self.replay_series_id.clone()),
-                Value::from(timestamps),
-            ],
+            payload!(
+                self.replay_session_id.clone(),
+                self.replay_series_id.clone(),
+                timestamps
+            ),
         )
         .await?;
 
@@ -366,38 +370,50 @@ impl ChartSocket {
             interval,
         });
 
-        let resolve_args = &[
-            self.chart_session_id.clone(),
-            series_symbol_id.clone(),
-            Self::symbol_init(symbol, currency)?,
-        ];
-        self.send("resolve_symbol", resolve_args).await?;
+        self.send(
+            "resolve_symbol",
+            payload!(
+                self.chart_session_id.clone(),
+                series_symbol_id.clone(),
+                Self::symbol_init(symbol, currency)?
+            ),
+        )
+        .await?;
 
-        let create_series_args = &[
-            Value::from(self.chart_session_id.clone()),
-            Value::from(series_id),
-            Value::from("s1"),
-            Value::from(series_symbol_id.clone()),
-            Value::from(interval.to_string()),
-            Value::from(bars),
-        ];
-        self.send("create_series", create_series_args).await?;
+        self.send(
+            "create_series",
+            payload!(
+                self.chart_session_id.clone(),
+                series_id,
+                "s1",
+                series_symbol_id.clone(),
+                interval.to_string(),
+                bars
+            ),
+        )
+        .await?;
         Ok(())
     }
 
     async fn _delete_chart_session_id(&mut self) -> Result<()> {
-        self.send("chart_delete_session", &[self.chart_session_id.clone()])
-            .await?;
+        self.send(
+            "chart_delete_session",
+            payload!(self.chart_session_id.clone()),
+        )
+        .await?;
         Ok(())
     }
 
     async fn _delete_replay_session_id(&mut self) -> Result<()> {
-        self.send("replay_delete_session", &[self.chart_session_id.clone()])
-            .await?;
+        self.send(
+            "replay_delete_session",
+            payload!(self.chart_session_id.clone()),
+        )
+        .await?;
         Ok(())
     }
 
-    async fn send<M, P>(&mut self, message: M, payload: &[P]) -> Result<()>
+    async fn send<M, P>(&mut self, message: M, payload: Vec<P>) -> Result<()>
     where
         M: Serialize,
         P: Serialize,
@@ -423,11 +439,11 @@ impl ChartSocket {
     pub async fn fetch_more_data(&mut self, num: u64) -> Result<()> {
         self.send(
             "request_more_data",
-            &[
+            payload!(
                 self.chart_session_id.clone(),
                 "$prices".to_string(),
-                num.to_string(),
-            ],
+                num.to_string()
+            ),
         )
         .await?;
         Ok(())

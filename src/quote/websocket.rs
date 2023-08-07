@@ -1,7 +1,8 @@
 use crate::{
     error::TradingViewError,
+    payload,
     prelude::*,
-    quote::QuoteEvent,
+    quote::{QuoteEvent, ALL_QUOTE_FIELDS},
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
     WEBSOCKET_HEADERS,
@@ -60,23 +61,23 @@ impl<'a> QuoteSocketBuilder<'a> {
     }
 
     fn initial_messages(&self, session: &str, auth_token: &str) -> Result<VecDeque<Message>> {
-        let quote_fields: Vec<String> = match self.quote_fields.clone() {
+        let quote_fields: Vec<Value> = match self.quote_fields.clone() {
             Some(fields) => {
-                let mut quote_fields = vec![session.clone().to_string()];
-                quote_fields.extend(fields);
+                let mut quote_fields = payload![session.clone().to_string()];
+                quote_fields.extend(fields.into_iter().map(Value::from));
                 quote_fields
             }
             None => {
-                let mut quote_fields = vec![session.clone().to_string()];
-                quote_fields.extend(crate::quote::ALL_QUOTE_FIELDS.clone());
+                let mut quote_fields = payload![session.clone().to_string()];
+                quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
                 quote_fields
             }
         };
 
         Ok(VecDeque::from(vec![
-            SocketMessage::new("set_auth_token", &[auth_token]).to_message()?,
-            SocketMessage::new("quote_create_session", &[session]).to_message()?,
-            SocketMessage::new("quote_set_fields", &quote_fields).to_message()?,
+            SocketMessage::new("set_auth_token", payload!(auth_token)).to_message()?,
+            SocketMessage::new("quote_create_session", payload!(session)).to_message()?,
+            SocketMessage::new("quote_set_fields", quote_fields).to_message()?,
         ]))
     }
 
@@ -139,23 +140,23 @@ impl<'a> QuoteSocket<'a> {
     }
 
     pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.quote_session_id.clone()];
-        payload.extend(symbols);
-        self.send("quote_add_symbols", &payload).await?;
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_add_symbols", payloads).await?;
         Ok(())
     }
 
     pub async fn quote_fast_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.quote_session_id.clone()];
-        payload.extend(symbols);
-        self.send("quote_fast_symbols", &payload).await?;
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_fast_symbols", payloads).await?;
         Ok(())
     }
 
     pub async fn quote_remove_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.quote_session_id.clone()];
-        payload.extend(symbols);
-        self.send("quote_remove_symbols", &payload).await?;
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_remove_symbols", payloads).await?;
         Ok(())
     }
 
@@ -256,7 +257,7 @@ impl<'a> QuoteSocket<'a> {
         }
     }
 
-    async fn send<M, P>(&mut self, message: M, payload: &[P]) -> Result<()>
+    async fn send<M, P>(&mut self, message: M, payload: Vec<P>) -> Result<()>
     where
         M: Serialize,
         P: Serialize,
@@ -280,29 +281,35 @@ impl<'a> QuoteSocket<'a> {
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.send("quote_delete_session", &[self.quote_session_id.clone()])
-            .await?;
+        self.send(
+            "quote_delete_session",
+            payload!(self.quote_session_id.clone()),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
         self.quote_session_id = gen_session_id("qs");
-        self.send("quote_create_session", &[self.quote_session_id.clone()])
-            .await?;
+        self.send(
+            "quote_create_session",
+            payload!(self.quote_session_id.clone()),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<()> {
         let mut payload = vec![self.quote_session_id.clone()];
         payload.extend(fields);
-        self.send("quote_set_fields", &payload).await?;
+        self.send("quote_set_fields", payload!(payload)).await?;
         Ok(())
     }
 
     pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_string();
-        self.send("set_auth_token", &[self.auth_token.clone()])
+        self.send("set_auth_token", payload!(self.auth_token.clone()))
             .await?;
         Ok(())
     }

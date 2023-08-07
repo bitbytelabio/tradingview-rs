@@ -10,7 +10,7 @@ pub struct SocketMessage {
 }
 
 impl SocketMessage {
-    pub fn new<M, P>(m: M, p: &[P]) -> Self
+    pub fn new<M, P>(m: M, p: Vec<P>) -> Self
     where
         M: Serialize,
         P: Serialize,

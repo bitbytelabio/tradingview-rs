@@ -23,3 +23,11 @@ lazy_static::lazy_static! {
         headers
     };
 }
+
+#[macro_export]
+macro_rules! payload {
+    ($($payload:expr),*) => {{
+        let payload_vec = vec![$(serde_json::Value::from($payload)),*];
+        payload_vec
+    }};
+}
