@@ -217,14 +217,27 @@ impl<'a> QuoteSocket<'a> {
         while let Some(result) = self.read.next().await {
             match result {
                 Ok(message) => {
-                    let message_str = message.to_string();
-                    let values = parse_packet(&message_str).unwrap();
-                    for value in values {
-                        match value {
-                            Value::Number(_) => self.handle_ping(&message).await,
-                            Value::Object(_) => self.handle_message(value).await.unwrap(),
-                            _ => (),
+                    let message_str = match &message {
+                        Message::Text(text) => text,
+                        _ => {
+                            warn!("Received non-text message: {:?}", message);
+                            continue;
                         }
+                    };
+                    if let Ok(values) = parse_packet(message_str) {
+                        for value in values {
+                            match value {
+                                Value::Number(_) => self.handle_ping(&message).await,
+                                Value::Object(_) => {
+                                    if let Err(e) = self.handle_message(value).await {
+                                        error!("Error handling message: {:#?}", e);
+                                    }
+                                }
+                                _ => (),
+                            }
+                        }
+                    } else {
+                        error!("Error parsing message: {:?}", message);
                     }
                 }
                 Err(e) => {
