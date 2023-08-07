@@ -4,7 +4,7 @@ use crate::{
     quote::QuoteEvent,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
-    UA,
+    WEBSOCKET_HEADERS,
 };
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -88,9 +88,7 @@ impl<'a> QuoteSocketBuilder<'a> {
         .unwrap();
 
         let mut request = url.into_client_request().unwrap();
-        let headers = request.headers_mut();
-        headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
-        headers.insert("User-Agent", UA.parse().unwrap());
+        request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
 
         let socket: WebSocketStream<MaybeTlsStream<TcpStream>> = match connect_async(request).await
         {
