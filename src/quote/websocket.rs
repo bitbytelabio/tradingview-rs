@@ -1,10 +1,11 @@
 use crate::{
     error::TradingViewError,
+    payload,
     prelude::*,
-    quote::QuoteEvent,
+    quote::{QuoteEvent, ALL_QUOTE_FIELDS},
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
-    UA,
+    WEBSOCKET_HEADERS,
 };
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -12,7 +13,7 @@ use futures_util::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::VecDeque;
+use std::{borrow::Cow, collections::VecDeque};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -23,6 +24,15 @@ use tokio_tungstenite::{
 
 use tracing::{debug, error, info, warn};
 use url::Url;
+
+const MESSAGE_TYPE_KEY: &str = "m";
+const PAYLOAD_KEY: usize = 1;
+const STATUS_KEY: &str = "s";
+const OK_STATUS: &str = "ok";
+const ERROR_STATUS: &str = "error";
+const DATA_EVENT: &str = "qsd";
+const LOADED_EVENT: &str = "quote_completed";
+const ERROR_EVENT: &str = "critical_error";
 
 pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
@@ -51,23 +61,23 @@ impl<'a> QuoteSocketBuilder<'a> {
     }
 
     fn initial_messages(&self, session: &str, auth_token: &str) -> Result<VecDeque<Message>> {
-        let quote_fields: Vec<String> = match self.quote_fields.clone() {
+        let quote_fields: Vec<Value> = match self.quote_fields.clone() {
             Some(fields) => {
-                let mut quote_fields = vec![session.clone().to_string()];
-                quote_fields.extend(fields);
+                let mut quote_fields = payload![session.clone().to_string()];
+                quote_fields.extend(fields.into_iter().map(Value::from));
                 quote_fields
             }
             None => {
-                let mut quote_fields = vec![session.clone().to_string()];
-                quote_fields.extend(crate::quote::ALL_QUOTE_FIELDS.clone());
+                let mut quote_fields = payload![session.clone().to_string()];
+                quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
                 quote_fields
             }
         };
 
         Ok(VecDeque::from(vec![
-            SocketMessage::new("set_auth_token", &[auth_token]).to_message()?,
-            SocketMessage::new("quote_create_session", &[session]).to_message()?,
-            SocketMessage::new("quote_set_fields", &quote_fields).to_message()?,
+            SocketMessage::new("set_auth_token", payload!(auth_token)).to_message()?,
+            SocketMessage::new("quote_create_session", payload!(session)).to_message()?,
+            SocketMessage::new("quote_set_fields", quote_fields).to_message()?,
         ]))
     }
 
@@ -79,9 +89,7 @@ impl<'a> QuoteSocketBuilder<'a> {
         .unwrap();
 
         let mut request = url.into_client_request().unwrap();
-        let headers = request.headers_mut();
-        headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
-        headers.insert("User-Agent", UA.parse().unwrap());
+        request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
 
         let socket: WebSocketStream<MaybeTlsStream<TcpStream>> = match connect_async(request).await
         {
@@ -132,66 +140,58 @@ impl<'a> QuoteSocket<'a> {
     }
 
     pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.quote_session_id.clone()];
-        payload.extend(symbols);
-        self.send("quote_add_symbols", &payload).await?;
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_add_symbols", payloads).await?;
         Ok(())
     }
 
     pub async fn quote_fast_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.quote_session_id.clone()];
-        payload.extend(symbols);
-        self.send("quote_fast_symbols", &payload).await?;
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_fast_symbols", payloads).await?;
         Ok(())
     }
 
     pub async fn quote_remove_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let mut payload = vec![self.quote_session_id.clone()];
-        payload.extend(symbols);
-        self.send("quote_remove_symbols", &payload).await?;
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_remove_symbols", payloads).await?;
         Ok(())
     }
 
-    async fn handle_msg(&mut self, message: Value) -> Result<()> {
-        const MESSAGE_TYPE_KEY: &str = "m";
-        const PAYLOAD_KEY: usize = 1;
-        const STATUS_KEY: &str = "s";
-        const OK_STATUS: &str = "ok";
-        const ERROR_STATUS: &str = "error";
-        const DATA_EVENT: &str = "qsd";
-        const LOADED_EVENT: &str = "quote_completed";
-        const ERROR_EVENT: &str = "critical_error";
+    async fn handle_message(&mut self, message: Value) -> Result<()> {
         if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
             match message_type {
                 DATA_EVENT => {
                     if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
-                        if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
-                            match status {
-                                OK_STATUS => {
-                                    (self.handler)(QuoteEvent::Data, payload.clone())?;
-                                    return Ok(());
-                                }
-                                ERROR_STATUS => {
-                                    error!("failed to receive quote data: {:?}", payload);
-                                    (self.handler)(
-                                        QuoteEvent::Error(TradingViewError::QuoteDataError),
-                                        message.clone(),
-                                    )?;
-                                    return Ok(());
-                                }
-                                _ => {}
-                            }
-                        }
+                        self.handle_data_event(Cow::Borrowed(payload))?;
                     }
                 }
                 LOADED_EVENT => {
-                    (self.handler)(QuoteEvent::Loaded, message.clone())?;
-                    return Ok(());
+                    self.handle_loaded_event(Cow::Borrowed(&message))?;
                 }
                 ERROR_EVENT => {
+                    self.handle_error_event(Cow::Borrowed(&message))?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_data_event(&mut self, payload: Cow<'_, Value>) -> Result<()> {
+        if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
+            match status {
+                OK_STATUS => {
+                    (self.handler)(QuoteEvent::Data, payload.clone().into_owned())?;
+                    return Ok(());
+                }
+                ERROR_STATUS => {
+                    error!("failed to receive quote data: {:?}", payload);
                     (self.handler)(
-                        QuoteEvent::Error(TradingViewError::CriticalError),
-                        message.clone(),
+                        QuoteEvent::Error(TradingViewError::QuoteDataError),
+                        payload.into_owned(),
                     )?;
                     return Ok(());
                 }
@@ -201,27 +201,44 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
+    fn handle_loaded_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
+        (self.handler)(QuoteEvent::Loaded, message.into_owned())?;
+        Ok(())
+    }
+
+    fn handle_error_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
+        (self.handler)(
+            QuoteEvent::Error(TradingViewError::CriticalError),
+            message.into_owned(),
+        )?;
+        Ok(())
+    }
+
     pub async fn event_loop(&mut self) {
         while let Some(result) = self.read.next().await {
             match result {
                 Ok(message) => {
-                    let values = parse_packet(&message.to_string()).unwrap();
-                    for value in values {
-                        match value {
-                            Value::Number(_) => match self.ping(&message).await {
-                                Ok(()) => debug!("ping sent"),
-                                Err(e) => {
-                                    warn!("ping failed with: {:#?}", e);
-                                }
-                            },
-                            Value::Object(_) => match self.handle_msg(value).await {
-                                Ok(()) => {}
-                                Err(e) => {
-                                    error!("unable to handle message, with: {:#?}", e);
-                                }
-                            },
-                            _ => (),
+                    let message_str = match &message {
+                        Message::Text(text) => text,
+                        _ => {
+                            warn!("Received non-text message: {:?}", message);
+                            continue;
                         }
+                    };
+                    if let Ok(values) = parse_packet(message_str) {
+                        for value in values {
+                            match value {
+                                Value::Number(_) => self.handle_ping(&message).await,
+                                Value::Object(_) => {
+                                    if let Err(e) = self.handle_message(value).await {
+                                        error!("Error handling message: {:#?}", e);
+                                    }
+                                }
+                                _ => (),
+                            }
+                        }
+                    } else {
+                        error!("Error parsing message: {:?}", message);
                     }
                 }
                 Err(e) => {
@@ -231,7 +248,16 @@ impl<'a> QuoteSocket<'a> {
         }
     }
 
-    async fn send<M, P>(&mut self, message: M, payload: &[P]) -> Result<()>
+    async fn handle_ping(&mut self, message: &Message) {
+        match self.ping(message).await {
+            Ok(()) => debug!("ping sent"),
+            Err(e) => {
+                warn!("ping failed with: {:#?}", e);
+            }
+        }
+    }
+
+    async fn send<M, P>(&mut self, message: M, payload: Vec<P>) -> Result<()>
     where
         M: Serialize,
         P: Serialize,
@@ -243,8 +269,7 @@ impl<'a> QuoteSocket<'a> {
     }
 
     async fn send_queue(&mut self) -> Result<()> {
-        while !self.messages.is_empty() {
-            let msg = self.messages.pop_front().unwrap();
+        while let Some(msg) = self.messages.pop_front() {
             self.write.send(msg).await?;
         }
         Ok(())
@@ -256,29 +281,35 @@ impl<'a> QuoteSocket<'a> {
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.send("quote_delete_session", &[self.quote_session_id.clone()])
-            .await?;
+        self.send(
+            "quote_delete_session",
+            payload!(self.quote_session_id.clone()),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
         self.quote_session_id = gen_session_id("qs");
-        self.send("quote_create_session", &[self.quote_session_id.clone()])
-            .await?;
+        self.send(
+            "quote_create_session",
+            payload!(self.quote_session_id.clone()),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn quote_set_fields(&mut self, fields: Vec<String>) -> Result<()> {
         let mut payload = vec![self.quote_session_id.clone()];
         payload.extend(fields);
-        self.send("quote_set_fields", &payload).await?;
+        self.send("quote_set_fields", payload!(payload)).await?;
         Ok(())
     }
 
     pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_string();
-        self.send("set_auth_token", &[self.auth_token.clone()])
+        self.send("set_auth_token", payload!(self.auth_token.clone()))
             .await?;
         Ok(())
     }
