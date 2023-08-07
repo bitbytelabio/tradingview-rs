@@ -243,7 +243,7 @@ impl ChartSocket {
         Ok(())
     }
 
-    async fn handle_msg(&mut self, message: Value) -> Result<()> {
+    async fn handle_message(&mut self, message: Value) -> Result<()> {
         const MESSAGE_TYPE_KEY: &str = "m";
         const PAYLOAD_KEY: usize = 1;
 
@@ -309,13 +309,8 @@ impl ChartSocket {
                     let values = parse_packet(&message.to_string()).unwrap();
                     for value in values {
                         match value {
-                            Value::Number(_) => match self.ping(&message).await {
-                                Ok(_) => debug!("ping sent"),
-                                Err(e) => {
-                                    warn!("ping failed with: {:#?}", e);
-                                }
-                            },
-                            Value::Object(_) => match self.handle_msg(value).await {
+                            Value::Number(_) => self.handle_ping(&message).await,
+                            Value::Object(_) => match self.handle_message(value).await {
                                 Ok(()) => {}
                                 Err(e) => {
                                     error!("unable to handle message, with: {:#?}", e);
@@ -328,6 +323,15 @@ impl ChartSocket {
                 Err(e) => {
                     error!("Error reading message: {:#?}", e);
                 }
+            }
+        }
+    }
+
+    async fn handle_ping(&mut self, message: &Message) {
+        match self.ping(message).await {
+            Ok(()) => debug!("ping sent"),
+            Err(e) => {
+                warn!("ping failed with: {:#?}", e);
             }
         }
     }
@@ -407,8 +411,7 @@ impl ChartSocket {
     }
 
     async fn send_queue(&mut self) -> Result<()> {
-        while !self.messages.is_empty() {
-            let msg = self.messages.pop_front().unwrap();
+        while let Some(msg) = self.messages.pop_front() {
             self.write.send(msg).await?;
         }
         Ok(())

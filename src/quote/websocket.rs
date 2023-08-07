@@ -12,7 +12,7 @@ use futures_util::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -23,6 +23,15 @@ use tokio_tungstenite::{
 
 use tracing::{debug, error, info, warn};
 use url::Url;
+
+const MESSAGE_TYPE_KEY: &str = "m";
+const PAYLOAD_KEY: usize = 1;
+const STATUS_KEY: &str = "s";
+const OK_STATUS: &str = "ok";
+const ERROR_STATUS: &str = "error";
+const DATA_EVENT: &str = "qsd";
+const LOADED_EVENT: &str = "quote_completed";
+const ERROR_EVENT: &str = "critical_error";
 
 pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
@@ -152,47 +161,37 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
-    async fn handle_msg(&mut self, message: Value) -> Result<()> {
-        const MESSAGE_TYPE_KEY: &str = "m";
-        const PAYLOAD_KEY: usize = 1;
-        const STATUS_KEY: &str = "s";
-        const OK_STATUS: &str = "ok";
-        const ERROR_STATUS: &str = "error";
-        const DATA_EVENT: &str = "qsd";
-        const LOADED_EVENT: &str = "quote_completed";
-        const ERROR_EVENT: &str = "critical_error";
+    async fn handle_message(&mut self, message: Value) -> Result<()> {
         if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
             match message_type {
                 DATA_EVENT => {
                     if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
-                        if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
-                            match status {
-                                OK_STATUS => {
-                                    (self.handler)(QuoteEvent::Data, payload.clone())?;
-                                    return Ok(());
-                                }
-                                ERROR_STATUS => {
-                                    error!("failed to receive quote data: {:?}", payload);
-                                    (self.handler)(
-                                        QuoteEvent::Error(TradingViewError::QuoteDataError),
-                                        message.clone(),
-                                    )?;
-                                    return Ok(());
-                                }
-                                _ => {}
-                            }
-                        }
+                        self.handle_data_event(payload.clone())?;
                     }
                 }
                 LOADED_EVENT => {
-                    (self.handler)(QuoteEvent::Loaded, message.clone())?;
-                    return Ok(());
+                    self.handle_loaded_event(message)?;
                 }
                 ERROR_EVENT => {
-                    (self.handler)(
-                        QuoteEvent::Error(TradingViewError::CriticalError),
-                        message.clone(),
-                    )?;
+                    self.handle_error_event(message)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_data_event(&mut self, payload: Value) -> Result<()> {
+        const STATUS_KEY: &str = "s";
+        if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
+            match status {
+                OK_STATUS => {
+                    (self.handler)(QuoteEvent::Data, payload.clone())?;
+                    return Ok(());
+                }
+                ERROR_STATUS => {
+                    error!("failed to receive quote data: {:?}", payload);
+                    (self.handler)(QuoteEvent::Error(TradingViewError::QuoteDataError), payload)?;
                     return Ok(());
                 }
                 _ => {}
@@ -201,25 +200,26 @@ impl<'a> QuoteSocket<'a> {
         Ok(())
     }
 
+    fn handle_loaded_event(&mut self, message: Value) -> Result<()> {
+        (self.handler)(QuoteEvent::Loaded, message)?;
+        Ok(())
+    }
+
+    fn handle_error_event(&mut self, message: Value) -> Result<()> {
+        (self.handler)(QuoteEvent::Error(TradingViewError::CriticalError), message)?;
+        Ok(())
+    }
+
     pub async fn event_loop(&mut self) {
         while let Some(result) = self.read.next().await {
             match result {
                 Ok(message) => {
-                    let values = parse_packet(&message.to_string()).unwrap();
+                    let message_str = message.to_string();
+                    let values = parse_packet(&message_str).unwrap();
                     for value in values {
                         match value {
-                            Value::Number(_) => match self.ping(&message).await {
-                                Ok(()) => debug!("ping sent"),
-                                Err(e) => {
-                                    warn!("ping failed with: {:#?}", e);
-                                }
-                            },
-                            Value::Object(_) => match self.handle_msg(value).await {
-                                Ok(()) => {}
-                                Err(e) => {
-                                    error!("unable to handle message, with: {:#?}", e);
-                                }
-                            },
+                            Value::Number(_) => self.handle_ping(&message).await,
+                            Value::Object(_) => self.handle_message(value).await.unwrap(),
                             _ => (),
                         }
                     }
@@ -227,6 +227,15 @@ impl<'a> QuoteSocket<'a> {
                 Err(e) => {
                     error!("Error reading message: {:#?}", e);
                 }
+            }
+        }
+    }
+
+    async fn handle_ping(&mut self, message: &Message) {
+        match self.ping(message).await {
+            Ok(()) => debug!("ping sent"),
+            Err(e) => {
+                warn!("ping failed with: {:#?}", e);
             }
         }
     }
@@ -243,8 +252,7 @@ impl<'a> QuoteSocket<'a> {
     }
 
     async fn send_queue(&mut self) -> Result<()> {
-        while !self.messages.is_empty() {
-            let msg = self.messages.pop_front().unwrap();
+        while let Some(msg) = self.messages.pop_front() {
             self.write.send(msg).await?;
         }
         Ok(())
