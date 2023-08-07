@@ -31,6 +31,7 @@ pub enum DataServer {
     Data,
     ProData,
     WidgetData,
+    MobileData,
 }
 
 impl std::fmt::Display for DataServer {
@@ -39,23 +40,17 @@ impl std::fmt::Display for DataServer {
             DataServer::Data => write!(f, "data"),
             DataServer::ProData => write!(f, "prodata"),
             DataServer::WidgetData => write!(f, "widgetdata"),
+            DataServer::MobileData => write!(f, "mobile-data"),
         }
     }
 }
 
 #[async_trait]
-trait Socket {
+pub trait Socket {
     async fn connect(&mut self);
-
-    async fn send<M, P>(&mut self, m: M, p: Vec<P>) -> Result<()>
-    where
-        M: Serialize,
-        P: Serialize;
+    async fn send(&mut self, m: String, p: Vec<Value>) -> Result<()>;
     async fn send_queue(&mut self) -> Result<()>;
-
-    async fn handle_ping(&mut self, message: &Message);
     async fn ping(&mut self, ping: &Message) -> Result<()>;
-
     async fn handle_message(&mut self, message: Value) -> Result<()>;
     async fn handle_error(&mut self, message: Value) -> Result<()>;
     async fn handle_data(&mut self, payload: Value) -> Result<()>;
