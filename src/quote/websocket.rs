@@ -5,7 +5,7 @@ use crate::{
     quote::{QuoteEvent, ALL_QUOTE_FIELDS},
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_session_id, parse_packet},
-    WEBSOCKET_HEADERS,
+    ERROR_EVENT, MESSAGE_PAYLOAD_KEY, MESSAGE_TYPE_KEY, WEBSOCKET_HEADERS,
 };
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -25,14 +25,12 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-const MESSAGE_TYPE_KEY: &str = "m";
 const PAYLOAD_KEY: usize = 1;
 const STATUS_KEY: &str = "s";
 const OK_STATUS: &str = "ok";
 const ERROR_STATUS: &str = "error";
-const DATA_EVENT: &str = "qsd";
-const LOADED_EVENT: &str = "quote_completed";
-const ERROR_EVENT: &str = "critical_error";
+const QUOTE_DATA_EVENT: &str = "qsd";
+const QUOTE_LOADED_EVENT: &str = "quote_completed";
 
 pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
@@ -163,12 +161,15 @@ impl<'a> QuoteSocket<'a> {
     async fn handle_message(&mut self, message: Value) -> Result<()> {
         if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
             match message_type {
-                DATA_EVENT => {
-                    if let Some(payload) = message.get("p").and_then(|p| p.get(PAYLOAD_KEY)) {
+                QUOTE_DATA_EVENT => {
+                    if let Some(payload) = message
+                        .get(MESSAGE_PAYLOAD_KEY)
+                        .and_then(|p| p.get(PAYLOAD_KEY))
+                    {
                         self.handle_data_event(Cow::Borrowed(payload))?;
                     }
                 }
-                LOADED_EVENT => {
+                QUOTE_LOADED_EVENT => {
                     self.handle_loaded_event(Cow::Borrowed(&message))?;
                 }
                 ERROR_EVENT => {
