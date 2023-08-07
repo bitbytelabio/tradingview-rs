@@ -38,6 +38,7 @@ futures-util = { version = "0.3", default-features = false, features = [
     "std",
 ] }
 rayon = { version = "^1" }
+async-trait = "^0.1"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

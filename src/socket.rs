@@ -1,4 +1,7 @@
+use std::borrow::Cow;
+
 use crate::{prelude::*, utils::format_packet};
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_tungstenite::tungstenite::protocol::Message;
@@ -40,4 +43,23 @@ impl std::fmt::Display for DataServer {
             DataServer::WidgetData => write!(f, "widgetdata"),
         }
     }
+}
+
+#[async_trait]
+trait Socket {
+    async fn connect(&mut self);
+
+    async fn send<M, P>(&mut self, m: M, p: Vec<P>) -> Result<()>
+    where
+        M: Serialize,
+        P: Serialize;
+    async fn send_queue(&mut self) -> Result<()>;
+
+    async fn handle_ping(&mut self, message: &Message);
+    async fn ping(&mut self, ping: &Message) -> Result<()>;
+
+    async fn handle_message(&mut self, message: Value) -> Result<()>;
+    async fn handle_error(&mut self, message: Value) -> Result<()>;
+    async fn handle_data(&mut self, payload: Value) -> Result<()>;
+    async fn handle_loaded(&mut self, payload: Value) -> Result<()>;
 }
