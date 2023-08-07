@@ -77,8 +77,6 @@ impl UserBuilder {
         self
     }
 
-    pub fn vault_config() {}
-
     pub async fn build(&mut self) -> Result<User> {
         let mut user = User {
             id: self.id.unwrap_or_default(),
