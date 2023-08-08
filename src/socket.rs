@@ -82,6 +82,13 @@ impl std::fmt::Display for DataServer {
     }
 }
 
+pub enum ConnectionStatus {
+    Connected,
+    Disconnected,
+    Error,
+    Connecting,
+}
+
 #[async_trait]
 pub trait Socket {
     async fn connect(
@@ -92,14 +99,16 @@ pub trait Socket {
         SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     )> {
         let url = Url::parse(&format!(
-            "wss://{server}.tradingview.com/socket.io/websocket",
-            server = server.to_string()
+            "wss://{}.tradingview.com/socket.io/websocket",
+            server
         ))?;
 
         let mut request = url.into_client_request()?;
         request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
 
         let (socket, _response) = connect_async(request).await?;
+
+        // let ws = socket.;
 
         let (mut write, read) = socket.split();
 

@@ -1,10 +1,9 @@
 use crate::{
-    chart::Interval,
     payload,
     prelude::*,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_id, gen_session_id, parse_packet},
-    WEBSOCKET_HEADERS,
+    Interval, WEBSOCKET_HEADERS,
 };
 
 use futures_util::{

@@ -11,7 +11,7 @@ pub mod socket;
 pub mod user;
 pub mod utils;
 
-static UA: &'static str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36";
+static UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36";
 
 lazy_static::lazy_static! {
     static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -30,7 +30,48 @@ macro_rules! payload {
     }};
 }
 
+#[derive(Debug, Default)]
+pub enum SessionType {
+    #[default]
+    Regular,
+    Extended,
+    PreMarket,
+    PostMarket,
+}
+
+impl fmt::Display for SessionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SessionType::Regular => write!(f, "regular"),
+            SessionType::Extended => write!(f, "extended"),
+            SessionType::PreMarket => write!(f, "premarket"),
+            SessionType::PostMarket => write!(f, "postmarket"),
+        }
+    }
+}
+
 #[derive(Debug)]
+pub enum MarketStatus {
+    Holiday,
+    Open,
+    Close,
+    Post,
+    Pre,
+}
+
+impl fmt::Display for MarketStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MarketStatus::Holiday => write!(f, "holiday"),
+            MarketStatus::Open => write!(f, "market"),
+            MarketStatus::Close => write!(f, "out_of_session"),
+            MarketStatus::Post => write!(f, "post_market"),
+            MarketStatus::Pre => write!(f, "pre_market"),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 pub enum Timezone {
     AfricaCairo,
     AfricaCasablanca,
@@ -120,6 +161,8 @@ pub enum Timezone {
     PacificHonolulu,
     PacificNorfolk,
     USMountain,
+    #[default]
+    EtcUTC,
 }
 
 impl fmt::Display for Timezone {
@@ -213,6 +256,209 @@ impl fmt::Display for Timezone {
             Timezone::PacificHonolulu => write!(f, "Pacific/Honolulu"),
             Timezone::PacificNorfolk => write!(f, "Pacific/Norfolk"),
             Timezone::USMountain => write!(f, "US/Mountain"),
+            Timezone::EtcUTC => write!(f, "Etc/UTC"),
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
+pub enum Interval {
+    OneSecond,
+    FiveSeconds,
+    TenSeconds,
+    FifteenSeconds,
+    ThirtySeconds,
+    OneMinute,
+    ThreeMinutes,
+    FiveMinutes,
+    FifteenMinutes,
+    ThirtyMinutes,
+    FortyFiveMinutes,
+    OneHour,
+    TwoHours,
+    FourHours,
+    #[default]
+    Daily,
+    Weekly,
+    Monthly,
+    Quarterly,
+    SixMonths,
+    Yearly,
+}
+
+impl std::fmt::Display for Interval {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let time_interval = match self {
+            Interval::OneSecond => "1S",
+            Interval::FiveSeconds => "5S",
+            Interval::TenSeconds => "10S",
+            Interval::FifteenSeconds => "15S",
+            Interval::ThirtySeconds => "30S",
+            Interval::OneMinute => "1",
+            Interval::ThreeMinutes => "3",
+            Interval::FiveMinutes => "5",
+            Interval::FifteenMinutes => "15",
+            Interval::ThirtyMinutes => "30",
+            Interval::FortyFiveMinutes => "45",
+            Interval::OneHour => "1H",
+            Interval::TwoHours => "2H",
+            Interval::FourHours => "4H",
+            Interval::Daily => "1D",
+            Interval::Weekly => "1W",
+            Interval::Monthly => "1M",
+            Interval::Quarterly => "3M",
+            Interval::SixMonths => "6M",
+            Interval::Yearly => "12M",
+        };
+        write!(f, "{}", time_interval)
+    }
+}
+
+pub enum LanguageCode {
+    Arabic,
+    Chinese,
+    Czech,
+    Danish,
+    Catalan,
+    Dutch,
+    English,
+    Estonian,
+    French,
+    German,
+    Greek,
+    Hebrew,
+    Hungarian,
+    Indonesian,
+    Italian,
+    Japanese,
+    Korean,
+    Persian,
+    Polish,
+    Portuguese,
+    Romanian,
+    Russian,
+    Slovak,
+    Spanish,
+    Swedish,
+    Thai,
+    Turkish,
+    Vietnamese,
+    Norwegian,
+    Malay,
+    TraditionalChinese,
+}
+
+impl std::fmt::Display for LanguageCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            LanguageCode::Arabic => write!(f, "ar"),
+            LanguageCode::Chinese => write!(f, "zh"),
+            LanguageCode::Czech => write!(f, "cs"),
+            LanguageCode::Danish => write!(f, "da_DK"),
+            LanguageCode::Catalan => write!(f, "ca_ES"),
+            LanguageCode::Dutch => write!(f, "nl_NL"),
+            LanguageCode::English => write!(f, "en"),
+            LanguageCode::Estonian => write!(f, "et_EE"),
+            LanguageCode::French => write!(f, "fr"),
+            LanguageCode::German => write!(f, "de"),
+            LanguageCode::Greek => write!(f, "el"),
+            LanguageCode::Hebrew => write!(f, "he_IL"),
+            LanguageCode::Hungarian => write!(f, "hu_HU"),
+            LanguageCode::Indonesian => write!(f, "id_ID"),
+            LanguageCode::Italian => write!(f, "it"),
+            LanguageCode::Japanese => write!(f, "ja"),
+            LanguageCode::Korean => write!(f, "ko"),
+            LanguageCode::Persian => write!(f, "fa"),
+            LanguageCode::Polish => write!(f, "pl"),
+            LanguageCode::Portuguese => write!(f, "pt"),
+            LanguageCode::Romanian => write!(f, "ro"),
+            LanguageCode::Russian => write!(f, "ru"),
+            LanguageCode::Slovak => write!(f, "sk_SK"),
+            LanguageCode::Spanish => write!(f, "es"),
+            LanguageCode::Swedish => write!(f, "sv"),
+            LanguageCode::Thai => write!(f, "th"),
+            LanguageCode::Turkish => write!(f, "tr"),
+            LanguageCode::Vietnamese => write!(f, "vi"),
+            LanguageCode::Norwegian => write!(f, "no"),
+            LanguageCode::Malay => write!(f, "ms_MY"),
+            LanguageCode::TraditionalChinese => write!(f, "zh_TW"),
+        }
+    }
+}
+
+/// `FY` stands for Fiscal Year. This is the 12-month period that a company or organization uses for accounting and budgeting purposes. It may not coincide with the calendar year, depending on the company’s preferences. For example, some companies may have their fiscal year end on June 30th, while others may have it on December 31st.
+///
+/// `FQ` stands for Fiscal Quarter. This is a three-month period within a fiscal year that a company or organization uses to report its financial results. There are usually four fiscal quarters in a fiscal year, numbered from Q1 to Q4. For example, if a company’s fiscal year ends on June 30th, then its Q1 would be from July 1st to September 30th, and its Q4 would be from April 1st to June 30th.
+///
+/// `FH` stands for Fiscal Half-Year. This is a six-month period within a fiscal year that a company or organization uses to report its financial results. There are usually two fiscal half-years in a fiscal year, numbered from H1 to H2. For example, if a company’s fiscal year ends on June 30th, then its H1 would be from July 1st to December 31st, and its H2 would be from January 1st to June 30th.
+///
+/// `TTM` stands for Trailing Twelve Months. This is the past 12 consecutive months of a company’s or organization’s performance data that is used for reporting financial figures. It does not necessarily coincide with a fiscal year or a calendar year, but rather it is updated every month or quarter with the most recent data available. For example, if the current month is August 2023, then the TTM would be from September 2022 to August 2023. TTM is useful for analyzing the most recent financial trends and performance of a company or organization without being affected by seasonality or one-time events.
+pub enum FinancialPeriod {
+    FiscalYear,
+    FiscalQuarter,
+    FiscalHalfYear,
+    TrailingTwelveMonths,
+}
+
+impl std::fmt::Display for FinancialPeriod {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            FinancialPeriod::FiscalYear => write!(f, "FY"),
+            FinancialPeriod::FiscalQuarter => write!(f, "FQ"),
+            FinancialPeriod::FiscalHalfYear => write!(f, "FH"),
+            FinancialPeriod::TrailingTwelveMonths => write!(f, "TTM"),
+        }
+    }
+}
+
+pub enum SymbolType {
+    Stock,
+    Index,
+    Forex,
+    Futures,
+    Bitcoin,
+    Crypto,
+    Undefined,
+    Expression,
+    Spread,
+    Cfd,
+    Economic,
+    Equity,
+    Dr,
+    Bond,
+    Right,
+    Warrant,
+    Fund,
+    Structured,
+    Commodity,
+    Fundamental,
+    Spot,
+}
+
+impl std::fmt::Display for SymbolType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            SymbolType::Stock => write!(f, "stock"),
+            SymbolType::Index => write!(f, "index"),
+            SymbolType::Forex => write!(f, "forex"),
+            SymbolType::Futures => write!(f, "futures"),
+            SymbolType::Bitcoin => write!(f, "bitcoin"),
+            SymbolType::Crypto => write!(f, "crypto"),
+            SymbolType::Undefined => write!(f, "undefined"),
+            SymbolType::Expression => write!(f, "expression"),
+            SymbolType::Spread => write!(f, "spread"),
+            SymbolType::Cfd => write!(f, "cfd"),
+            SymbolType::Economic => write!(f, "economic"),
+            SymbolType::Equity => write!(f, "equity"),
+            SymbolType::Dr => write!(f, "dr"),
+            SymbolType::Bond => write!(f, "bond"),
+            SymbolType::Right => write!(f, "right"),
+            SymbolType::Warrant => write!(f, "warrant"),
+            SymbolType::Fund => write!(f, "fund"),
+            SymbolType::Structured => write!(f, "structured"),
+            SymbolType::Commodity => write!(f, "commodity"),
+            SymbolType::Fundamental => write!(f, "fundamental"),
+            SymbolType::Spot => write!(f, "spot"),
         }
     }
 }

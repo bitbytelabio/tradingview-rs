@@ -185,7 +185,7 @@ impl<'a> QuoteSocket<'a> {
                 Ok(Some(result)) => match result {
                     Ok(message) => {
                         if let Message::Text(text) = &message {
-                            if let Ok(values) = parse_packet(&text) {
+                            if let Ok(values) = parse_packet(text) {
                                 for value in values {
                                     match value {
                                         Value::Number(_) => {
@@ -201,7 +201,7 @@ impl<'a> QuoteSocket<'a> {
                                         _ => (),
                                     }
                                 }
-                            } else if let Err(e) = parse_packet(&text) {
+                            } else if let Err(e) = parse_packet(text) {
                                 error!("Error parsing message: {:#?}", e);
                             }
                         } else {
