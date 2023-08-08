@@ -13,7 +13,7 @@ use futures_util::{
 use rayon::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
-use std::{borrow::Cow, collections::VecDeque, sync::Arc};
+use std::{borrow::Cow, collections::VecDeque, sync::Arc, thread::JoinHandle};
 use tokio::time::{timeout, Duration};
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
@@ -290,10 +290,10 @@ pub struct WebSocketsBuilder {
 }
 
 pub struct WebSockets {
-    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-    read: Arc<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
+    pub write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    pub read: Arc<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     server: DataServer,
-    quote_session_id: Option<String>,
+    quote_session_id: String,
     quote_fields: Option<Vec<String>>,
     auth_token: String,
     symbols: Vec<String>,
@@ -330,7 +330,7 @@ impl WebSocketsBuilder {
             write,
             read,
             server,
-            quote_session_id: None,
+            quote_session_id: gen_session_id("qs"),
             quote_fields: self.quote_fields.clone(),
             auth_token,
             symbols: vec![],
@@ -345,6 +345,39 @@ impl WebSockets {
             server: None,
             quote_fields: None,
         }
+    }
+
+    pub async fn create_session(&mut self) -> Result<()> {
+        let write = Arc::clone(&self.write);
+
+        let message = SocketMessage::new(
+            "quote_create_session",
+            payload!(self.quote_session_id.clone()),
+        )
+        .to_message()?;
+
+        let task = tokio::spawn(async move {
+            let mut write_guard = write.lock().await;
+            write_guard.send(message).await
+        });
+
+        task.await??;
+        Ok(())
+    }
+
+    pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
+        let write = Arc::clone(&self.write);
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        let message = SocketMessage::new("quote_add_symbols", payload!(payloads)).to_message()?;
+
+        let task = tokio::spawn(async move {
+            let mut write_guard = write.lock().await;
+            write_guard.send(message).await
+        });
+
+        task.await??;
+        Ok(())
     }
 }
 
