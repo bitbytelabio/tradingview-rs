@@ -1,5 +1,4 @@
 use reqwest::header::{HeaderMap, HeaderValue};
-use std::fmt;
 
 pub mod chart;
 pub mod client;
@@ -39,8 +38,8 @@ pub enum SessionType {
     PostMarket,
 }
 
-impl fmt::Display for SessionType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for SessionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SessionType::Regular => write!(f, "regular"),
             SessionType::Extended => write!(f, "extended"),
@@ -59,8 +58,8 @@ pub enum MarketStatus {
     Pre,
 }
 
-impl fmt::Display for MarketStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for MarketStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MarketStatus::Holiday => write!(f, "holiday"),
             MarketStatus::Open => write!(f, "market"),
@@ -165,8 +164,8 @@ pub enum Timezone {
     EtcUTC,
 }
 
-impl fmt::Display for Timezone {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Timezone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Timezone::AfricaCairo => write!(f, "Africa/Cairo"),
             Timezone::AfricaCasablanca => write!(f, "Africa/Casablanca"),
