@@ -292,11 +292,9 @@ pub struct WebSocketsBuilder {
 pub struct WebSockets {
     pub write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
     pub read: Arc<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
-    server: DataServer,
     quote_session_id: String,
-    quote_fields: Option<Vec<String>>,
+    quote_fields: Vec<Value>,
     auth_token: String,
-    symbols: Vec<String>,
 }
 
 impl WebSocketsBuilder {
@@ -317,23 +315,35 @@ impl WebSocketsBuilder {
             .unwrap_or("unauthorized_user_token".to_string());
 
         let server = self.server.clone().unwrap_or_default();
-        #[allow(unused_mut)]
-        let (mut write_stream, read_stream) = WebSockets::connect(&server, &auth_token).await?;
-        #[allow(unused_mut)]
-        let mut write: Arc<
-            Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>,
-        > = Arc::from(Mutex::new(write_stream));
+
+        let session = gen_session_id("qs");
+
+        let quote_fields: Vec<Value> = match self.quote_fields.clone() {
+            Some(fields) => {
+                let mut quote_fields = payload![session.clone().to_string()];
+                quote_fields.extend(fields.into_iter().map(Value::from));
+                quote_fields
+            }
+            None => {
+                let mut quote_fields = payload![session.clone().to_string()];
+                quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
+                quote_fields
+            }
+        };
+
+        let (write_stream, read_stream) = WebSockets::connect(&server, &auth_token).await?;
+
+        let write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>> =
+            Arc::from(Mutex::new(write_stream));
 
         let read = Arc::from(read_stream);
 
         Ok(WebSockets {
             write,
             read,
-            server,
-            quote_session_id: gen_session_id("qs"),
-            quote_fields: self.quote_fields.clone(),
+            quote_session_id: session,
+            quote_fields,
             auth_token,
-            symbols: vec![],
         })
     }
 }
@@ -348,36 +358,34 @@ impl WebSockets {
     }
 
     pub async fn create_session(&mut self) -> Result<()> {
-        let write = Arc::clone(&self.write);
-
         let message = SocketMessage::new(
             "quote_create_session",
             payload!(self.quote_session_id.clone()),
         )
         .to_message()?;
 
-        let task = tokio::spawn(async move {
-            let mut write_guard = write.lock().await;
-            write_guard.send(message).await
-        });
-
-        task.await??;
-        Ok(())
+        Ok(self.write.lock().await.send(message).await?)
     }
 
-    pub async fn quote_add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let write = Arc::clone(&self.write);
+    pub async fn set_fields(&mut self) -> Result<()> {
+        let message =
+            SocketMessage::new("quote_set_fields", self.quote_fields.clone()).to_message()?;
+        Ok(self.write.lock().await.send(message).await?)
+    }
+
+    pub async fn add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
         let mut payloads = payload![self.quote_session_id.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         let message = SocketMessage::new("quote_add_symbols", payload!(payloads)).to_message()?;
 
-        let task = tokio::spawn(async move {
-            let mut write_guard = write.lock().await;
-            write_guard.send(message).await
-        });
+        Ok(self.write.lock().await.send(message).await?)
+    }
 
-        task.await??;
-        Ok(())
+    pub async fn set_new_auth_token(&mut self, auth_token: &str) -> Result<()> {
+        let message: Message =
+            SocketMessage::new("set_auth_token", payload!(auth_token)).to_message()?;
+
+        Ok(self.write.lock().await.send(message).await?)
     }
 }
 
