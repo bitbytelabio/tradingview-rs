@@ -161,7 +161,7 @@ impl<'a> QuoteSocket<'a> {
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        let payload: crate::socket::SocketMessageType<super::QuoteMessage> =
+        let payload: crate::socket::SocketMessageType<super::QuoteSocketMessage> =
             match serde_json::from_value(message.clone()) {
                 Ok(p) => p,
                 Err(e) => {

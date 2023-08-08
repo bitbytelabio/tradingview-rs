@@ -64,9 +64,11 @@ pub enum QuoteEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct QuoteMessage {
-    pub m: String,
-    pub p: Vec<QuotePayloadType>,
+pub struct QuoteSocketMessage {
+    #[serde(rename = "m")]
+    pub message_type: String,
+    #[serde(rename = "p")]
+    pub payload: Vec<QuotePayloadType>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
