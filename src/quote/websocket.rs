@@ -154,7 +154,7 @@ impl<'a> QuoteSocket<'a> {
         let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)
             .map_err(|e| {
                 error!("Error parsing quote data: {:#?}", e);
-                Error::ParseError(e)
+                Error::JsonParseError(e)
             })?;
 
         match payload {

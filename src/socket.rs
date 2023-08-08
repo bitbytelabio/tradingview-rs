@@ -85,7 +85,6 @@ impl std::fmt::Display for DataServer {
 #[async_trait]
 pub trait Socket {
     async fn connect(
-        &mut self,
         server: DataServer,
         auth_token: Option<String>,
     ) -> Result<(
@@ -95,10 +94,9 @@ pub trait Socket {
         let url = Url::parse(&format!(
             "wss://{server}.tradingview.com/socket.io/websocket",
             server = server.to_string()
-        ))
-        .unwrap();
+        ))?;
 
-        let mut request = url.into_client_request().unwrap();
+        let mut request = url.into_client_request()?;
         request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
 
         let (socket, _response) = connect_async(request).await?;
