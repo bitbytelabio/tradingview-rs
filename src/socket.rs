@@ -132,8 +132,11 @@ pub trait Socket {
     }
 
     async fn send(
-        mut write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-        m: String,
+        mut write: tokio::sync::MutexGuard<
+            '_,
+            SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        >,
+        m: &str,
         p: Vec<Value>,
     ) -> Result<()> {
         let msg = SocketMessage::new(m, p).to_message()?;
@@ -142,7 +145,10 @@ pub trait Socket {
     }
 
     async fn ping(
-        mut write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        mut write: tokio::sync::MutexGuard<
+            '_,
+            SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        >,
         ping: &Message,
     ) -> Result<()> {
         write.send(ping.clone()).await?;
