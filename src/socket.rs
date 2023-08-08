@@ -1,8 +1,21 @@
-use crate::{prelude::*, utils::format_packet};
+use crate::{payload, prelude::*, utils::format_packet, WEBSOCKET_HEADERS};
 use async_trait::async_trait;
+use futures_util::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio_tungstenite::tungstenite::protocol::Message;
+use tokio::{
+    net::TcpStream,
+    time::{timeout, Duration},
+};
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::{client::IntoClientRequest, protocol::Message},
+    MaybeTlsStream, WebSocketStream,
+};
+use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SocketMessage {
@@ -69,11 +82,67 @@ impl std::fmt::Display for DataServer {
     }
 }
 
+pub enum ConnectionStatus {
+    Connected,
+    Disconnected,
+    Error,
+    Connecting,
+}
+
 #[async_trait]
 pub trait Socket {
-    async fn connect(&mut self);
-    async fn send(&mut self, m: String, p: Vec<Value>) -> Result<()>;
-    async fn ping(&mut self, ping: &Message) -> Result<()>;
+    async fn connect(
+        server: DataServer,
+        auth_token: Option<String>,
+    ) -> Result<(
+        SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    )> {
+        let url = Url::parse(&format!(
+            "wss://{}.tradingview.com/socket.io/websocket",
+            server
+        ))?;
+
+        let mut request = url.into_client_request()?;
+        request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
+
+        let (socket, _response) = connect_async(request).await?;
+
+        // let ws = socket.;
+
+        let (mut write, read) = socket.split();
+
+        write
+            .send(
+                SocketMessage::new(
+                    "set_auth_token",
+                    payload!(auth_token.unwrap_or("unauthorized_user_token".to_string())),
+                )
+                .to_message()?,
+            )
+            .await?;
+
+        Ok((write, read))
+    }
+
+    async fn send(
+        mut write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        m: String,
+        p: Vec<Value>,
+    ) -> Result<()> {
+        let msg = SocketMessage::new(m, p).to_message()?;
+        write.send(msg).await?;
+        Ok(())
+    }
+
+    async fn ping(
+        mut write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        ping: &Message,
+    ) -> Result<()> {
+        write.send(ping.clone()).await?;
+        Ok(())
+    }
+
     async fn handle_message(&mut self, message: Value) -> Result<()>;
     async fn handle_error(&mut self, message: Value) -> Result<()>;
     async fn handle_data(&mut self, payload: Value) -> Result<()>;

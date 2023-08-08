@@ -4,66 +4,54 @@ use thiserror::Error;
 pub enum Error {
     #[error("Generic {0}")]
     Generic(String),
-
     #[error("failed to send the api request")]
     RequestError(#[from] reqwest::Error),
-
     #[error("failed to parse the api response")]
-    ParseError(#[from] serde_json::Error),
-
+    JsonParseError(#[from] serde_json::Error),
     #[error("failed to convert into int from {}", .0)]
     TypeConversionError(#[from] std::num::ParseIntError),
-
     #[error("invalid header value")]
     HeaderValueError(#[from] reqwest::header::InvalidHeaderValue),
-
     #[error("failed to login")]
     LoginError(#[from] LoginError),
-
     #[error("failed to capture regex data")]
     RegexError(#[from] regex::Error),
-
-    #[error("Can not establish websocket connection")]
+    #[error("can not establish websocket connection")]
     WebSocketError(#[from] tokio_tungstenite::tungstenite::Error),
-
-    #[error("No chart token found")]
+    #[error("no chart token found")]
     NoChartTokenFound,
-
     #[error("No scan data found")]
     NoScanDataFound,
-
-    #[error("Symbols may not in the same exchange")]
+    #[error("symbols may not in the same exchange")]
     SymbolsNotInSameExchange,
-
-    #[error("Exchange not specified")]
+    #[error("exchange not specified")]
     ExchangeNotSpecified,
-
-    #[error("Exchange is invalid")]
+    #[error("exchange is invalid")]
     InvalidExchange,
-
-    #[error("Symbols not specified")]
+    #[error("symbols not specified")]
     SymbolsNotSpecified,
-
-    #[error("No search data found")]
+    #[error("no search data found")]
     NoSearchDataFound,
-
-    #[error("Inexistent or unsupported indicator {}", .0)]
+    #[error("inexistent or unsupported indicator {}", .0)]
     IndicatorDataNotFound(String),
-
-    #[error("Tokio task join error")]
+    #[error("tokio task join error")]
     TokioJoinError(#[from] tokio::task::JoinError),
+    #[error("url parse error")]
+    UrlParseError(#[from] url::ParseError),
 }
 
 #[derive(Debug, Error)]
 pub enum TradingViewError {
-    #[error("Series error")]
+    #[error("series_error")]
     SeriesError,
-    #[error("Symbol error")]
+    #[error("symbol_error")]
     SymbolError,
-    #[error("Critical error")]
+    #[error("critical_error")]
     CriticalError,
-    #[error("Quote Data error")]
-    QuoteDataError,
+    #[error("protocol_error")]
+    ProtocolError,
+    #[error("error")]
+    QuoteDataStatusError,
 }
 
 #[derive(Debug, Error)]

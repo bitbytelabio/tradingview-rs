@@ -33,24 +33,17 @@ pub struct IndicatorMetadata {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct IndicatorMetaInfo {
     pub id: String,
-
     #[serde(default, rename(deserialize = "_metainfoVersion"))]
     pub version: i32,
-
     #[serde(rename(deserialize = "scriptIdPart"))]
     pub pine_id: String,
-
     #[serde(default)]
     pub description: String,
-
     pub inputs: Vec<HashMap<String, Value>>,
-
     #[serde(default)]
     pub is_hidden_study: bool,
-
     #[serde(default)]
     pub is_price_study: bool,
-
     #[serde(rename(deserialize = "defaults"))]
     pub default: HashMap<String, Value>,
 }

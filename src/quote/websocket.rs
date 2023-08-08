@@ -1,38 +1,28 @@
 use crate::{
-    error::TradingViewError,
     payload,
     prelude::*,
-    quote::{QuoteEvent, ALL_QUOTE_FIELDS},
-    socket::{DataServer, SocketMessage},
+    quote::{QuoteEvent, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
+    socket::{DataServer, SocketMessage, SocketMessageType},
     utils::{format_packet, gen_session_id, parse_packet},
-    ERROR_EVENT, MESSAGE_PAYLOAD_KEY, MESSAGE_TYPE_KEY, WEBSOCKET_HEADERS,
+    WEBSOCKET_HEADERS,
 };
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+use rayon::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
 use std::{borrow::Cow, collections::VecDeque};
-
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
-
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
     MaybeTlsStream, WebSocketStream,
 };
-
 use tracing::{debug, error, info, warn};
 use url::Url;
-
-const PAYLOAD_KEY: usize = 1;
-const STATUS_KEY: &str = "s";
-const OK_STATUS: &str = "ok";
-const ERROR_STATUS: &str = "error";
-const QUOTE_DATA_EVENT: &str = "qsd";
-const QUOTE_LOADED_EVENT: &str = "quote_completed";
 
 pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
@@ -161,85 +151,31 @@ impl<'a> QuoteSocket<'a> {
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        let payload: crate::socket::SocketMessageType<super::QuoteSocketMessage> =
-            match serde_json::from_value(message.clone()) {
-                Ok(p) => p,
-                Err(e) => {
-                    error!("Error parsing quote data: {:#?}", e);
-                    error!("payload: {:#?}", &message);
-                    return Ok(());
-                }
-            };
-        match payload {
-            crate::socket::SocketMessageType::SocketServerInfo(server) => info!(server.via),
-            crate::socket::SocketMessageType::SocketMessage(data) => {
-                info!("data: {:#?}", &data);
-            }
-        }
-        Ok(())
-        // if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
-        //     match message_type {
-        //         QUOTE_DATA_EVENT => {
-        //             // debug!("data: {:#?}", &message);
-        //             let payload: super::QuoteMessage = match serde_json::from_value(message.clone())
-        //             {
-        //                 Ok(p) => p,
-        //                 Err(e) => {
-        //                     error!("Error parsing quote data: {:#?}", e);
-        //                     return Ok(());
-        //                 }
-        //             };
-        //             debug!("payload: {:#?}", &payload);
-        //             // if let Some(payload) = message
-        //             //     .get(MESSAGE_PAYLOAD_KEY)
-        //             //     .and_then(|p| p.get(PAYLOAD_KEY))
-        //             // {
-        //             //     self.handle_data_event(Cow::Borrowed(payload))?;
-        //             // }
-        //         }
-        //         QUOTE_LOADED_EVENT => {
-        //             self.handle_loaded_event(Cow::Borrowed(&message))?;
-        //         }
-        //         ERROR_EVENT => {
-        //             self.handle_error_event(Cow::Borrowed(&message))?;
-        //         }
-        //         _ => {}
-        //     }
-        // }
-        // Ok(())
-    }
+        let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)
+            .map_err(|e| {
+                error!("Error parsing quote data: {:#?}", e);
+                Error::JsonParseError(e)
+            })?;
 
-    fn handle_data_event(&mut self, payload: Cow<'_, Value>) -> Result<()> {
-        if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
-            match status {
-                OK_STATUS => {
-                    (self.handler)(QuoteEvent::Data, payload.clone().into_owned())?;
-                    return Ok(());
+        match payload {
+            SocketMessageType::SocketServerInfo(server_info) => {
+                info!("Received SocketServerInfo: {:#?}", server_info);
+            }
+            SocketMessageType::SocketMessage(quote_msg) => match quote_msg.message_type.as_str() {
+                "qsd" => {
+                    quote_msg.payload.par_iter().for_each(|p| match p {
+                        QuotePayloadType::String(s) => debug!("Received quote session ID: {}", s),
+                        QuotePayloadType::QuotePayload(d) => {
+                            info!("Received quote data: {:#?}", d);
+                        }
+                    });
                 }
-                ERROR_STATUS => {
-                    error!("failed to receive quote data: {:?}", payload);
-                    (self.handler)(
-                        QuoteEvent::Error(TradingViewError::QuoteDataError),
-                        payload.into_owned(),
-                    )?;
-                    return Ok(());
+                "quote_completed" => {
+                    info!("Received quote completed message: {:#?}", quote_msg);
                 }
                 _ => {}
-            }
+            },
         }
-        Ok(())
-    }
-
-    fn handle_loaded_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
-        (self.handler)(QuoteEvent::Loaded, message.into_owned())?;
-        Ok(())
-    }
-
-    fn handle_error_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
-        (self.handler)(
-            QuoteEvent::Error(TradingViewError::CriticalError),
-            message.into_owned(),
-        )?;
         Ok(())
     }
 
@@ -249,7 +185,7 @@ impl<'a> QuoteSocket<'a> {
                 Ok(Some(result)) => match result {
                     Ok(message) => {
                         if let Message::Text(text) = &message {
-                            if let Ok(values) = parse_packet(&text) {
+                            if let Ok(values) = parse_packet(text) {
                                 for value in values {
                                     match value {
                                         Value::Number(_) => {
@@ -265,7 +201,7 @@ impl<'a> QuoteSocket<'a> {
                                         _ => (),
                                     }
                                 }
-                            } else if let Err(e) = parse_packet(&text) {
+                            } else if let Err(e) = parse_packet(text) {
                                 error!("Error parsing message: {:#?}", e);
                             }
                         } else {
