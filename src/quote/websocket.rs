@@ -159,19 +159,19 @@ impl<'a> QuoteSocket<'a> {
 
         match payload {
             SocketMessageType::SocketServerInfo(server_info) => {
-                info!("{:#?}", server_info);
+                info!("Received SocketServerInfo: {:#?}", server_info);
             }
             SocketMessageType::SocketMessage(quote_msg) => match quote_msg.message_type.as_str() {
                 "qsd" => {
                     quote_msg.payload.par_iter().for_each(|p| match p {
-                        QuotePayloadType::String(s) => debug!("quote session: {}", s),
+                        QuotePayloadType::String(s) => debug!("Received quote session ID: {}", s),
                         QuotePayloadType::QuotePayload(d) => {
-                            info!("quote data: {:#?}", d);
+                            info!("Received quote data: {:#?}", d);
                         }
                     });
                 }
                 "quote_completed" => {
-                    info!("{:#?}", quote_msg);
+                    info!("Received quote completed message: {:#?}", quote_msg);
                 }
                 _ => {}
             },

@@ -1,4 +1,5 @@
 use reqwest::header::{HeaderMap, HeaderValue};
+use std::fmt;
 
 pub mod chart;
 pub mod client;
@@ -28,8 +29,6 @@ macro_rules! payload {
         payload_vec
     }};
 }
-
-use std::fmt;
 
 #[derive(Debug)]
 pub enum Timezone {
