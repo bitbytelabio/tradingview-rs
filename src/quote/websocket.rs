@@ -2,10 +2,10 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuoteEvent, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
-    socket::{DataServer, SocketMessage, SocketMessageType},
+    socket::{DataServer, Socket, SocketMessage, SocketMessageType, WEBSOCKET_HEADERS},
     utils::{format_packet, gen_session_id, parse_packet},
-    WEBSOCKET_HEADERS,
 };
+use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
@@ -13,9 +13,9 @@ use futures_util::{
 use rayon::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
-use std::{borrow::Cow, collections::VecDeque};
-use tokio::net::TcpStream;
+use std::{borrow::Cow, collections::VecDeque, sync::Arc};
 use tokio::time::{timeout, Duration};
+use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
@@ -279,6 +279,89 @@ impl<'a> QuoteSocket<'a> {
         self.auth_token = auth_token.to_string();
         self.send("set_auth_token", payload!(self.auth_token.clone()))
             .await?;
+        Ok(())
+    }
+}
+
+pub struct WebSocketsBuilder {
+    server: Option<DataServer>,
+    auth_token: Option<String>,
+    quote_fields: Option<Vec<String>>,
+}
+
+pub struct WebSockets {
+    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    read: Arc<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
+    server: DataServer,
+    quote_session_id: Option<String>,
+    quote_fields: Option<Vec<String>>,
+    auth_token: String,
+    symbols: Vec<String>,
+}
+
+impl WebSocketsBuilder {
+    pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
+        self.auth_token = Some(auth_token);
+        self
+    }
+
+    pub fn quote_fields(&mut self, quote_fields: Vec<String>) -> &mut Self {
+        self.quote_fields = Some(quote_fields);
+        self
+    }
+
+    pub async fn subscribe(&self) -> Result<WebSockets> {
+        let auth_token = self
+            .auth_token
+            .clone()
+            .unwrap_or("unauthorized_user_token".to_string());
+
+        let server = self.server.clone().unwrap_or_default();
+        #[allow(unused_mut)]
+        let (mut write_stream, read_stream) = WebSockets::connect(&server, &auth_token).await?;
+        #[allow(unused_mut)]
+        let mut write: Arc<
+            Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>,
+        > = Arc::from(Mutex::new(write_stream));
+
+        let read = Arc::from(read_stream);
+
+        Ok(WebSockets {
+            write,
+            read,
+            server,
+            quote_session_id: None,
+            quote_fields: self.quote_fields.clone(),
+            auth_token,
+            symbols: vec![],
+        })
+    }
+}
+
+impl WebSockets {
+    pub fn new() -> WebSocketsBuilder {
+        WebSocketsBuilder {
+            auth_token: None,
+            server: None,
+            quote_fields: None,
+        }
+    }
+}
+
+#[async_trait]
+impl Socket for WebSockets {
+    async fn event_loop(&mut self) {}
+
+    async fn handle_message(&mut self, message: Value) -> Result<()> {
+        Ok(())
+    }
+    async fn handle_error(&mut self, message: Value) -> Result<()> {
+        Ok(())
+    }
+    async fn handle_data(&mut self, payload: Value) -> Result<()> {
+        Ok(())
+    }
+    async fn handle_loaded(&mut self, payload: Value) -> Result<()> {
         Ok(())
     }
 }

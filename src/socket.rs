@@ -1,9 +1,12 @@
-use crate::{payload, prelude::*, utils::format_packet, WEBSOCKET_HEADERS};
+use std::default;
+
+use crate::{payload, prelude::*, utils::format_packet, UA};
 use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{
@@ -16,6 +19,15 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 use url::Url;
+
+lazy_static::lazy_static! {
+    pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
+        let mut headers = HeaderMap::new();
+        headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
+        headers.insert("User-Agent", UA.parse().unwrap());
+        headers
+    };
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SocketMessage {
@@ -64,7 +76,9 @@ pub enum SocketMessageType<T> {
     SocketMessage(T),
 }
 
+#[derive(Default, Clone)]
 pub enum DataServer {
+    #[default]
     Data,
     ProData,
     WidgetData,
@@ -92,8 +106,8 @@ pub enum ConnectionStatus {
 #[async_trait]
 pub trait Socket {
     async fn connect(
-        server: DataServer,
-        auth_token: Option<String>,
+        server: &DataServer,
+        auth_token: &str,
     ) -> Result<(
         SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
         SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
@@ -108,18 +122,10 @@ pub trait Socket {
 
         let (socket, _response) = connect_async(request).await?;
 
-        // let ws = socket.;
-
         let (mut write, read) = socket.split();
 
         write
-            .send(
-                SocketMessage::new(
-                    "set_auth_token",
-                    payload!(auth_token.unwrap_or("unauthorized_user_token".to_string())),
-                )
-                .to_message()?,
-            )
+            .send(SocketMessage::new("set_auth_token", payload!(auth_token)).to_message()?)
             .await?;
 
         Ok((write, read))
@@ -142,6 +148,8 @@ pub trait Socket {
         write.send(ping.clone()).await?;
         Ok(())
     }
+
+    async fn event_loop(&mut self);
 
     async fn handle_message(&mut self, message: Value) -> Result<()>;
     async fn handle_error(&mut self, message: Value) -> Result<()>;
