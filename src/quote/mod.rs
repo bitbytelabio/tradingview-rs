@@ -1,58 +1,58 @@
 pub mod websocket;
+use serde::{Deserialize, Serialize};
+
 use crate::error::TradingViewError;
-use lazy_static::lazy_static;
-lazy_static! {
-    pub static ref ALL_QUOTE_FIELDS: Vec<String> = vec![
-        "base-currency-logoid".to_string(),
-        "ch".to_string(),
-        "chp".to_string(),
-        "currency-logoid".to_string(),
-        "currency_code".to_string(),
-        "current_session".to_string(),
-        "description".to_string(),
-        "exchange".to_string(),
-        "format".to_string(),
-        "fractional".to_string(),
-        "is_tradable".to_string(),
-        "language".to_string(),
-        "local_description".to_string(),
-        "logoid".to_string(),
-        "lp".to_string(),
-        "lp_time".to_string(),
-        "minmov".to_string(),
-        "minmove2".to_string(),
-        "original_name".to_string(),
-        "pricescale".to_string(),
-        "pro_name".to_string(),
-        "short_name".to_string(),
-        "type".to_string(),
-        "update_mode".to_string(),
-        "volume".to_string(),
-        "ask".to_string(),
-        "bid".to_string(),
-        "fundamentals".to_string(),
-        "high_price".to_string(),
-        "low_price".to_string(),
-        "open_price".to_string(),
-        "prev_close_price".to_string(),
-        "rch".to_string(),
-        "rchp".to_string(),
-        "rtc".to_string(),
-        "rtc_time".to_string(),
-        "status".to_string(),
-        "industry".to_string(),
-        "basic_eps_net_income".to_string(),
-        "beta_1_year".to_string(),
-        "market_cap_basic".to_string(),
-        "earnings_per_share_basic_ttm".to_string(),
-        "price_earnings_ttm".to_string(),
-        "sector".to_string(),
-        "dividends_yield".to_string(),
-        "timezone".to_string(),
-        "country_code".to_string(),
-        "provider_id".to_string(),
-        "bid_size".to_string(),
-        "ask_size".to_string(),
+
+lazy_static::lazy_static! {
+    pub static ref ALL_QUOTE_FIELDS: Vec<&'static str> = vec![
+        "lp",
+        "lp_time",
+        "ask",
+        "bid",
+        "bid_size",
+        "ask_size",
+        "ch",
+        "chp",
+        "volume",
+        "high_price",
+        "low_price",
+        "open_price",
+        "prev_close_price",
+        "currency_code",
+        "current_session",
+        "description",
+        "exchange",
+        "format",
+        "fractional",
+        "is_tradable",
+        "language",
+        "local_description",
+        "logoid",
+        "minmov",
+        "minmove2",
+        "original_name",
+        "pricescale",
+        "pro_name",
+        "short_name",
+        "type",
+        "update_mode",
+        "fundamentals",
+        "rch",
+        "rchp",
+        "rtc",
+        "rtc_time",
+        "status",
+        "industry",
+        "basic_eps_net_income",
+        "beta_1_year",
+        "market_cap_basic",
+        "earnings_per_share_basic_ttm",
+        "price_earnings_ttm",
+        "sector",
+        "dividends_yield",
+        "timezone",
+        "country_code",
+        "provider_id",
     ];
 }
 
@@ -61,4 +61,67 @@ pub enum QuoteEvent {
     Data,
     Loaded,
     Error(TradingViewError),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct QuoteSocketMessage {
+    #[serde(rename = "m")]
+    pub message_type: String,
+    #[serde(rename = "p")]
+    pub payload: Vec<QuotePayloadType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum QuotePayloadType {
+    String(String),
+    QuotePayload(QuotePayload),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct QuotePayload {
+    #[serde(rename = "n")]
+    pub name: String,
+    #[serde(rename = "s")]
+    pub status: String,
+    #[serde(rename = "v")]
+    pub value: QuoteValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct QuoteValue {
+    #[serde(default)]
+    pub ask: f64,
+    #[serde(default)]
+    pub ask_size: f64,
+    #[serde(default)]
+    pub bid: f64,
+    #[serde(default)]
+    pub bid_size: f64,
+    #[serde(default, rename = "ch")]
+    pub price_change: f64,
+    #[serde(default, rename = "chp")]
+    pub price_change_percent: f64,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub exchange: Option<String>,
+    #[serde(default)]
+    pub short_name: Option<String>,
+    #[serde(default)]
+    pub spread: f64,
+    #[serde(default)]
+    pub open_price: f64,
+    #[serde(default)]
+    pub high_price: f64,
+    #[serde(default)]
+    pub low_price: f64,
+    #[serde(default)]
+    pub prev_close_price: f64,
+    #[serde(default, rename = "lp")]
+    pub price: f64,
+    #[serde(default, rename = "lp_time")]
+    pub price_time: i64,
+    #[serde(default)]
+    pub volume: f64,
 }

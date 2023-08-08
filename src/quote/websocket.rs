@@ -16,6 +16,8 @@ use serde_json::Value;
 use std::{borrow::Cow, collections::VecDeque};
 
 use tokio::net::TcpStream;
+use tokio::time::{timeout, Duration};
+
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
@@ -159,26 +161,52 @@ impl<'a> QuoteSocket<'a> {
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
-            match message_type {
-                QUOTE_DATA_EVENT => {
-                    if let Some(payload) = message
-                        .get(MESSAGE_PAYLOAD_KEY)
-                        .and_then(|p| p.get(PAYLOAD_KEY))
-                    {
-                        self.handle_data_event(Cow::Borrowed(payload))?;
-                    }
+        let payload: crate::socket::SocketMessageType<super::QuoteSocketMessage> =
+            match serde_json::from_value(message.clone()) {
+                Ok(p) => p,
+                Err(e) => {
+                    error!("Error parsing quote data: {:#?}", e);
+                    error!("payload: {:#?}", &message);
+                    return Ok(());
                 }
-                QUOTE_LOADED_EVENT => {
-                    self.handle_loaded_event(Cow::Borrowed(&message))?;
-                }
-                ERROR_EVENT => {
-                    self.handle_error_event(Cow::Borrowed(&message))?;
-                }
-                _ => {}
+            };
+        match payload {
+            crate::socket::SocketMessageType::SocketServerInfo(server) => info!(server.via),
+            crate::socket::SocketMessageType::SocketMessage(data) => {
+                info!("data: {:#?}", &data);
             }
         }
         Ok(())
+        // if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
+        //     match message_type {
+        //         QUOTE_DATA_EVENT => {
+        //             // debug!("data: {:#?}", &message);
+        //             let payload: super::QuoteMessage = match serde_json::from_value(message.clone())
+        //             {
+        //                 Ok(p) => p,
+        //                 Err(e) => {
+        //                     error!("Error parsing quote data: {:#?}", e);
+        //                     return Ok(());
+        //                 }
+        //             };
+        //             debug!("payload: {:#?}", &payload);
+        //             // if let Some(payload) = message
+        //             //     .get(MESSAGE_PAYLOAD_KEY)
+        //             //     .and_then(|p| p.get(PAYLOAD_KEY))
+        //             // {
+        //             //     self.handle_data_event(Cow::Borrowed(payload))?;
+        //             // }
+        //         }
+        //         QUOTE_LOADED_EVENT => {
+        //             self.handle_loaded_event(Cow::Borrowed(&message))?;
+        //         }
+        //         ERROR_EVENT => {
+        //             self.handle_error_event(Cow::Borrowed(&message))?;
+        //         }
+        //         _ => {}
+        //     }
+        // }
+        // Ok(())
     }
 
     fn handle_data_event(&mut self, payload: Cow<'_, Value>) -> Result<()> {
@@ -216,44 +244,47 @@ impl<'a> QuoteSocket<'a> {
     }
 
     pub async fn event_loop(&mut self) {
-        while let Some(result) = self.read.next().await {
-            match result {
-                Ok(message) => {
-                    let message_str = match &message {
-                        Message::Text(text) => text,
-                        _ => {
-                            warn!("Received non-text message: {:?}", message);
-                            continue;
-                        }
-                    };
-                    if let Ok(values) = parse_packet(message_str) {
-                        for value in values {
-                            match value {
-                                Value::Number(_) => self.handle_ping(&message).await,
-                                Value::Object(_) => {
-                                    if let Err(e) = self.handle_message(value).await {
-                                        error!("Error handling message: {:#?}", e);
+        loop {
+            match timeout(Duration::from_secs(5), self.read.next()).await {
+                Ok(Some(result)) => match result {
+                    Ok(message) => {
+                        if let Message::Text(text) = &message {
+                            if let Ok(values) = parse_packet(&text) {
+                                for value in values {
+                                    match value {
+                                        Value::Number(_) => {
+                                            if let Err(e) = self.ping(&message).await {
+                                                error!("Error handling ping: {:#?}", e);
+                                            }
+                                        }
+                                        Value::Object(_) => {
+                                            if let Err(e) = self.handle_message(value).await {
+                                                error!("Error handling message: {:#?}", e);
+                                            }
+                                        }
+                                        _ => (),
                                     }
                                 }
-                                _ => (),
+                            } else if let Err(e) = parse_packet(&text) {
+                                error!("Error parsing message: {:#?}", e);
                             }
+                        } else {
+                            warn!("Received non-text message: {:?}", message);
                         }
-                    } else {
-                        error!("Error parsing message: {:?}", message);
                     }
+                    Err(e) => {
+                        error!("Error reading message: {:#?}", e);
+                        break;
+                    }
+                },
+                Ok(None) => {
+                    // Connection closed
+                    break;
                 }
                 Err(e) => {
                     error!("Error reading message: {:#?}", e);
+                    break;
                 }
-            }
-        }
-    }
-
-    async fn handle_ping(&mut self, message: &Message) {
-        match self.ping(message).await {
-            Ok(()) => debug!("ping sent"),
-            Err(e) => {
-                warn!("ping failed with: {:#?}", e);
             }
         }
     }
