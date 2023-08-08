@@ -20,15 +20,15 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut binding = QuoteSocket::new(DataServer::ProData, event_handler);
+    let mut binding = QuoteSocket::new(DataServer::Data, event_handler);
     let mut socket = binding.auth_token(user.auth_token).build().await.unwrap();
 
     socket
         .quote_add_symbols(vec![
             "BINANCE:BTCUSDT".to_string(),
-            "BINANCE:ETHUSDT".to_string(),
-            "BITSTAMP:ETHUSD".to_string(),
-            "NASDAQ:TSLA".to_string(),
+            // "BINANCE:ETHUSDT".to_string(),
+            // "BITSTAMP:ETHUSD".to_string(),
+            // "NASDAQ:TSLA".to_string(),
         ])
         .await
         .unwrap();

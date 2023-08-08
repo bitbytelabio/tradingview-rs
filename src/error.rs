@@ -56,14 +56,16 @@ pub enum Error {
 
 #[derive(Debug, Error)]
 pub enum TradingViewError {
-    #[error("Series error")]
+    #[error("series_error")]
     SeriesError,
-    #[error("Symbol error")]
+    #[error("symbol_error")]
     SymbolError,
-    #[error("Critical error")]
+    #[error("critical_error")]
     CriticalError,
-    #[error("Quote Data error")]
-    QuoteDataError,
+    #[error("protocol_error")]
+    ProtocolError,
+    #[error("error")]
+    QuoteDataStatusError,
 }
 
 #[derive(Debug, Error)]

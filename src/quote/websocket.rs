@@ -2,15 +2,16 @@ use crate::{
     error::TradingViewError,
     payload,
     prelude::*,
-    quote::{QuoteEvent, ALL_QUOTE_FIELDS},
-    socket::{DataServer, SocketMessage},
+    quote::{QuoteEvent, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
+    socket::{DataServer, SocketMessage, SocketMessageType},
     utils::{format_packet, gen_session_id, parse_packet},
-    ERROR_EVENT, MESSAGE_PAYLOAD_KEY, MESSAGE_TYPE_KEY, WEBSOCKET_HEADERS,
+    WEBSOCKET_HEADERS,
 };
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+use lazy_static::lazy_static;
 use serde::Serialize;
 use serde_json::Value;
 use std::{borrow::Cow, collections::VecDeque};
@@ -26,13 +27,6 @@ use tokio_tungstenite::{
 
 use tracing::{debug, error, info, warn};
 use url::Url;
-
-const PAYLOAD_KEY: usize = 1;
-const STATUS_KEY: &str = "s";
-const OK_STATUS: &str = "ok";
-const ERROR_STATUS: &str = "error";
-const QUOTE_DATA_EVENT: &str = "qsd";
-const QUOTE_LOADED_EVENT: &str = "quote_completed";
 
 pub struct QuoteSocket<'a> {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
@@ -161,87 +155,66 @@ impl<'a> QuoteSocket<'a> {
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        let payload: crate::socket::SocketMessageType<super::QuoteSocketMessage> =
-            match serde_json::from_value(message.clone()) {
-                Ok(p) => p,
-                Err(e) => {
-                    error!("Error parsing quote data: {:#?}", e);
-                    error!("payload: {:#?}", &message);
-                    return Ok(());
-                }
-            };
+        let payload: SocketMessageType<QuoteSocketMessage> = match serde_json::from_value(message) {
+            Ok(p) => p,
+            Err(e) => {
+                error!("Error parsing quote data: {:#?}", e);
+                return Err(Error::ParseError(e));
+            }
+        };
         match payload {
-            crate::socket::SocketMessageType::SocketServerInfo(server) => info!(server.via),
-            crate::socket::SocketMessageType::SocketMessage(data) => {
-                info!("data: {:#?}", &data);
+            SocketMessageType::SocketServerInfo(server_info) => {
+                info!("{:#?}", server_info);
             }
-        }
-        Ok(())
-        // if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
-        //     match message_type {
-        //         QUOTE_DATA_EVENT => {
-        //             // debug!("data: {:#?}", &message);
-        //             let payload: super::QuoteMessage = match serde_json::from_value(message.clone())
-        //             {
-        //                 Ok(p) => p,
-        //                 Err(e) => {
-        //                     error!("Error parsing quote data: {:#?}", e);
-        //                     return Ok(());
-        //                 }
-        //             };
-        //             debug!("payload: {:#?}", &payload);
-        //             // if let Some(payload) = message
-        //             //     .get(MESSAGE_PAYLOAD_KEY)
-        //             //     .and_then(|p| p.get(PAYLOAD_KEY))
-        //             // {
-        //             //     self.handle_data_event(Cow::Borrowed(payload))?;
-        //             // }
-        //         }
-        //         QUOTE_LOADED_EVENT => {
-        //             self.handle_loaded_event(Cow::Borrowed(&message))?;
-        //         }
-        //         ERROR_EVENT => {
-        //             self.handle_error_event(Cow::Borrowed(&message))?;
-        //         }
-        //         _ => {}
-        //     }
-        // }
-        // Ok(())
-    }
-
-    fn handle_data_event(&mut self, payload: Cow<'_, Value>) -> Result<()> {
-        if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
-            match status {
-                OK_STATUS => {
-                    (self.handler)(QuoteEvent::Data, payload.clone().into_owned())?;
-                    return Ok(());
+            SocketMessageType::SocketMessage(quote_msg) => {
+                if quote_msg.message_type == "qsd".to_string() {
+                    for p in quote_msg.payload {
+                        if let QuotePayloadType::QuotePayload(quote_payload) = p {
+                            info!("{:#?}", quote_payload);
+                        }
+                    }
+                    // info!("{:#?}", quote_msg);
+                } else if quote_msg.message_type == "quote_completed".to_string() {
+                    info!("{:#?}", quote_msg);
                 }
-                ERROR_STATUS => {
-                    error!("failed to receive quote data: {:?}", payload);
-                    (self.handler)(
-                        QuoteEvent::Error(TradingViewError::QuoteDataError),
-                        payload.into_owned(),
-                    )?;
-                    return Ok(());
-                }
-                _ => {}
             }
         }
         Ok(())
     }
 
-    fn handle_loaded_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
-        (self.handler)(QuoteEvent::Loaded, message.into_owned())?;
-        Ok(())
-    }
+    // fn handle_data_event(&mut self, payload: Cow<'_, Value>) -> Result<()> {
+    //     if let Some(status) = payload.get(STATUS_KEY).and_then(|s| s.as_str()) {
+    //         match status {
+    //             OK_STATUS => {
+    //                 (self.handler)(QuoteEvent::Data, payload.clone().into_owned())?;
+    //                 return Ok(());
+    //             }
+    //             ERROR_STATUS => {
+    //                 error!("failed to receive quote data: {:?}", payload);
+    //                 (self.handler)(
+    //                     QuoteEvent::Error(TradingViewError::QuoteDataStatusError),
+    //                     payload.into_owned(),
+    //                 )?;
+    //                 return Ok(());
+    //             }
+    //             _ => {}
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
-    fn handle_error_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
-        (self.handler)(
-            QuoteEvent::Error(TradingViewError::CriticalError),
-            message.into_owned(),
-        )?;
-        Ok(())
-    }
+    // fn handle_loaded_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
+    //     (self.handler)(QuoteEvent::Loaded, message.into_owned())?;
+    //     Ok(())
+    // }
+
+    // fn handle_error_event(&mut self, message: Cow<'_, Value>) -> Result<()> {
+    //     (self.handler)(
+    //         QuoteEvent::Error(TradingViewError::CriticalError),
+    //         message.into_owned(),
+    //     )?;
+    //     Ok(())
+    // }
 
     pub async fn event_loop(&mut self) {
         loop {
