@@ -161,26 +161,52 @@ impl<'a> QuoteSocket<'a> {
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
-            match message_type {
-                QUOTE_DATA_EVENT => {
-                    if let Some(payload) = message
-                        .get(MESSAGE_PAYLOAD_KEY)
-                        .and_then(|p| p.get(PAYLOAD_KEY))
-                    {
-                        self.handle_data_event(Cow::Borrowed(payload))?;
-                    }
+        let payload: crate::socket::SocketMessageType<super::QuoteMessage> =
+            match serde_json::from_value(message.clone()) {
+                Ok(p) => p,
+                Err(e) => {
+                    error!("Error parsing quote data: {:#?}", e);
+                    error!("payload: {:#?}", &message);
+                    return Ok(());
                 }
-                QUOTE_LOADED_EVENT => {
-                    self.handle_loaded_event(Cow::Borrowed(&message))?;
-                }
-                ERROR_EVENT => {
-                    self.handle_error_event(Cow::Borrowed(&message))?;
-                }
-                _ => {}
+            };
+        match payload {
+            crate::socket::SocketMessageType::SocketServerInfo(server) => info!(server.via),
+            crate::socket::SocketMessageType::SocketMessage(data) => {
+                info!("data: {:#?}", &data);
             }
         }
         Ok(())
+        // if let Some(message_type) = message.get(MESSAGE_TYPE_KEY).and_then(|m| m.as_str()) {
+        //     match message_type {
+        //         QUOTE_DATA_EVENT => {
+        //             // debug!("data: {:#?}", &message);
+        //             let payload: super::QuoteMessage = match serde_json::from_value(message.clone())
+        //             {
+        //                 Ok(p) => p,
+        //                 Err(e) => {
+        //                     error!("Error parsing quote data: {:#?}", e);
+        //                     return Ok(());
+        //                 }
+        //             };
+        //             debug!("payload: {:#?}", &payload);
+        //             // if let Some(payload) = message
+        //             //     .get(MESSAGE_PAYLOAD_KEY)
+        //             //     .and_then(|p| p.get(PAYLOAD_KEY))
+        //             // {
+        //             //     self.handle_data_event(Cow::Borrowed(payload))?;
+        //             // }
+        //         }
+        //         QUOTE_LOADED_EVENT => {
+        //             self.handle_loaded_event(Cow::Borrowed(&message))?;
+        //         }
+        //         ERROR_EVENT => {
+        //             self.handle_error_event(Cow::Borrowed(&message))?;
+        //         }
+        //         _ => {}
+        //     }
+        // }
+        // Ok(())
     }
 
     fn handle_data_event(&mut self, payload: Cow<'_, Value>) -> Result<()> {

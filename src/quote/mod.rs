@@ -1,12 +1,23 @@
 pub mod websocket;
+use serde::{Deserialize, Serialize};
+
 use crate::error::TradingViewError;
 
 lazy_static::lazy_static! {
     pub static ref ALL_QUOTE_FIELDS: Vec<&'static str> = vec![
-        "base-currency-logoid",
+        "lp",
+        "lp_time",
+        "ask",
+        "bid",
+        "bid_size",
+        "ask_size",
         "ch",
         "chp",
-        "currency-logoid",
+        "volume",
+        "high_price",
+        "low_price",
+        "open_price",
+        "prev_close_price",
         "currency_code",
         "current_session",
         "description",
@@ -17,8 +28,6 @@ lazy_static::lazy_static! {
         "language",
         "local_description",
         "logoid",
-        "lp",
-        "lp_time",
         "minmov",
         "minmove2",
         "original_name",
@@ -27,14 +36,7 @@ lazy_static::lazy_static! {
         "short_name",
         "type",
         "update_mode",
-        "volume",
-        "ask",
-        "bid",
         "fundamentals",
-        "high_price",
-        "low_price",
-        "open_price",
-        "prev_close_price",
         "rch",
         "rchp",
         "rtc",
@@ -51,8 +53,6 @@ lazy_static::lazy_static! {
         "timezone",
         "country_code",
         "provider_id",
-        "bid_size",
-        "ask_size",
     ];
 }
 
@@ -61,4 +61,65 @@ pub enum QuoteEvent {
     Data,
     Loaded,
     Error(TradingViewError),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct QuoteMessage {
+    pub m: String,
+    pub p: Vec<QuotePayloadType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum QuotePayloadType {
+    String(String),
+    QuotePayload(QuotePayload),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct QuotePayload {
+    #[serde(rename = "n")]
+    pub name: String,
+    #[serde(rename = "s")]
+    pub status: String,
+    #[serde(rename = "v")]
+    pub value: QuoteValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct QuoteValue {
+    #[serde(default)]
+    pub ask: f64,
+    #[serde(default)]
+    pub ask_size: f64,
+    #[serde(default)]
+    pub bid: f64,
+    #[serde(default)]
+    pub bid_size: f64,
+    #[serde(default, rename = "ch")]
+    pub price_change: f64,
+    #[serde(default, rename = "chp")]
+    pub price_change_percent: f64,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub exchange: Option<String>,
+    #[serde(default)]
+    pub short_name: Option<String>,
+    #[serde(default)]
+    pub spread: f64,
+    #[serde(default)]
+    pub open_price: f64,
+    #[serde(default)]
+    pub high_price: f64,
+    #[serde(default)]
+    pub low_price: f64,
+    #[serde(default)]
+    pub prev_close_price: f64,
+    #[serde(default, rename = "lp")]
+    pub price: f64,
+    #[serde(default, rename = "lp_time")]
+    pub price_time: i64,
+    #[serde(default)]
+    pub volume: f64,
 }

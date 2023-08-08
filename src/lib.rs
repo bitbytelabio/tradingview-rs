@@ -1,8 +1,5 @@
 use reqwest::header::{HeaderMap, HeaderValue};
 
-extern crate google_authenticator;
-extern crate regex;
-
 pub mod chart;
 pub mod client;
 pub mod error;
