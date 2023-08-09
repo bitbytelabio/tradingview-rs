@@ -205,18 +205,20 @@ impl Socket for WebSocket {
                                     for value in values {
                                         match value {
                                             Value::Number(_) => {
-                                                trace!("Handling ping message: {:?}", message);
+                                                trace!("handling ping message: {:?}", message);
                                                 if let Err(e) = self.ping(&message).await {
                                                     error!("Error handling ping: {:#?}", e);
                                                 }
                                             }
                                             Value::Object(_) => {
-                                                trace!("Handling message: {:?}", value);
+                                                trace!("handling message: {:?}", value);
                                                 if let Err(e) = self.handle_message(value).await {
                                                     error!("Error handling message: {:#?}", e);
                                                 }
                                             }
-                                            _ => (),
+                                            _ => {
+                                                trace!("unhandled message: {:?}", value);
+                                            },
                                         }
                                     }
                                 } else if let Err(e) = parse_packet(text) {
