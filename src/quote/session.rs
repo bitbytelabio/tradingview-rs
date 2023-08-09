@@ -229,8 +229,8 @@ impl Socket for WebSocket {
                             }
                         }
                         Ok(Some(Err(e))) => {
-                            error!("Error reading message: {:#?}", e);
-                            break;
+                            error!("error reading message: {:#?}", e);
+                            continue;
                         }
                         Ok(None) => {
                             error!("No message received, connection closed");
@@ -273,16 +273,6 @@ impl Socket for WebSocket {
             }
         }
 
-        Ok(())
-    }
-
-    async fn handle_error(&mut self, _message: Value) -> Result<()> {
-        Ok(())
-    }
-    async fn handle_data(&mut self, _payload: Value) -> Result<()> {
-        Ok(())
-    }
-    async fn handle_loaded(&mut self, _payload: Value) -> Result<()> {
         Ok(())
     }
 }

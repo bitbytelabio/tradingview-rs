@@ -1,6 +1,6 @@
 use std::env;
 
-use tracing::info;
+use tracing::{error, info};
 use tradingview_rs::error::TradingViewError;
 use tradingview_rs::quote::{
     session::{QuoteCallbackFn, WebSocket},
@@ -45,6 +45,7 @@ async fn main() {
             "BINANCE:ETHUSDT",
             "BITSTAMP:ETHUSD",
             "NASDAQ:TSLA",
+            "BINANCE:B",
         ])
         .await
         .unwrap();
@@ -64,6 +65,6 @@ fn on_loaded(msg: QuoteSocketMessage) -> Result<()> {
 }
 
 fn on_error(err: TradingViewError) -> Result<()> {
-    info!("Error: {:#?}", err);
+    error!("Error: {:#?}", err);
     Ok(())
 }
