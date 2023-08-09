@@ -1,7 +1,11 @@
 use std::env;
 
 use tracing::info;
-use tradingview_rs::quote::{session::WebSocket, QuotePayload, QuoteSocketEvent};
+use tradingview_rs::error::TradingViewError;
+use tradingview_rs::quote::{
+    session::{QuoteCallbackFn, WebSocket},
+    QuotePayload, QuoteSocketMessage,
+};
 use tradingview_rs::socket::DataServer;
 use tradingview_rs::user::User;
 type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
@@ -19,10 +23,16 @@ async fn main() {
         .await
         .unwrap();
 
+    let handlers = QuoteCallbackFn {
+        data: Box::new(on_data),
+        loaded: Box::new(on_loaded),
+        error: Box::new(on_error),
+    };
+
     let mut socket = WebSocket::new()
         .server(DataServer::ProData)
         .auth_token(user.auth_token)
-        .connect(event_handler)
+        .connect(handlers)
         .await
         .unwrap();
 
@@ -42,19 +52,17 @@ async fn main() {
     socket.subscribe().await;
 }
 
-fn event_handler(event: QuoteSocketEvent, data: QuotePayload) -> Result<()> {
-    match event {
-        QuoteSocketEvent::Data => {
-            // debug!("data: {:#?}", &data);
-            // let data2 = data.get("v").unwrap();
-            // let quote: QuoteValue = serde_json::from_value(data2.clone()).unwrap();
-            // info!("quote: {:#?}", quote);
-            info!("Data: {:#?}", data);
-        }
-        QuoteSocketEvent::Loaded => {
-            info!("loaded: {:#?}", data);
-        }
-        QuoteSocketEvent::Error(_) => todo!(),
-    }
+fn on_data(data: QuotePayload) -> Result<()> {
+    info!("Data: {:#?}", data);
+    Ok(())
+}
+
+fn on_loaded(msg: QuoteSocketMessage) -> Result<()> {
+    info!("Data: {:#?}", msg);
+    Ok(())
+}
+
+fn on_error(err: TradingViewError) -> Result<()> {
+    info!("Error: {:#?}", err);
     Ok(())
 }

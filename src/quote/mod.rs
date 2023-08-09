@@ -1,8 +1,6 @@
 pub mod session;
 use serde::{Deserialize, Serialize};
 
-use crate::error::TradingViewError;
-
 lazy_static::lazy_static! {
     pub static ref ALL_QUOTE_FIELDS: Vec<&'static str> = vec![
         "lp",
@@ -54,13 +52,6 @@ lazy_static::lazy_static! {
         "country_code",
         "provider_id",
     ];
-}
-
-#[derive(Debug)]
-pub enum QuoteSocketEvent {
-    Data,
-    Loaded,
-    Error(TradingViewError),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

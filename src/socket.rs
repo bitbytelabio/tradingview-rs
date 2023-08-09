@@ -1,5 +1,3 @@
-
-
 use crate::{payload, prelude::*, utils::format_packet, UA};
 use async_trait::async_trait;
 use futures_util::{
@@ -9,9 +7,7 @@ use futures_util::{
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::{
-    net::TcpStream,
-};
+use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
