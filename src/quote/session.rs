@@ -186,11 +186,11 @@ impl Socket for WebSocket {
     }
 
     async fn event_loop(&mut self) {
-        trace!("Starting event loop iteration");
+        debug!("Starting event loop");
         let read = self.read.clone();
         let mut read_guard = read.write().await;
-        debug!("Waiting for next message");
         while let Some(next_message) = read_guard.next().await {
+            debug!("Waiting for next message");
             match next_message {
                 Ok(message) => {
                     if let Message::Text(text) = &message {
@@ -227,6 +227,7 @@ impl Socket for WebSocket {
                 }
             }
         }
+        debug!("Event loop finished");
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
