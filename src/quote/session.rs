@@ -19,7 +19,7 @@ use tokio::{
     time::{timeout, Duration},
 };
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -187,8 +187,12 @@ impl Socket for WebSocket {
 
     async fn event_loop(&mut self) {
         loop {
+            trace!("Starting event loop iteration");
+
             let read = self.read.clone();
             let mut read_guard = read.write().await;
+
+            debug!("Waiting for next message");
             let next_message = read_guard.next();
 
             tokio::select! {
@@ -196,15 +200,18 @@ impl Socket for WebSocket {
                     match result {
                         Ok(Some(Ok(message))) => {
                             if let Message::Text(text) = &message {
+                                trace!("Parsing message: {:?}", text);
                                 if let Ok(values) = parse_packet(text) {
                                     for value in values {
                                         match value {
                                             Value::Number(_) => {
+                                                trace!("Handling ping message: {:?}", message);
                                                 if let Err(e) = self.ping(&message).await {
                                                     error!("Error handling ping: {:#?}", e);
                                                 }
                                             }
                                             Value::Object(_) => {
+                                                trace!("Handling message: {:?}", value);
                                                 if let Err(e) = self.handle_message(value).await {
                                                     error!("Error handling message: {:#?}", e);
                                                 }
@@ -224,7 +231,7 @@ impl Socket for WebSocket {
                             break;
                         }
                         Ok(None) => {
-                            // Connection closed
+                            error!("No message received, connection closed");
                             break;
                         }
                         Err(e) => {
@@ -235,17 +242,15 @@ impl Socket for WebSocket {
                 }
                 _ = tokio::time::sleep(Duration::from_secs(5)) => {
                     // Handle timeout
-                    // if let Err(e) = self.ping(&Message::Ping(vec![])).await {
-                    //     error!("Error handling ping: {:#?}", e);
-                    // }
+                    error!("Timeout reading message, connection trailed off");
+                    break;
                 }
             }
         }
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        let payload: SocketMessageType<QuoteSocketMessage> =
-            serde_json::from_str(&message.to_string())?;
+        let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)?;
 
         match payload {
             SocketMessageType::SocketServerInfo(server_info) => {
