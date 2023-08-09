@@ -1,8 +1,7 @@
 use std::env;
 
-use serde_json::Value;
 use tracing::info;
-use tradingview_rs::quote::{session::WebSocket, QuoteSocketEvent};
+use tradingview_rs::quote::{session::WebSocket, QuotePayload, QuoteSocketEvent};
 use tradingview_rs::socket::DataServer;
 use tradingview_rs::user::User;
 type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
@@ -21,6 +20,7 @@ async fn main() {
         .unwrap();
 
     let mut socket = WebSocket::new()
+        .server(DataServer::ProData)
         .auth_token(user.auth_token)
         .connect(event_handler)
         .await
@@ -42,13 +42,14 @@ async fn main() {
     socket.subscribe().await;
 }
 
-fn event_handler(event: QuoteSocketEvent, data: Value) -> Result<()> {
+fn event_handler(event: QuoteSocketEvent, data: QuotePayload) -> Result<()> {
     match event {
         QuoteSocketEvent::Data => {
             // debug!("data: {:#?}", &data);
             // let data2 = data.get("v").unwrap();
             // let quote: QuoteValue = serde_json::from_value(data2.clone()).unwrap();
             // info!("quote: {:#?}", quote);
+            info!("Data: {:#?}", data);
         }
         QuoteSocketEvent::Loaded => {
             info!("loaded: {:#?}", data);

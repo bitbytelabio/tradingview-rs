@@ -1,7 +1,9 @@
 use crate::{
     payload,
     prelude::*,
-    quote::{QuotePayloadType, QuoteSocketEvent, QuoteSocketMessage, ALL_QUOTE_FIELDS},
+    quote::{
+        QuotePayload, QuotePayloadType, QuoteSocketEvent, QuoteSocketMessage, ALL_QUOTE_FIELDS,
+    },
     socket::{DataServer, Socket, SocketMessage, SocketMessageType},
     utils::{gen_session_id, parse_packet},
 };
@@ -13,26 +15,11 @@ use futures_util::{
 use rayon::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
-use std::{borrow::Cow, collections::VecDeque, sync::Arc, thread::JoinHandle};
+use std::{borrow::Cow, collections::VecDeque, rc::Rc, sync::Arc, thread::JoinHandle};
 use tokio::time::{timeout, Duration};
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 use tracing::{debug, error, info, warn};
-
-// pub struct QuoteSocket<'a> {
-//     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-//     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-//     quote_session_id: String,
-//     messages: VecDeque<Message>,
-//     auth_token: String,
-//     handler: Box<dyn FnMut(QuoteEvent, Value) -> Result<()> + 'a>,
-// }
-// pub struct QuoteSocketBuilder<'a> {
-//     server: DataServer,
-//     auth_token: Option<String>,
-//     quote_fields: Option<Vec<String>>,
-//     handler: Option<Box<dyn FnMut(QuoteEvent, Value) -> Result<()> + 'a>>,
-// }
 
 // impl<'a> QuoteSocketBuilder<'a> {
 //     pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
@@ -290,7 +277,7 @@ pub struct WebSocket {
     quote_session_id: String,
     quote_fields: Vec<Value>,
     auth_token: String,
-    callback_fn: Box<dyn FnMut(QuoteSocketEvent, Value) -> Result<()> + Send>,
+    callback_fn: Box<dyn FnMut(QuoteSocketEvent, QuotePayload) -> Result<()> + Send + Sync>,
 }
 
 impl WebSocketsBuilder {
@@ -300,6 +287,11 @@ impl WebSocketsBuilder {
             server: None,
             quote_fields: None,
         }
+    }
+
+    pub fn server(&mut self, server: DataServer) -> &mut Self {
+        self.server = Some(server);
+        self
     }
 
     pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
@@ -314,7 +306,7 @@ impl WebSocketsBuilder {
 
     pub async fn connect<T>(&self, callback: T) -> Result<WebSocket>
     where
-        T: FnMut(QuoteSocketEvent, Value) -> Result<()> + Send + 'static,
+        T: FnMut(QuoteSocketEvent, QuotePayload) -> Result<()> + Send + Sync + 'static,
     {
         let auth_token = self
             .auth_token
@@ -503,15 +495,16 @@ impl Socket for WebSocket {
             }
             SocketMessageType::SocketMessage(quote_msg) => match quote_msg.message_type.as_str() {
                 "qsd" => {
-                    quote_msg.payload.par_iter().for_each(|p| match p {
-                        QuotePayloadType::String(s) => debug!("Received quote session ID: {}", s),
-                        QuotePayloadType::QuotePayload(d) => {
-                            info!("Received quote data: {:#?}", d);
+                    if let Some(payload) = quote_msg.payload.get(1) {
+                        if let QuotePayloadType::QuotePayload(quote_payload) = payload {
+                            // info!("Received quote message: {:#?}", payload);
+                            (self.callback_fn)(QuoteSocketEvent::Data, quote_payload.clone())
+                                .unwrap();
                         }
-                    });
+                    }
                 }
                 "quote_completed" => {
-                    info!("Received quote completed message: {:#?}", quote_msg);
+                    // info!("Received quote completed message: {:#?}", quote_msg);
                 }
                 _ => {}
             },
