@@ -264,7 +264,7 @@ use tracing::{error, info, warn};
 //         Ok(())
 //     }
 // }
-
+#[derive(Default)]
 pub struct WebSocketsBuilder {
     server: Option<DataServer>,
     auth_token: Option<String>,
@@ -281,14 +281,6 @@ pub struct WebSocket {
 }
 
 impl WebSocketsBuilder {
-    pub fn new() -> Self {
-        Self {
-            auth_token: None,
-            server: None,
-            quote_fields: None,
-        }
-    }
-
     pub fn server(&mut self, server: DataServer) -> &mut Self {
         self.server = Some(server);
         self
@@ -350,7 +342,7 @@ impl WebSocketsBuilder {
 
 impl WebSocket {
     pub fn new() -> WebSocketsBuilder {
-        WebSocketsBuilder::new()
+        WebSocketsBuilder::default()
     }
 
     pub async fn create_session(&mut self) -> Result<()> {
