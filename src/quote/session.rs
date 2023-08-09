@@ -186,48 +186,51 @@ impl Socket for WebSocket {
     }
 
     async fn event_loop(&mut self) {
-        debug!("Starting event loop");
         let read = self.read.clone();
         let mut read_guard = read.write().await;
         while let Some(next_message) = read_guard.next().await {
             debug!("Waiting for next message");
             match next_message {
-                Ok(message) => {
-                    if let Message::Text(text) = &message {
-                        trace!("Parsing message: {:?}", text);
-                        if let Ok(values) = parse_packet(text) {
-                            for value in values {
-                                match value {
-                                    Value::Number(_) => {
-                                        trace!("handling ping message: {:?}", message);
-                                        if let Err(e) = self.ping(&message).await {
-                                            error!("Error handling ping: {:#?}", e);
+                Ok(message) => match &message {
+                    Message::Text(text) => {
+                        trace!("parsing message: {:?}", text);
+                        match parse_packet(text) {
+                            Ok(values) => {
+                                for value in values {
+                                    match value {
+                                        Value::Number(_) => {
+                                            trace!("handling ping message: {:?}", message);
+                                            if let Err(e) = self.ping(&message).await {
+                                                error!("Error handling ping: {:#?}", e);
+                                            }
                                         }
-                                    }
-                                    Value::Object(_) => {
-                                        trace!("handling message: {:?}", value);
-                                        if let Err(e) = self.handle_message(value).await {
-                                            error!("Error handling message: {:#?}", e);
+                                        Value::Object(_) => {
+                                            trace!("handling message: {:?}", value);
+                                            if let Err(e) = self.handle_message(value).await {
+                                                error!("Error handling message: {:#?}", e);
+                                            }
                                         }
-                                    }
-                                    _ => {
-                                        trace!("unhandled message: {:?}", value);
+                                        _ => {
+                                            trace!("unhandled message: {:?}", value);
+                                        }
                                     }
                                 }
                             }
-                        } else if let Err(e) = parse_packet(text) {
-                            error!("Error parsing message: {:#?}", e);
+                            Err(e) => {
+                                error!("Error parsing message: {:#?}", e);
+                                continue;
+                            }
                         }
-                    } else {
+                    }
+                    _ => {
                         warn!("received non-text message: {:?}", message);
                     }
-                }
+                },
                 Err(e) => {
                     error!("Error reading message: {:#?}", e);
                 }
             }
         }
-        debug!("Event loop finished");
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
