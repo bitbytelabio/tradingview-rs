@@ -11,7 +11,6 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use iso_currency::Currency;
-use protobuf::well_known_types::timestamp;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::{net::TcpStream, sync::RwLock};
@@ -89,6 +88,12 @@ impl WebSocket {
 
     pub async fn set_locale(&mut self) -> Result<()> {
         self.send("set_locale", &payload!("en", "US")).await?;
+        Ok(())
+    }
+
+    pub async fn set_data_quality(&mut self, data_quality: &str) -> Result<()> {
+        self.send("set_data_quality", &payload!(data_quality))
+            .await?;
         Ok(())
     }
 
@@ -232,6 +237,16 @@ impl WebSocket {
         self.send(
             "request_more_tickmarks",
             &payload!(self.chart_session_id.clone(), series_id, num),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn create_study(&mut self, study_id: &str, series_id: &str) -> Result<()> {
+        self.send(
+            "create_study",
+            &payload!(self.chart_session_id.clone(), study_id, series_id),
+            //TODO: add study options
         )
         .await?;
         Ok(())
