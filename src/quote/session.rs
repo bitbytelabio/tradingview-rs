@@ -13,11 +13,8 @@ use futures_util::{
 };
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::{net::TcpStream, time::Instant};
-use tokio::{
-    sync::RwLock,
-    time::{timeout, Duration},
-};
+use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 use tracing::{debug, error, info, trace, warn};
 
