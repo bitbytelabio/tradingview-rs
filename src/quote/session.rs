@@ -188,13 +188,14 @@ impl Socket for WebSocket {
     async fn event_loop(&mut self) {
         let read = self.read.clone();
         let mut read_guard = read.write().await;
-        while let Some(next_message) = read_guard.next().await {
+
+        loop {
             debug!("Waiting for next message");
-            match next_message {
-                Ok(message) => match &message {
+            match read_guard.next().await {
+                Some(Ok(message)) => match &message {
                     Message::Text(text) => {
                         trace!("parsing message: {:?}", text);
-                        match parse_packet(text) {
+                        match parse_packet(&text) {
                             Ok(values) => {
                                 for value in values {
                                     match value {
@@ -218,7 +219,6 @@ impl Socket for WebSocket {
                             }
                             Err(e) => {
                                 error!("Error parsing message: {:#?}", e);
-                                continue;
                             }
                         }
                     }
@@ -226,8 +226,12 @@ impl Socket for WebSocket {
                         warn!("received non-text message: {:?}", message);
                     }
                 },
-                Err(e) => {
+                Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
+                }
+                None => {
+                    debug!("No more messages to read");
+                    break;
                 }
             }
         }
