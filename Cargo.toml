@@ -38,6 +38,7 @@ futures-util = { version = "0.3", default-features = false, features = [
     "std",
 ] }
 async-trait = "^0.1"
+iso_currency = { version = "0.4", features = ["with-serde"] }
 rayon = { version = "^1" }
 
 [dev-dependencies]

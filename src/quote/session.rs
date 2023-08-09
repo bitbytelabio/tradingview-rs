@@ -197,7 +197,7 @@ impl Socket for WebSocket {
                 Some(Ok(message)) => match &message {
                     Message::Text(text) => {
                         trace!("parsing message: {:?}", text);
-                        match parse_packet(&text) {
+                        match parse_packet(text) {
                             Ok(values) => {
                                 for value in values {
                                     match value {

@@ -1,8 +1,7 @@
 use crate::{
-    error::TradingViewError,
     payload,
     prelude::*,
-    socket::{DataServer, Socket, SocketMessage, SocketMessageType},
+    socket::{DataServer, Socket, SocketMessage},
     utils::{gen_session_id, parse_packet},
     Interval, Timezone,
 };
@@ -15,7 +14,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -228,7 +227,7 @@ impl Socket for WebSocket {
                 Some(Ok(message)) => match &message {
                     Message::Text(text) => {
                         trace!("parsing message: {:?}", text);
-                        match parse_packet(&text) {
+                        match parse_packet(text) {
                             Ok(values) => {
                                 for value in values {
                                     match value {

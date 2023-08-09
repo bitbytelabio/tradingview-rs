@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::prelude::*;
 
+use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
@@ -96,15 +97,12 @@ pub fn clean_em_tags(text: &str) -> Result<String> {
     Ok(cleaned_text.to_string())
 }
 
-pub fn symbol_init(symbol: &str, currency: Option<String>) -> Result<String> {
+pub fn symbol_init(symbol: &str, currency: Option<Currency>) -> Result<String> {
     let mut symbol_init: HashMap<String, String> = HashMap::new();
     symbol_init.insert("adjustment".to_string(), "splits".to_string());
     symbol_init.insert("symbol".to_string(), symbol.to_string());
-    match currency {
-        Some(c) => {
-            symbol_init.insert("currency-id".to_string(), c);
-        }
-        None => {}
+    if let Some(c) = currency {
+        symbol_init.insert("currency-id".to_string(), c.to_string());
     }
     let symbol_init_json = serde_json::to_value(&symbol_init)?;
     Ok(format!("={}", symbol_init_json))
