@@ -182,6 +182,11 @@ impl Socket for WebSocket {
         Ok(())
     }
 
+    async fn close(&mut self) -> Result<()> {
+        self.write.write().await.close().await?;
+        Ok(())
+    }
+
     async fn event_loop(&mut self) {
         let read = self.read.clone();
         let mut read_guard = read.write().await;

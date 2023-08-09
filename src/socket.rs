@@ -127,6 +127,7 @@ pub trait Socket {
     }
     async fn send(&mut self, m: &str, p: &[Value]) -> Result<()>;
     async fn ping(&mut self, ping: &Message) -> Result<()>;
+    async fn close(&mut self) -> Result<()>;
     async fn event_loop(&mut self);
     async fn handle_message(&mut self, message: Value) -> Result<()>;
 }
