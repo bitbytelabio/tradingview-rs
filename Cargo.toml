@@ -37,12 +37,13 @@ futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
-rayon = { version = "^1" }
 async-trait = "^0.1"
+rayon = { version = "^1" }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
+protobuf = "3"
 
 [[example]]
 name = "quote"

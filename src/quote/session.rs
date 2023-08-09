@@ -13,8 +13,11 @@ use futures_util::{
 };
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::time::{timeout, Duration};
-use tokio::{net::TcpStream, sync::Mutex};
+use tokio::net::TcpStream;
+use tokio::{
+    sync::RwLock,
+    time::{timeout, Duration},
+};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 use tracing::{error, info, warn};
 
@@ -26,8 +29,8 @@ pub struct WebSocketsBuilder {
 }
 
 pub struct WebSocket {
-    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-    read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     quote_session_id: String,
     quote_fields: Vec<Value>,
     auth_token: String,
@@ -80,11 +83,8 @@ impl WebSocketsBuilder {
         };
 
         let (write_stream, read_stream) = WebSocket::connect(&server, &auth_token).await?;
-
-        let write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>> =
-            Arc::from(Mutex::new(write_stream));
-
-        let read = Arc::from(Mutex::new(read_stream));
+        let write = Arc::from(RwLock::new(write_stream));
+        let read = Arc::from(RwLock::new(read_stream));
 
         Ok(WebSocket {
             write,
@@ -173,7 +173,7 @@ impl WebSocket {
 impl Socket for WebSocket {
     async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
         self.write
-            .lock()
+            .write()
             .await
             .send(SocketMessage::new(m, p).to_message()?)
             .await?;
@@ -181,52 +181,63 @@ impl Socket for WebSocket {
     }
 
     async fn ping(&mut self, ping: &Message) -> Result<()> {
-        self.write.lock().await.send(ping.clone()).await?;
+        self.write.write().await.send(ping.clone()).await?;
         Ok(())
     }
+
     async fn event_loop(&mut self) {
         loop {
             let read = self.read.clone();
-            let mut read_guard = read.lock().await;
-            match timeout(Duration::from_secs(5), read_guard.next()).await {
-                Ok(Some(result)) => match result {
-                    Ok(message) => {
-                        if let Message::Text(text) = &message {
-                            if let Ok(values) = parse_packet(text) {
-                                for value in values {
-                                    match value {
-                                        Value::Number(_) => {
-                                            if let Err(e) = self.ping(&message).await {
-                                                error!("Error handling ping: {:#?}", e);
+            let mut read_guard = read.write().await;
+            let next_message = read_guard.next();
+
+            tokio::select! {
+                result = timeout(Duration::from_secs(5), next_message) => {
+                    match result {
+                        Ok(Some(Ok(message))) => {
+                            if let Message::Text(text) = &message {
+                                if let Ok(values) = parse_packet(text) {
+                                    for value in values {
+                                        match value {
+                                            Value::Number(_) => {
+                                                if let Err(e) = self.ping(&message).await {
+                                                    error!("Error handling ping: {:#?}", e);
+                                                }
                                             }
-                                        }
-                                        Value::Object(_) => {
-                                            if let Err(e) = self.handle_message(value).await {
-                                                error!("Error handling message: {:#?}", e);
+                                            Value::Object(_) => {
+                                                if let Err(e) = self.handle_message(value).await {
+                                                    error!("Error handling message: {:#?}", e);
+                                                }
                                             }
+                                            _ => (),
                                         }
-                                        _ => (),
                                     }
+                                } else if let Err(e) = parse_packet(text) {
+                                    error!("Error parsing message: {:#?}", e);
                                 }
-                            } else if let Err(e) = parse_packet(text) {
-                                error!("Error parsing message: {:#?}", e);
+                            } else {
+                                warn!("Received non-text message: {:?}", message);
                             }
-                        } else {
-                            warn!("Received non-text message: {:?}", message);
+                        }
+                        Ok(Some(Err(e))) => {
+                            error!("Error reading message: {:#?}", e);
+                            break;
+                        }
+                        Ok(None) => {
+                            // Connection closed
+                            break;
+                        }
+                        Err(e) => {
+                            error!("Timeout reading message: {:#?}", e);
+                            break;
                         }
                     }
-                    Err(e) => {
-                        error!("Error reading message: {:#?}", e);
-                        break;
-                    }
-                },
-                Ok(None) => {
-                    // Connection closed
-                    break;
                 }
-                Err(e) => {
-                    error!("Error reading message: {:#?}", e);
-                    break;
+                _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                    // Handle timeout
+                    // if let Err(e) = self.ping(&Message::Ping(vec![])).await {
+                    //     error!("Error handling ping: {:#?}", e);
+                    // }
                 }
             }
         }
