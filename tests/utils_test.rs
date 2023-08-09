@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod utils {
-    use tradingview_rs::utils::*;
+    use tradingview_rs::{utils::*, MarketAdjustment, SessionType};
     #[test]
     fn test_parse_packet() {
         let current_dir = std::env::current_dir().unwrap().display().to_string();
@@ -37,5 +37,27 @@ mod utils {
             let cleaned_text = clean_em_tags(text.0);
             assert_eq!(cleaned_text.unwrap(), text.1);
         }
+    }
+
+    #[test]
+    fn test_symbol_init() {
+        let test1 = symbol_init("NSE:NIFTY", None, None, None);
+        assert!(test1.is_ok());
+        assert_eq!(
+            test1.unwrap(),
+            r#"={"adjustment":"splits","symbol":"NSE:NIFTY"}"#.to_string()
+        );
+
+        let test2 = symbol_init(
+            "HOSE:FPT",
+            Some(MarketAdjustment::Dividends),
+            Some(iso_currency::Currency::USD),
+            Some(SessionType::Extended),
+        );
+        assert!(test2.is_ok());
+        assert_eq!(
+            test2.unwrap(),
+            r#"={"adjustment":"dividends","currency-id":"USD","session":"extended","symbol":"HOSE:FPT"}"#.to_string()
+        );
     }
 }

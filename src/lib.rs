@@ -38,6 +38,22 @@ impl std::fmt::Display for SessionType {
     }
 }
 
+#[derive(Debug, Default)]
+pub enum MarketAdjustment {
+    #[default]
+    Splits,
+    Dividends,
+}
+
+impl std::fmt::Display for MarketAdjustment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarketAdjustment::Splits => write!(f, "splits"),
+            MarketAdjustment::Dividends => write!(f, "dividends"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum MarketStatus {
     Holiday,
