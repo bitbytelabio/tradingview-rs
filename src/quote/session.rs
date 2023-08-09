@@ -13,7 +13,7 @@ use futures_util::{
 };
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, time::Instant};
 use tokio::{
     sync::RwLock,
     time::{timeout, Duration},
@@ -186,66 +186,44 @@ impl Socket for WebSocket {
     }
 
     async fn event_loop(&mut self) {
-        loop {
-            trace!("Starting event loop iteration");
-
-            let read = self.read.clone();
-            let mut read_guard = read.write().await;
-
-            debug!("Waiting for next message");
-            let next_message = read_guard.next();
-
-            tokio::select! {
-                result = timeout(Duration::from_secs(5), next_message) => {
-                    match result {
-                        Ok(Some(Ok(message))) => {
-                            if let Message::Text(text) = &message {
-                                trace!("Parsing message: {:?}", text);
-                                if let Ok(values) = parse_packet(text) {
-                                    for value in values {
-                                        match value {
-                                            Value::Number(_) => {
-                                                trace!("handling ping message: {:?}", message);
-                                                if let Err(e) = self.ping(&message).await {
-                                                    error!("Error handling ping: {:#?}", e);
-                                                }
-                                            }
-                                            Value::Object(_) => {
-                                                trace!("handling message: {:?}", value);
-                                                if let Err(e) = self.handle_message(value).await {
-                                                    error!("Error handling message: {:#?}", e);
-                                                }
-                                            }
-                                            _ => {
-                                                trace!("unhandled message: {:?}", value);
-                                            },
+        trace!("Starting event loop iteration");
+        let read = self.read.clone();
+        let mut read_guard = read.write().await;
+        debug!("Waiting for next message");
+        while let Some(next_message) = read_guard.next().await {
+            match next_message {
+                Ok(message) => {
+                    if let Message::Text(text) = &message {
+                        trace!("Parsing message: {:?}", text);
+                        if let Ok(values) = parse_packet(text) {
+                            for value in values {
+                                match value {
+                                    Value::Number(_) => {
+                                        trace!("handling ping message: {:?}", message);
+                                        if let Err(e) = self.ping(&message).await {
+                                            error!("Error handling ping: {:#?}", e);
                                         }
                                     }
-                                } else if let Err(e) = parse_packet(text) {
-                                    error!("Error parsing message: {:#?}", e);
+                                    Value::Object(_) => {
+                                        trace!("handling message: {:?}", value);
+                                        if let Err(e) = self.handle_message(value).await {
+                                            error!("Error handling message: {:#?}", e);
+                                        }
+                                    }
+                                    _ => {
+                                        trace!("unhandled message: {:?}", value);
+                                    }
                                 }
-                            } else {
-                                warn!("Received non-text message: {:?}", message);
                             }
+                        } else if let Err(e) = parse_packet(text) {
+                            error!("Error parsing message: {:#?}", e);
                         }
-                        Ok(Some(Err(e))) => {
-                            error!("error reading message: {:#?}", e);
-                            continue;
-                        }
-                        Ok(None) => {
-                            error!("No message received, connection closed");
-                            break;
-                        }
-                        Err(e) => {
-                            error!("Timeout reading message: {:#?}", e);
-                            break;
-                        }
+                    } else {
+                        warn!("received non-text message: {:?}", message);
                     }
                 }
-                _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                    // Handle timeout
-                    error!("Timeout reading message, connection trailed off");
-                    break;
+                Err(e) => {
+                    error!("Error reading message: {:#?}", e);
                 }
             }
         }
