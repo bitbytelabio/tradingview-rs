@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::prelude::*;
 
 use rand::Rng;
@@ -92,4 +94,18 @@ pub fn clean_em_tags(text: &str) -> Result<String> {
     let regex = Regex::new(r"<[^>]*>")?;
     let cleaned_text = regex.replace_all(text, "");
     Ok(cleaned_text.to_string())
+}
+
+pub fn symbol_init(symbol: &str, currency: Option<String>) -> Result<String> {
+    let mut symbol_init: HashMap<String, String> = HashMap::new();
+    symbol_init.insert("adjustment".to_string(), "splits".to_string());
+    symbol_init.insert("symbol".to_string(), symbol.to_string());
+    match currency {
+        Some(c) => {
+            symbol_init.insert("currency-id".to_string(), c);
+        }
+        None => {}
+    }
+    let symbol_init_json = serde_json::to_value(&symbol_init)?;
+    Ok(format!("={}", symbol_init_json))
 }
