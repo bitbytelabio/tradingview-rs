@@ -1,9 +1,9 @@
 use crate::{
     payload,
     prelude::*,
-    quote::{QuoteEvent, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
-    socket::{DataServer, Socket, SocketMessage, SocketMessageType, WEBSOCKET_HEADERS},
-    utils::{format_packet, gen_session_id, parse_packet},
+    quote::{QuotePayloadType, QuoteSocketEvent, QuoteSocketMessage, ALL_QUOTE_FIELDS},
+    socket::{DataServer, Socket, SocketMessage, SocketMessageType},
+    utils::{gen_session_id, parse_packet},
 };
 use async_trait::async_trait;
 use futures_util::{
@@ -16,13 +16,8 @@ use serde_json::Value;
 use std::{borrow::Cow, collections::VecDeque, sync::Arc, thread::JoinHandle};
 use tokio::time::{timeout, Duration};
 use tokio::{net::TcpStream, sync::Mutex};
-use tokio_tungstenite::{
-    connect_async,
-    tungstenite::{client::IntoClientRequest, protocol::Message},
-    MaybeTlsStream, WebSocketStream,
-};
+use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
 use tracing::{debug, error, info, warn};
-use url::Url;
 
 // pub struct QuoteSocket<'a> {
 //     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
@@ -289,15 +284,24 @@ pub struct WebSocketsBuilder {
     quote_fields: Option<Vec<String>>,
 }
 
-pub struct WebSockets {
-    pub write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-    pub read: Arc<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
+pub struct WebSocket {
+    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     quote_session_id: String,
     quote_fields: Vec<Value>,
     auth_token: String,
+    callback_fn: Box<dyn FnMut(QuoteSocketEvent, Value) -> Result<()> + Send>,
 }
 
 impl WebSocketsBuilder {
+    pub fn new() -> Self {
+        Self {
+            auth_token: None,
+            server: None,
+            quote_fields: None,
+        }
+    }
+
     pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
         self.auth_token = Some(auth_token);
         self
@@ -308,7 +312,10 @@ impl WebSocketsBuilder {
         self
     }
 
-    pub async fn subscribe(&self) -> Result<WebSockets> {
+    pub async fn connect<T>(&self, callback: T) -> Result<WebSocket>
+    where
+        T: FnMut(QuoteSocketEvent, Value) -> Result<()> + Send + 'static,
+    {
         let auth_token = self
             .auth_token
             .clone()
@@ -331,82 +338,187 @@ impl WebSocketsBuilder {
             }
         };
 
-        let (write_stream, read_stream) = WebSockets::connect(&server, &auth_token).await?;
+        let (write_stream, read_stream) = WebSocket::connect(&server, &auth_token).await?;
 
         let write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>> =
             Arc::from(Mutex::new(write_stream));
 
-        let read = Arc::from(read_stream);
+        let read = Arc::from(Mutex::new(read_stream));
 
-        Ok(WebSockets {
+        Ok(WebSocket {
             write,
             read,
             quote_session_id: session,
             quote_fields,
             auth_token,
+            callback_fn: Box::new(callback),
         })
     }
 }
 
-impl WebSockets {
+impl WebSocket {
     pub fn new() -> WebSocketsBuilder {
-        WebSocketsBuilder {
-            auth_token: None,
-            server: None,
-            quote_fields: None,
-        }
+        WebSocketsBuilder::new()
     }
 
     pub async fn create_session(&mut self) -> Result<()> {
-        Self::send(
-            self.write.lock().await,
+        self.send(
             "quote_create_session",
-            payload!(self.quote_session_id.clone()),
+            &payload!(self.quote_session_id.clone()),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_session(&mut self) -> Result<()> {
+        self.send(
+            "quote_delete_session",
+            &payload!(self.quote_session_id.clone()),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn update_session(&mut self) -> Result<()> {
+        self.delete_session().await?;
+        self.quote_session_id = gen_session_id("qs");
+        self.send(
+            "quote_create_session",
+            &payload!(self.quote_session_id.clone()),
         )
         .await?;
         Ok(())
     }
 
     pub async fn set_fields(&mut self) -> Result<()> {
-        Self::send(
-            self.write.lock().await,
-            "quote_set_fields",
-            self.quote_fields.clone(),
-        )
-        .await?;
+        self.send("quote_set_fields", &self.quote_fields.clone())
+            .await?;
         Ok(())
     }
 
-    pub async fn add_symbols(&mut self, symbols: Vec<String>) -> Result<()> {
-        let payloads: Vec<Value> = symbols.into_iter().map(Value::from).collect();
-        Self::send(
-            self.write.lock().await,
-            "quote_add_symbols",
-            payload!(payloads),
-        )
-        .await?;
+    pub async fn add_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_add_symbols", &payloads).await?;
         Ok(())
     }
 
-    pub async fn set_new_auth_token(&mut self, auth_token: &str) -> Result<()> {
+    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_owned();
-        Self::send(
-            self.write.lock().await,
-            "set_auth_token",
-            payload!(auth_token),
-        )
-        .await?;
+        self.send("set_auth_token", &payload!(auth_token)).await?;
         Ok(())
+    }
+
+    pub async fn fast_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_fast_symbols", &payloads).await?;
+        Ok(())
+    }
+
+    pub async fn remove_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
+        let mut payloads = payload![self.quote_session_id.clone()];
+        payloads.extend(symbols.into_iter().map(Value::from));
+        self.send("quote_remove_symbols", &payloads).await?;
+        Ok(())
+    }
+
+    pub async fn subscribe(&mut self) {
+        self.event_loop().await;
     }
 }
 
 #[async_trait]
-impl Socket for WebSockets {
-    async fn event_loop(&mut self) {}
-
-    async fn handle_message(&mut self, message: Value) -> Result<()> {
+impl Socket for WebSocket {
+    async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
+        self.write
+            .lock()
+            .await
+            .send(SocketMessage::new(m, p).to_message()?)
+            .await?;
         Ok(())
     }
+
+    async fn ping(&mut self, ping: &Message) -> Result<()> {
+        self.write.lock().await.send(ping.clone()).await?;
+        Ok(())
+    }
+    async fn event_loop(&mut self) {
+        loop {
+            let read = self.read.clone();
+            let mut read_guard = read.lock().await;
+            match timeout(Duration::from_secs(5), read_guard.next()).await {
+                Ok(Some(result)) => match result {
+                    Ok(message) => {
+                        if let Message::Text(text) = &message {
+                            if let Ok(values) = parse_packet(text) {
+                                for value in values {
+                                    match value {
+                                        Value::Number(_) => {
+                                            if let Err(e) = self.ping(&message).await {
+                                                error!("Error handling ping: {:#?}", e);
+                                            }
+                                        }
+                                        Value::Object(_) => {
+                                            if let Err(e) = self.handle_message(value).await {
+                                                error!("Error handling message: {:#?}", e);
+                                            }
+                                        }
+                                        _ => (),
+                                    }
+                                }
+                            } else if let Err(e) = parse_packet(text) {
+                                error!("Error parsing message: {:#?}", e);
+                            }
+                        } else {
+                            warn!("Received non-text message: {:?}", message);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error reading message: {:#?}", e);
+                        break;
+                    }
+                },
+                Ok(None) => {
+                    // Connection closed
+                    break;
+                }
+                Err(e) => {
+                    error!("Error reading message: {:#?}", e);
+                    break;
+                }
+            }
+        }
+    }
+
+    async fn handle_message(&mut self, message: Value) -> Result<()> {
+        let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)
+            .map_err(|e| {
+                error!("error parsing quote data: {:#?}", e);
+                Error::JsonParseError(e)
+            })?;
+        match payload {
+            SocketMessageType::SocketServerInfo(server_info) => {
+                info!("Received SocketServerInfo: {:#?}", server_info);
+            }
+            SocketMessageType::SocketMessage(quote_msg) => match quote_msg.message_type.as_str() {
+                "qsd" => {
+                    quote_msg.payload.par_iter().for_each(|p| match p {
+                        QuotePayloadType::String(s) => debug!("Received quote session ID: {}", s),
+                        QuotePayloadType::QuotePayload(d) => {
+                            info!("Received quote data: {:#?}", d);
+                        }
+                    });
+                }
+                "quote_completed" => {
+                    info!("Received quote completed message: {:#?}", quote_msg);
+                }
+                _ => {}
+            },
+        }
+        Ok(())
+    }
+
     async fn handle_error(&mut self, message: Value) -> Result<()> {
         Ok(())
     }

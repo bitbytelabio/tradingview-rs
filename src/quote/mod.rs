@@ -1,4 +1,4 @@
-pub mod websocket;
+pub mod session;
 use serde::{Deserialize, Serialize};
 
 use crate::error::TradingViewError;
@@ -57,7 +57,7 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug)]
-pub enum QuoteEvent {
+pub enum QuoteSocketEvent {
     Data,
     Loaded,
     Error(TradingViewError),

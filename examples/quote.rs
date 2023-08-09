@@ -1,8 +1,8 @@
 use std::env;
 
 use serde_json::Value;
-use tracing::{info};
-use tradingview_rs::quote::{websocket::QuoteSocket, QuoteEvent};
+use tracing::info;
+use tradingview_rs::quote::{session::WebSocket, QuoteSocketEvent};
 use tradingview_rs::socket::DataServer;
 use tradingview_rs::user::User;
 type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
@@ -20,34 +20,40 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut binding = QuoteSocket::new(DataServer::Data, event_handler);
-    let mut socket = binding.auth_token(user.auth_token).build().await.unwrap();
+    let mut socket = WebSocket::new()
+        .auth_token(user.auth_token)
+        .connect(event_handler)
+        .await
+        .unwrap();
+
+    socket.create_session().await.unwrap();
+    socket.set_fields().await.unwrap();
 
     socket
-        .quote_add_symbols(vec![
-            "BINANCE:BTCUSDT".to_string(),
-            "BINANCE:ETHUSDT".to_string(),
-            "BITSTAMP:ETHUSD".to_string(),
-            "NASDAQ:TSLA".to_string(),
+        .add_symbols(vec![
+            "BINANCE:BTCUSDT",
+            "BINANCE:ETHUSDT",
+            "BITSTAMP:ETHUSD",
+            "NASDAQ:TSLA",
         ])
         .await
         .unwrap();
 
-    socket.event_loop().await;
+    socket.subscribe().await;
 }
 
-fn event_handler(event: QuoteEvent, data: Value) -> Result<()> {
+fn event_handler(event: QuoteSocketEvent, data: Value) -> Result<()> {
     match event {
-        QuoteEvent::Data => {
+        QuoteSocketEvent::Data => {
             // debug!("data: {:#?}", &data);
             // let data2 = data.get("v").unwrap();
             // let quote: QuoteValue = serde_json::from_value(data2.clone()).unwrap();
             // info!("quote: {:#?}", quote);
         }
-        QuoteEvent::Loaded => {
+        QuoteSocketEvent::Loaded => {
             info!("loaded: {:#?}", data);
         }
-        QuoteEvent::Error(_) => todo!(),
+        QuoteSocketEvent::Error(_) => todo!(),
     }
     Ok(())
 }

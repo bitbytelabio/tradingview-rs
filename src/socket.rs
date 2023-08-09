@@ -36,7 +36,7 @@ pub struct SocketMessage {
 }
 
 impl SocketMessage {
-    pub fn new<M, P>(m: M, p: Vec<P>) -> Self
+    pub fn new<M, P>(m: M, p: P) -> Self
     where
         M: Serialize,
         P: Serialize,
@@ -131,29 +131,8 @@ pub trait Socket {
         Ok((write, read))
     }
 
-    async fn send(
-        mut write: tokio::sync::MutexGuard<
-            '_,
-            SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-        >,
-        m: &str,
-        p: Vec<Value>,
-    ) -> Result<()> {
-        let msg = SocketMessage::new(m, p).to_message()?;
-        write.send(msg).await?;
-        Ok(())
-    }
-
-    async fn ping(
-        mut write: tokio::sync::MutexGuard<
-            '_,
-            SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-        >,
-        ping: &Message,
-    ) -> Result<()> {
-        write.send(ping.clone()).await?;
-        Ok(())
-    }
+    async fn send(&mut self, m: &str, p: &[Value]) -> Result<()>;
+    async fn ping(&mut self, ping: &Message) -> Result<()>;
 
     async fn event_loop(&mut self);
 
