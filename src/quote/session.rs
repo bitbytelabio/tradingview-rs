@@ -26,8 +26,8 @@ pub struct WebSocketsBuilder {
 }
 
 pub struct WebSocket {
-    write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-    read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    pub write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    pub read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     quote_session_id: String,
     quote_fields: Vec<Value>,
     auth_token: String,

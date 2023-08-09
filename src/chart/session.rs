@@ -2,14 +2,16 @@ use crate::{
     payload,
     prelude::*,
     socket::{DataServer, Socket, SocketMessage},
-    utils::{gen_session_id, parse_packet},
-    Interval, Timezone,
+    utils::{gen_session_id, parse_packet, symbol_init},
+    Interval, MarketAdjustment, SessionType, Timezone,
 };
 use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+use iso_currency::Currency;
+use protobuf::well_known_types::timestamp;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::{net::TcpStream, sync::RwLock};
@@ -24,8 +26,8 @@ pub struct WebSocketsBuilder {
 }
 
 pub struct WebSocket {
-    write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-    read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    pub write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    pub read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     chart_session_id: String,
     replay_session_id: String,
     replay_series_id: String,
@@ -35,8 +37,8 @@ pub struct WebSocket {
 }
 
 pub struct ChartCallbackFn {
-    // pub series_loaded: Box<dyn FnMut(QuotePayload) -> Result<()> + Send + Sync>,
-    // pub symbol_loaded: Box<dyn FnMut(QuotePayload) -> Result<()> + Send + Sync>,
+    // pub series_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
+    // pub symbol_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
 }
 
 impl WebSocketsBuilder {
@@ -85,6 +87,21 @@ impl WebSocket {
         WebSocketsBuilder::default()
     }
 
+    pub async fn set_locale(&mut self) -> Result<()> {
+        self.send("set_locale", &payload!("en", "US")).await?;
+        Ok(())
+    }
+
+    pub async fn set_timezone(&mut self, timezone: Timezone) -> Result<()> {
+        self.send(
+            "switch_timezone",
+            &payload!(self.chart_session_id.clone(), timezone.to_string()),
+        )
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_owned();
         self.send("set_auth_token", &payload!(auth_token)).await?;
@@ -111,6 +128,28 @@ impl WebSocket {
         Ok(())
     }
 
+    pub async fn replay_add_series(
+        &mut self,
+        symbol: &str,
+        interval: Interval,
+        adjustment: Option<MarketAdjustment>,
+        currency: Option<Currency>,
+        session_type: Option<SessionType>,
+    ) -> Result<()> {
+        self.replay_series_id = gen_session_id("rs");
+        self.send(
+            "replay_add_series",
+            &payload!(
+                self.chart_session_id.clone(),
+                self.replay_series_id.clone(),
+                symbol_init(symbol, adjustment, currency, session_type)?,
+                interval.to_string()
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn _delete_chart_session_id(&mut self) -> Result<()> {
         self.send(
             "chart_delete_session",
@@ -126,21 +165,6 @@ impl WebSocket {
             &payload!(self.chart_session_id.clone()),
         )
         .await?;
-        Ok(())
-    }
-
-    pub async fn set_locale(&mut self) -> Result<()> {
-        self.send("set_locale", &payload!("en", "US")).await?;
-        Ok(())
-    }
-
-    pub async fn set_timezone(&mut self, timezone: Timezone) -> Result<()> {
-        self.send(
-            "switch_timezone",
-            &payload!(self.chart_session_id.clone(), timezone.to_string()),
-        )
-        .await?;
-
         Ok(())
     }
 
@@ -182,13 +206,69 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn fetch_more_data(&mut self, num: u64) -> Result<()> {
+    pub async fn replay_reset(&mut self, timestamp: i64) -> Result<()> {
+        self.send(
+            "replay_reset",
+            &payload!(
+                self.replay_session_id.clone(),
+                self.replay_series_id.clone(),
+                timestamp
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn request_more_data(&mut self, series_id: &str, num: u64) -> Result<()> {
         self.send(
             "request_more_data",
+            &payload!(self.chart_session_id.clone(), series_id, num),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn request_more_tickmarks(&mut self, series_id: &str, num: u64) -> Result<()> {
+        self.send(
+            "request_more_tickmarks",
+            &payload!(self.chart_session_id.clone(), series_id, num),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn remove_study(&mut self, study_id: &str) -> Result<()> {
+        self.send(
+            "remove_study",
+            &payload!(self.chart_session_id.clone(), study_id),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn remove_series(&mut self, series_id: &str) -> Result<()> {
+        self.send(
+            "remove_series",
+            &payload!(self.chart_session_id.clone(), series_id),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn resolve_symbol(
+        &mut self,
+        symbol_series_id: &str,
+        symbol: &str,
+        adjustment: Option<MarketAdjustment>,
+        currency: Option<Currency>,
+        session_type: Option<SessionType>,
+    ) -> Result<()> {
+        self.send(
+            "resolve_symbol",
             &payload!(
                 self.chart_session_id.clone(),
-                "$prices".to_string(),
-                num.to_string()
+                symbol_series_id,
+                symbol_init(symbol, adjustment, currency, session_type)?
             ),
         )
         .await?;

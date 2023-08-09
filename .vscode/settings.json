@@ -41,6 +41,7 @@
     "socketio",
     "TASE",
     "thiserror",
+    "tickmarks",
     "totp",
     "Tradingview",
     "TSXV",
