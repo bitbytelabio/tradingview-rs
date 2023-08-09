@@ -244,35 +244,26 @@ impl Socket for WebSocket {
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        let payload: SocketMessageType<QuoteSocketMessage> = match serde_json::from_value(message) {
-            Ok(payload) => payload,
-            Err(e) => {
-                error!("error parsing quote data: {:#?}", e);
-                return Err(Error::JsonParseError(e));
-            }
-        };
+        let payload: SocketMessageType<QuoteSocketMessage> =
+            serde_json::from_str(&message.to_string())?;
 
         match payload {
             SocketMessageType::SocketServerInfo(server_info) => {
                 info!("Received SocketServerInfo: {:#?}", server_info);
             }
-            SocketMessageType::SocketMessage(quote_msg) => match quote_msg.message_type.as_str() {
-                "qsd" => {
-                    if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
-                        &quote_msg.payload.get(1)
-                    {
-                        if quote_payload.status == "ok" {
-                            (self.callbacks.data)(*quote_payload.clone())?;
-                        } else {
-                            (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
-                        }
+            SocketMessageType::SocketMessage(quote_msg) => {
+                if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
+                    quote_msg.payload.get(1)
+                {
+                    if quote_payload.status == "ok" {
+                        (self.callbacks.data)(*quote_payload.clone())?;
+                    } else {
+                        (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
                     }
-                }
-                "quote_completed" => {
+                } else if quote_msg.message_type == "quote_completed" {
                     (self.callbacks.loaded)(quote_msg)?;
                 }
-                _ => {}
-            },
+            }
         }
 
         Ok(())
