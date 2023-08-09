@@ -218,9 +218,80 @@ impl Socket for WebSocket {
         Ok(())
     }
 
-    async fn event_loop(&mut self) {}
+    async fn event_loop(&mut self) {
+        let read = self.read.clone();
+        let mut read_guard = read.write().await;
 
-    async fn handle_message(&mut self, message: Value) -> Result<()> {
+        loop {
+            debug!("Waiting for next message");
+            match read_guard.next().await {
+                Some(Ok(message)) => match &message {
+                    Message::Text(text) => {
+                        trace!("parsing message: {:?}", text);
+                        match parse_packet(&text) {
+                            Ok(values) => {
+                                for value in values {
+                                    match value {
+                                        Value::Number(_) => {
+                                            trace!("handling ping message: {:?}", message);
+                                            if let Err(e) = self.ping(&message).await {
+                                                error!("Error handling ping: {:#?}", e);
+                                            }
+                                        }
+                                        Value::Object(_) => {
+                                            trace!("handling message: {:?}", value);
+                                            if let Err(e) = self.handle_message(value).await {
+                                                error!("Error handling message: {:#?}", e);
+                                            }
+                                        }
+                                        _ => {
+                                            trace!("unhandled message: {:?}", value);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Error parsing message: {:#?}", e);
+                            }
+                        }
+                    }
+                    _ => {
+                        warn!("received non-text message: {:?}", message);
+                    }
+                },
+                Some(Err(e)) => {
+                    error!("Error reading message: {:#?}", e);
+                }
+                None => {
+                    debug!("No more messages to read");
+                    break;
+                }
+            }
+        }
+    }
+
+    async fn handle_message(&mut self, _message: Value) -> Result<()> {
+        // let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)?;
+
+        // match payload {
+        //     SocketMessageType::SocketServerInfo(server_info) => {
+        //         info!("Received SocketServerInfo: {:#?}", server_info);
+        //     }
+        //     SocketMessageType::SocketMessage(quote_msg) => {
+        //         if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
+        //             quote_msg.payload.get(1)
+        //         {
+        //             if quote_payload.status == "ok" {
+        //                 (self.callbacks.data)(*quote_payload.clone())?;
+        //             } else {
+        //                 (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
+        //             }
+        //         } else if quote_msg.message_type == "quote_completed" {
+        //             (self.callbacks.loaded)(quote_msg)?;
+        //         }
+        //     }
+        // }
+
         Ok(())
     }
 }
