@@ -82,37 +82,31 @@ pub struct QuotePayload {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct QuoteValue {
     #[serde(default)]
-    pub ask: f64,
+    pub ask: Option<f64>,
     #[serde(default)]
-    pub ask_size: f64,
+    pub ask_size: Option<f64>,
     #[serde(default)]
-    pub bid: f64,
+    pub bid: Option<f64>,
     #[serde(default)]
-    pub bid_size: f64,
-    #[serde(default, rename = "ch")]
-    pub price_change: f64,
-    #[serde(default, rename = "chp")]
-    pub price_change_percent: f64,
+    pub bid_size: Option<f64>,
+    #[serde(default, rename(deserialize = "ch"))]
+    pub price_change: Option<f64>,
+    #[serde(default, rename(deserialize = "chp"))]
+    pub price_change_percent: Option<f64>,
     #[serde(default)]
-    pub description: Option<String>,
+    pub spread: Option<f64>,
     #[serde(default)]
-    pub exchange: Option<String>,
+    pub open_price: Option<f64>,
     #[serde(default)]
-    pub short_name: Option<String>,
+    pub high_price: Option<f64>,
     #[serde(default)]
-    pub spread: f64,
+    pub low_price: Option<f64>,
     #[serde(default)]
-    pub open_price: f64,
+    pub prev_close_price: Option<f64>,
+    #[serde(default, rename(deserialize = "lp"))]
+    pub price: Option<f64>,
+    #[serde(default, rename(deserialize = "lp_time"))]
+    pub price_time: Option<i64>,
     #[serde(default)]
-    pub high_price: f64,
-    #[serde(default)]
-    pub low_price: f64,
-    #[serde(default)]
-    pub prev_close_price: f64,
-    #[serde(default, rename = "lp")]
-    pub price: f64,
-    #[serde(default, rename = "lp_time")]
-    pub price_time: i64,
-    #[serde(default)]
-    pub volume: f64,
+    pub volume: Option<f64>,
 }

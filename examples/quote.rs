@@ -53,7 +53,8 @@ async fn main() {
 }
 
 fn on_data(data: QuotePayload) -> Result<()> {
-    info!("Data: {:#?}", data);
+    let json_string = serde_json::to_string(&data)?;
+    info!("{}", json_string);
     Ok(())
 }
 
