@@ -13,13 +13,13 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use rayon::prelude::*;
-use serde::Serialize;
+
 use serde_json::Value;
-use std::{borrow::Cow, collections::VecDeque, rc::Rc, sync::Arc, thread::JoinHandle};
+use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 // impl<'a> QuoteSocketBuilder<'a> {
 //     pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
@@ -502,7 +502,7 @@ impl Socket for WebSocket {
                         quote_msg.payload.get(1)
                     {
                         // info!("Received quote message: {:#?}", quote_payload);
-                        (self.callback_fn)(QuoteSocketEvent::Data, quote_payload.clone())?;
+                        (self.callback_fn)(QuoteSocketEvent::Data, *quote_payload.clone())?;
                     }
                 }
                 "quote_completed" => {
@@ -515,13 +515,13 @@ impl Socket for WebSocket {
         Ok(())
     }
 
-    async fn handle_error(&mut self, message: Value) -> Result<()> {
+    async fn handle_error(&mut self, _message: Value) -> Result<()> {
         Ok(())
     }
-    async fn handle_data(&mut self, payload: Value) -> Result<()> {
+    async fn handle_data(&mut self, _payload: Value) -> Result<()> {
         Ok(())
     }
-    async fn handle_loaded(&mut self, payload: Value) -> Result<()> {
+    async fn handle_loaded(&mut self, _payload: Value) -> Result<()> {
         Ok(())
     }
 }

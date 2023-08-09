@@ -92,7 +92,7 @@ impl ChartSocketBuilder {
         ))
         .unwrap();
 
-        let mut request = url.into_client_request().unwrap();
+        let request = url.into_client_request().unwrap();
         // request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
 
         let socket: WebSocketStream<MaybeTlsStream<TcpStream>> = match connect_async(request).await

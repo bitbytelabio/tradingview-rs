@@ -75,7 +75,7 @@ pub struct QuoteSocketMessage {
 #[serde(untagged)]
 pub enum QuotePayloadType {
     String(String),
-    QuotePayload(QuotePayload),
+    QuotePayload(Box<QuotePayload>),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

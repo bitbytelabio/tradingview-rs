@@ -1,4 +1,4 @@
-use std::default;
+
 
 use crate::{payload, prelude::*, utils::format_packet, UA};
 use async_trait::async_trait;
@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{
     net::TcpStream,
-    time::{timeout, Duration},
 };
 use tokio_tungstenite::{
     connect_async,
