@@ -484,23 +484,25 @@ impl Socket for WebSocket {
     }
 
     async fn handle_message(&mut self, message: Value) -> Result<()> {
-        let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)
-            .map_err(|e| {
+        let payload: SocketMessageType<QuoteSocketMessage> = match serde_json::from_value(message) {
+            Ok(payload) => payload,
+            Err(e) => {
                 error!("error parsing quote data: {:#?}", e);
-                Error::JsonParseError(e)
-            })?;
+                return Err(Error::JsonParseError(e));
+            }
+        };
+
         match payload {
             SocketMessageType::SocketServerInfo(server_info) => {
                 info!("Received SocketServerInfo: {:#?}", server_info);
             }
             SocketMessageType::SocketMessage(quote_msg) => match quote_msg.message_type.as_str() {
                 "qsd" => {
-                    if let Some(payload) = quote_msg.payload.get(1) {
-                        if let QuotePayloadType::QuotePayload(quote_payload) = payload {
-                            // info!("Received quote message: {:#?}", payload);
-                            (self.callback_fn)(QuoteSocketEvent::Data, quote_payload.clone())
-                                .unwrap();
-                        }
+                    if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
+                        quote_msg.payload.get(1)
+                    {
+                        // info!("Received quote message: {:#?}", quote_payload);
+                        (self.callback_fn)(QuoteSocketEvent::Data, quote_payload.clone())?;
                     }
                 }
                 "quote_completed" => {
@@ -509,6 +511,7 @@ impl Socket for WebSocket {
                 _ => {}
             },
         }
+
         Ok(())
     }
 
