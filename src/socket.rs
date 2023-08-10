@@ -24,6 +24,22 @@ lazy_static::lazy_static! {
     };
 }
 
+pub const ON_CHART_DATA: &str = "timescale_update";
+pub const ON_CHART_DATA_UPDATE: &str = "du";
+pub const ON_QUOTE_DATA: &str = "qsd";
+pub const ON_QUOTE_COMPLETED: &str = "quote_completed";
+pub const ON_SERIES_LOADING: &str = "series_loading";
+pub const ON_SERIES_COMPLETED: &str = "series_completed";
+pub const ON_SYMBOL_RESOLVED: &str = "symbol_resolved";
+pub const ON_REPLAY_POINT: &str = "replay_point";
+pub const ON_REPLAY_INSTANCE_ID: &str = "replay_instance_id";
+pub const ON_REPLAY_RESOLUTIONS: &str = "replay_resolutions";
+pub const ON_REPLAY_DATA_END: &str = "replay_data_end";
+pub const ON_STUDY_COMPLETED: &str = "study_completed";
+pub const ON_SYMBOL_ERROR: &str = "symbol_error";
+pub const ON_SERIES_ERROR: &str = "series_error";
+pub const ON_CRITICAL_ERROR: &str = "critical_error";
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SocketMessage {
     pub m: Value,

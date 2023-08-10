@@ -3,7 +3,10 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuotePayload, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
-    socket::{DataServer, Socket, SocketMessage, SocketMessageType},
+    socket::{
+        DataServer, Socket, SocketMessage, SocketMessageType, ON_CRITICAL_ERROR,
+        ON_QUOTE_COMPLETED, ON_QUOTE_DATA,
+    },
     utils::{gen_session_id, parse_packet},
 };
 use async_trait::async_trait;
@@ -247,20 +250,26 @@ impl Socket for WebSocket {
                 info!("Received SocketServerInfo: {:#?}", server_info);
             }
             SocketMessageType::SocketMessage(quote_msg) => {
-                if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
-                    quote_msg.payload.get(1)
-                {
-                    if quote_payload.status == "ok" {
-                        (self.callbacks.data)(*quote_payload.clone())?;
-                    } else {
-                        (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
+                if quote_msg.message_type == ON_QUOTE_DATA {
+                    if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
+                        quote_msg.payload.get(1)
+                    {
+                        if quote_payload.status == "ok" {
+                            (self.callbacks.data)(*quote_payload.clone())?;
+                            return Ok(());
+                        } else {
+                            (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
+                            return Ok(());
+                        }
                     }
-                } else if quote_msg.message_type == "quote_completed" {
+                } else if quote_msg.message_type == ON_QUOTE_COMPLETED {
                     (self.callbacks.loaded)(quote_msg)?;
+                    return Ok(());
+                } else if quote_msg.message_type == ON_CRITICAL_ERROR {
+                    //TODO: Handle critical error
                 }
             }
         }
-
         Ok(())
     }
 }

@@ -5,12 +5,6 @@ pub mod session;
 pub mod study;
 pub mod websocket;
 
-const ON_DATA: &str = "timescale_update";
-const ON_DATA_UPDATE: &str = "du";
-const ON_SERIES_LOADING: &str = "series_loading";
-const ON_SERIES_COMPLETED: &str = "series_completed";
-const ON_SYMBOL_RESOLVED: &str = "symbol_resolved";
-
 #[derive(Debug)]
 pub enum ChartEvent {
     Data,
@@ -42,4 +36,3 @@ impl std::fmt::Display for ChartType {
         write!(f, "{}", chart_type)
     }
 }
-

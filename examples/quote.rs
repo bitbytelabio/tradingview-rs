@@ -42,10 +42,10 @@ async fn main() {
     socket
         .add_symbols(vec![
             "SP:SPX",
-            // "BINANCE:BTCUSDT",
-            // "BINANCE:ETHUSDT",
-            // "BITSTAMP:ETHUSD",
-            // "NASDAQ:TSLA",
+            "BINANCE:BTCUSDT",
+            "BINANCE:ETHUSDT",
+            "BITSTAMP:ETHUSD",
+            "NASDAQ:TSLA",
             // "BINANCE:B",
         ])
         .await
