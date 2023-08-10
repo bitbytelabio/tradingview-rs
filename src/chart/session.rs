@@ -82,7 +82,7 @@ impl WebSocketsBuilder {
 }
 
 impl WebSocket {
-    pub fn new() -> WebSocketsBuilder {
+    pub fn build() -> WebSocketsBuilder {
         WebSocketsBuilder::default()
     }
 

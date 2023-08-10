@@ -17,9 +17,9 @@ async fn main() {
     let session = env::var("TV_SESSION").unwrap();
     let signature = env::var("TV_SIGNATURE").unwrap();
 
-    let user = User::new()
+    let user = User::build()
         .session(&session, &signature)
-        .build()
+        .get()
         .await
         .unwrap();
 
@@ -29,7 +29,7 @@ async fn main() {
         error: Box::new(on_error),
     };
 
-    let mut socket = WebSocket::new()
+    let mut socket = WebSocket::build()
         .server(DataServer::ProData)
         .auth_token(user.auth_token)
         .connect(handlers)
