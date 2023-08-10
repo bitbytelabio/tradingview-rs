@@ -71,11 +71,11 @@ pub enum QuotePayloadType {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct QuotePayload {
-    #[serde(rename = "n")]
+    #[serde(rename(deserialize = "n"))]
     pub name: String,
-    #[serde(rename = "s")]
+    #[serde(rename(deserialize = "s"))]
     pub status: String,
-    #[serde(rename = "v")]
+    #[serde(rename(deserialize = "v"))]
     pub value: QuoteValue,
 }
 

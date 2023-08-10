@@ -252,10 +252,66 @@ impl WebSocket {
         Ok(())
     }
 
+    pub async fn modify_study(&mut self, study_id: &str, options: &str) -> Result<()> {
+        self.send(
+            "modify_study",
+            &payload!(self.chart_session_id.clone(), study_id, options),
+            //TODO: add study options
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn remove_study(&mut self, study_id: &str) -> Result<()> {
         self.send(
             "remove_study",
             &payload!(self.chart_session_id.clone(), study_id),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn create_series(
+        &mut self,
+        series_id: &str,
+        series_version: &str,
+        series_symbol_id: &str,
+        interval: Interval,
+        bar_count: u64,
+    ) -> Result<()> {
+        self.send(
+            "create_series",
+            &payload!(
+                self.chart_session_id.clone(),
+                series_id,
+                series_version,
+                series_symbol_id,
+                interval.to_string(),
+                bar_count
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn modify_series(
+        &mut self,
+        series_id: &str,
+        series_version: &str,
+        series_symbol_id: &str,
+        interval: Interval,
+        bar_count: u64,
+    ) -> Result<()> {
+        self.send(
+            "modify_series",
+            &payload!(
+                self.chart_session_id.clone(),
+                series_id,
+                series_version,
+                series_symbol_id,
+                interval.to_string(),
+                bar_count
+            ),
         )
         .await?;
         Ok(())
