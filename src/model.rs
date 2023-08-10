@@ -77,3 +77,13 @@ pub struct Symbol {
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct OHLCV {
+    pub time: f64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+}

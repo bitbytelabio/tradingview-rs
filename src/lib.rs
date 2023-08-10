@@ -1,6 +1,3 @@
-use reqwest::header::{HeaderMap, HeaderValue};
-use std::fmt;
-
 pub mod chart;
 pub mod client;
 pub mod error;
@@ -13,21 +10,53 @@ pub mod utils;
 
 static UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36";
 
-lazy_static::lazy_static! {
-    static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
-        let mut headers = HeaderMap::new();
-        headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
-        headers.insert("User-Agent", UA.parse().unwrap());
-        headers
-    };
-}
-
 #[macro_export]
 macro_rules! payload {
     ($($payload:expr),*) => {{
         let payload_vec = vec![$(serde_json::Value::from($payload)),*];
         payload_vec
     }};
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Screener {
+    America,
+    Australia,
+    Canada,
+    Egypt,
+    Germany,
+    India,
+    Israel,
+    Italy,
+    Luxembourg,
+    Poland,
+    Sweden,
+    Turkey,
+    UK,
+    Vietnam,
+    Other(String),
+}
+
+impl std::fmt::Display for Screener {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Screener::America => write!(f, "america"),
+            Screener::Australia => write!(f, "australia"),
+            Screener::Canada => write!(f, "canada"),
+            Screener::Egypt => write!(f, "egypt"),
+            Screener::Germany => write!(f, "germany"),
+            Screener::India => write!(f, "india"),
+            Screener::Israel => write!(f, "israel"),
+            Screener::Italy => write!(f, "italy"),
+            Screener::Luxembourg => write!(f, "luxembourg"),
+            Screener::Poland => write!(f, "poland"),
+            Screener::Sweden => write!(f, "sweden"),
+            Screener::Turkey => write!(f, "turkey"),
+            Screener::UK => write!(f, "uk"),
+            Screener::Vietnam => write!(f, "vietnam"),
+            Screener::Other(s) => write!(f, "{}", s.to_lowercase()),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -39,13 +68,29 @@ pub enum SessionType {
     PostMarket,
 }
 
-impl fmt::Display for SessionType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for SessionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SessionType::Regular => write!(f, "regular"),
             SessionType::Extended => write!(f, "extended"),
             SessionType::PreMarket => write!(f, "premarket"),
             SessionType::PostMarket => write!(f, "postmarket"),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub enum MarketAdjustment {
+    #[default]
+    Splits,
+    Dividends,
+}
+
+impl std::fmt::Display for MarketAdjustment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarketAdjustment::Splits => write!(f, "splits"),
+            MarketAdjustment::Dividends => write!(f, "dividends"),
         }
     }
 }
@@ -59,8 +104,8 @@ pub enum MarketStatus {
     Pre,
 }
 
-impl fmt::Display for MarketStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for MarketStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MarketStatus::Holiday => write!(f, "holiday"),
             MarketStatus::Open => write!(f, "market"),
@@ -165,8 +210,8 @@ pub enum Timezone {
     EtcUTC,
 }
 
-impl fmt::Display for Timezone {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Timezone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Timezone::AfricaCairo => write!(f, "Africa/Cairo"),
             Timezone::AfricaCasablanca => write!(f, "Africa/Casablanca"),

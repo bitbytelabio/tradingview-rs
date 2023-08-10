@@ -4,53 +4,13 @@ use crate::{
     model::{IndicatorInfo, IndicatorMetadata, SimpleTA, Symbol, SymbolSearch},
     prelude::*,
     user::User,
+    Screener,
 };
 use reqwest::Response;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::{debug, warn};
 
 const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
-
-#[derive(Debug, PartialEq)]
-pub enum Screener {
-    America,
-    Australia,
-    Canada,
-    Egypt,
-    Germany,
-    India,
-    Israel,
-    Italy,
-    Luxembourg,
-    Poland,
-    Sweden,
-    Turkey,
-    UK,
-    Vietnam,
-    Other(String),
-}
-
-impl std::fmt::Display for Screener {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Screener::America => write!(f, "america"),
-            Screener::Australia => write!(f, "australia"),
-            Screener::Canada => write!(f, "canada"),
-            Screener::Egypt => write!(f, "egypt"),
-            Screener::Germany => write!(f, "germany"),
-            Screener::India => write!(f, "india"),
-            Screener::Israel => write!(f, "israel"),
-            Screener::Italy => write!(f, "italy"),
-            Screener::Luxembourg => write!(f, "luxembourg"),
-            Screener::Poland => write!(f, "poland"),
-            Screener::Sweden => write!(f, "sweden"),
-            Screener::Turkey => write!(f, "turkey"),
-            Screener::UK => write!(f, "uk"),
-            Screener::Vietnam => write!(f, "vietnam"),
-            Screener::Other(s) => write!(f, "{}", s.to_lowercase()),
-        }
-    }
-}
 
 #[tracing::instrument]
 fn get_screener(exchange: &str) -> Result<Screener> {

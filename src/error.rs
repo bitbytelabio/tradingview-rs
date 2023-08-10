@@ -58,34 +58,24 @@ pub enum TradingViewError {
 pub enum LoginError {
     #[error("username or password is empty")]
     EmptyCredentials,
-
     #[error("username or password is invalid")]
     InvalidCredentials,
-
     #[error("OTP Secret is empty")]
     OTPSecretNotFound,
-
     #[error("OTP Secret is invalid")]
     InvalidOTPSecret,
-
     #[error("Wrong or expired sessionid/signature")]
     InvalidSession,
-
     #[error("Sessionid/signature is empty")]
     SessionNotFound,
-
     #[error("can not parse user id")]
     ParseIDError,
-
     #[error("can not parse username")]
     ParseUsernameError,
-
     #[error("can not parse session hash")]
     ParseSessionHashError,
-
     #[error("can not parse private channel")]
     ParsePrivateChannelError,
-
     #[error("can not parse auth token")]
     ParseAuthTokenError,
 }

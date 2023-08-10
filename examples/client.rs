@@ -4,6 +4,7 @@ use tradingview_rs::user::User;
 
 use tradingview_rs::error::Error;
 type Result<T> = std::result::Result<T, Error>;
+
 use tracing::error;
 
 #[tokio::main]
@@ -12,9 +13,9 @@ async fn main() {
     let session = env::var("TV_SESSION").unwrap();
     let signature = env::var("TV_SIGNATURE").unwrap();
 
-    let user = User::new()
+    let user = User::build()
         .session(&session, &signature)
-        .build()
+        .get()
         .await
         .unwrap();
 

@@ -3,7 +3,7 @@ use crate::{
     prelude::*,
     socket::{DataServer, SocketMessage},
     utils::{format_packet, gen_id, gen_session_id, parse_packet},
-    Interval, WEBSOCKET_HEADERS,
+    Interval,
 };
 
 use futures_util::{
@@ -92,8 +92,8 @@ impl ChartSocketBuilder {
         ))
         .unwrap();
 
-        let mut request = url.into_client_request().unwrap();
-        request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
+        let request = url.into_client_request().unwrap();
+        // request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
 
         let socket: WebSocketStream<MaybeTlsStream<TcpStream>> = match connect_async(request).await
         {

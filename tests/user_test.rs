@@ -9,7 +9,7 @@ mod user {
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
-        let result = User::new().credentials("", "").build().await;
+        let result = User::build().credentials("", "").get().await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), empty_user);
     }
@@ -22,7 +22,7 @@ mod user {
         let username = env::var("TV_USERNAME").unwrap();
         let password = env::var("TV_PASSWORD").unwrap();
 
-        let result = User::new().credentials(&username, &password).build().await;
+        let result = User::build().credentials(&username, &password).get().await;
 
         assert!(result.is_ok());
         let user = result.unwrap();
@@ -40,7 +40,7 @@ mod user {
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
-        let result = User::new().credentials("invalid", "invalid").build().await;
+        let result = User::build().credentials("invalid", "invalid").get().await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -59,10 +59,10 @@ mod user {
         let password = env::var("TV_TOTP_PASSWORD").unwrap();
         let totp = env::var("TV_TOTP_SECRET").unwrap();
 
-        let result = User::new()
+        let result = User::build()
             .credentials(&username, &password)
             .totp_secret(&totp)
-            .build()
+            .get()
             .await;
 
         assert!(result.is_ok());
@@ -84,7 +84,7 @@ mod user {
         let session = env::var("TV_SESSION").unwrap();
         let signature = env::var("TV_SIGNATURE").unwrap();
 
-        let result = User::new().session(&session, &signature).build().await;
+        let result = User::build().session(&session, &signature).get().await;
 
         assert!(result.is_ok());
         let user = result.unwrap();
@@ -102,9 +102,9 @@ mod user {
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
-        let result = User::new()
+        let result = User::build()
             .session("invalid_session", "invalid_session_signature")
-            .build()
+            .get()
             .await;
 
         assert!(result.is_err());
@@ -124,10 +124,10 @@ mod user {
         let username = env::var("TV_TOTP_USERNAME").unwrap();
         let password = env::var("TV_TOTP_PASSWORD").unwrap();
 
-        let result = User::new()
+        let result = User::build()
             .credentials(&username, &password)
             .totp_secret("ZTIXV4KTRISK4KK7")
-            .build()
+            .get()
             .await;
 
         assert!(result.is_err());

@@ -77,7 +77,7 @@ impl UserBuilder {
         self
     }
 
-    pub async fn build(&mut self) -> Result<User> {
+    pub async fn get(&mut self) -> Result<User> {
         let mut user = User {
             id: self.id.unwrap_or_default(),
             username: self.username.take().unwrap_or_default(),
@@ -107,7 +107,7 @@ impl UserBuilder {
 }
 
 impl User {
-    pub fn new() -> UserBuilder {
+    pub fn build() -> UserBuilder {
         UserBuilder::default()
     }
 

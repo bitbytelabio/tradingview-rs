@@ -1,5 +1,8 @@
-use crate::prelude::*;
+use std::collections::HashMap;
 
+use crate::{prelude::*, MarketAdjustment, SessionType};
+
+use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
@@ -92,4 +95,26 @@ pub fn clean_em_tags(text: &str) -> Result<String> {
     let regex = Regex::new(r"<[^>]*>")?;
     let cleaned_text = regex.replace_all(text, "");
     Ok(cleaned_text.to_string())
+}
+
+pub fn symbol_init(
+    symbol: &str,
+    adjustment: Option<MarketAdjustment>,
+    currency: Option<Currency>,
+    session_type: Option<SessionType>,
+) -> Result<String> {
+    let mut symbol_init: HashMap<String, String> = HashMap::new();
+    symbol_init.insert(
+        "adjustment".to_string(),
+        adjustment.unwrap_or_default().to_string(),
+    );
+    symbol_init.insert("symbol".to_string(), symbol.to_string());
+    if let Some(c) = currency {
+        symbol_init.insert("currency-id".to_string(), c.code().to_string());
+    }
+    if let Some(s) = session_type {
+        symbol_init.insert("session".to_string(), s.to_string());
+    }
+    let symbol_init_json = serde_json::to_value(&symbol_init)?;
+    Ok(format!("={}", symbol_init_json))
 }
