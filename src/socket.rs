@@ -24,21 +24,51 @@ lazy_static::lazy_static! {
     };
 }
 
-pub const ON_CHART_DATA: &str = "timescale_update";
-pub const ON_CHART_DATA_UPDATE: &str = "du";
-pub const ON_QUOTE_DATA: &str = "qsd";
-pub const ON_QUOTE_COMPLETED: &str = "quote_completed";
-pub const ON_SERIES_LOADING: &str = "series_loading";
-pub const ON_SERIES_COMPLETED: &str = "series_completed";
-pub const ON_SYMBOL_RESOLVED: &str = "symbol_resolved";
-pub const ON_REPLAY_POINT: &str = "replay_point";
-pub const ON_REPLAY_INSTANCE_ID: &str = "replay_instance_id";
-pub const ON_REPLAY_RESOLUTIONS: &str = "replay_resolutions";
-pub const ON_REPLAY_DATA_END: &str = "replay_data_end";
-pub const ON_STUDY_COMPLETED: &str = "study_completed";
-pub const ON_SYMBOL_ERROR: &str = "symbol_error";
-pub const ON_SERIES_ERROR: &str = "series_error";
-pub const ON_CRITICAL_ERROR: &str = "critical_error";
+pub enum SocketEvent {
+    OnChartData,
+    OnChartDataUpdate,
+    OnQuoteData,
+    OnQuoteCompleted,
+    OnSeriesLoading,
+    OnSeriesCompleted,
+    OnSymbolResolved,
+    OnReplayPoint,
+    OnReplayInstanceId,
+    OnReplayResolutions,
+    OnReplayDataEnd,
+    OnStudyCompleted,
+    OnError(SocketErrorEvent),
+    UnknownEvent(String),
+}
+
+pub enum SocketErrorEvent {
+    OnSymbolError,
+    OnSeriesError,
+    OnCriticalError,
+}
+
+impl From<&str> for SocketEvent {
+    fn from(s: &str) -> Self {
+        match s {
+            "timescale_update" => SocketEvent::OnChartData,
+            "du" => SocketEvent::OnChartDataUpdate,
+            "qsd" => SocketEvent::OnQuoteData,
+            "quote_completed" => SocketEvent::OnQuoteCompleted,
+            "series_loading" => SocketEvent::OnSeriesLoading,
+            "series_completed" => SocketEvent::OnSeriesCompleted,
+            "symbol_resolved" => SocketEvent::OnSymbolResolved,
+            "replay_point" => SocketEvent::OnReplayPoint,
+            "replay_instance_id" => SocketEvent::OnReplayInstanceId,
+            "replay_resolutions" => SocketEvent::OnReplayResolutions,
+            "replay_data_end" => SocketEvent::OnReplayDataEnd,
+            "study_completed" => SocketEvent::OnStudyCompleted,
+            "symbol_error" => SocketEvent::OnError(SocketErrorEvent::OnSymbolError),
+            "series_error" => SocketEvent::OnError(SocketErrorEvent::OnSeriesError),
+            "critical_error" => SocketEvent::OnError(SocketErrorEvent::OnCriticalError),
+            s => SocketEvent::UnknownEvent(s.to_string()),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SocketMessage {

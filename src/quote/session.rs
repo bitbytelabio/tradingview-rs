@@ -4,7 +4,7 @@ use crate::{
     prelude::*,
     quote::{QuotePayload, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
     socket::{
-        DataServer, Socket, SocketMessage, SocketMessageType, ON_CRITICAL_ERROR,
+        DataServer, Socket, SocketEvent, SocketMessage, SocketMessageType, ON_CRITICAL_ERROR,
         ON_QUOTE_COMPLETED, ON_QUOTE_DATA,
     },
     utils::{gen_session_id, parse_packet},

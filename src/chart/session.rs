@@ -411,6 +411,7 @@ impl Socket for WebSocket {
                 },
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
+                    continue;
                 }
                 None => {
                     debug!("No more messages to read");
