@@ -210,7 +210,6 @@ impl WebSocket {
 #[async_trait]
 impl Socket for WebSocket {
     async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
-        let message = Rc::new(message);
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnQuoteData => {
                 trace!("received OnQuoteData: {:#?}", message);
