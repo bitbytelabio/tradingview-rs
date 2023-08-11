@@ -1,7 +1,7 @@
 use crate::{
     payload,
     prelude::*,
-    socket::{DataServer, Socket, SocketMessageDe, SocketMessageSer},
+    socket::{DataServer, Socket, SocketEvent, SocketMessage, SocketMessageDe, SocketMessageSer},
     utils::{gen_session_id, parse_packet, symbol_init},
     Interval, MarketAdjustment, SessionType, Timezone,
 };
@@ -12,10 +12,10 @@ use futures_util::{
 };
 use iso_currency::Currency;
 use serde_json::Value;
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -372,77 +372,69 @@ impl Socket for WebSocket {
         let read = self.read.clone();
         let mut read_guard = read.write().await;
 
-        // loop {
-        //     debug!("Waiting for next message");
-        //     match read_guard.next().await {
-        //         Some(Ok(message)) => match &message {
-        //             Message::Text(text) => {
-        //                 trace!("parsing message: {:?}", text);
-        //                 match parse_packet(text) {
-        //                     Ok(values) => {
-        //                         for value in values {
-        //                             match value {
-        //                                 Value::Number(_) => {
-        //                                     trace!("handling ping message: {:?}", message);
-        //                                     if let Err(e) = self.ping(&message).await {
-        //                                         error!("Error handling ping: {:#?}", e);
-        //                                     }
-        //                                 }
-        //                                 Value::Object(_) => {
-        //                                     trace!("handling message: {:?}", value);
-        //                                     if let Err(e) = self.handle_message(value).await {
-        //                                         error!("Error handling message: {:#?}", e);
-        //                                     }
-        //                                 }
-        //                                 _ => {
-        //                                     trace!("unhandled message: {:?}", value);
-        //                                 }
-        //                             }
-        //                         }
-        //                     }
-        //                     Err(e) => {
-        //                         error!("Error parsing message: {:#?}", e);
-        //                     }
-        //                 }
-        //             }
-        //             _ => {
-        //                 warn!("received non-text message: {:?}", message);
-        //             }
-        //         },
-        //         Some(Err(e)) => {
-        //             error!("Error reading message: {:#?}", e);
-        //             continue;
-        //         }
-        //         None => {
-        //             debug!("No more messages to read");
-        //             break;
-        //         }
-        //     }
-        // }
+        loop {
+            debug!("waiting for next message");
+            match read_guard.next().await {
+                Some(Ok(message)) => match &message {
+                    Message::Text(text) => {
+                        trace!("parsing message: {:?}", text);
+                        match parse_packet(text) {
+                            Ok(values) => {
+                                for value in values {
+                                    match value {
+                                        SocketMessage::SocketServerInfo(info) => {
+                                            info!("received server info: {:?}", info);
+                                        }
+                                        SocketMessage::SocketMessage(msg) => {
+                                            if let Err(e) = self.handle_message(msg).await {
+                                                error!("Error handling message: {:#?}", e);
+                                            }
+                                        }
+                                        SocketMessage::Other(value) => {
+                                            trace!("receive message: {:?}", value);
+                                            if value.is_number() {
+                                                trace!("handling ping message: {:?}", message);
+                                                if let Err(e) = self.ping(&message).await {
+                                                    error!("error handling ping: {:#?}", e);
+                                                }
+                                            } else {
+                                                warn!("unhandled message: {:?}", value)
+                                            }
+                                        }
+                                        SocketMessage::Unknown(s) => {
+                                            warn!("unknown message: {:?}", s);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Error parsing message: {:#?}", e);
+                            }
+                        }
+                    }
+                    _ => {
+                        warn!("received non-text message: {:?}", message);
+                    }
+                },
+                Some(Err(e)) => {
+                    error!("Error reading message: {:#?}", e);
+                    break;
+                }
+                None => {
+                    debug!("No more messages to read");
+                    break;
+                }
+            }
+        }
     }
 
-    async fn handle_message(&mut self, _message: SocketMessageDe) -> Result<()> {
-        // let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)?;
-
-        // match payload {
-        //     SocketMessageType::SocketServerInfo(server_info) => {
-        //         info!("Received SocketServerInfo: {:#?}", server_info);
-        //     }
-        //     SocketMessageType::SocketMessage(quote_msg) => {
-        //         if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
-        //             quote_msg.payload.get(1)
-        //         {
-        //             if quote_payload.status == "ok" {
-        //                 (self.callbacks.data)(*quote_payload.clone())?;
-        //             } else {
-        //                 (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
-        //             }
-        //         } else if quote_msg.message_type == "quote_completed" {
-        //             (self.callbacks.loaded)(quote_msg)?;
-        //         }
-        //     }
-        // }
-
+    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()> {
+        let message = Rc::new(message);
+        match SocketEvent::from(message.m.clone()) {
+            _ => {
+                trace!("received message: {:#?}", message);
+            }
+        };
         Ok(())
     }
 }
