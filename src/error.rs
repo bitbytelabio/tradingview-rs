@@ -38,6 +38,12 @@ pub enum Error {
     TokioJoinError(#[from] tokio::task::JoinError),
     #[error("url parse error")]
     UrlParseError(#[from] url::ParseError),
+    #[error("base64 decode error")]
+    Base64DecodeError(#[from] base64::DecodeError),
+    #[error("zip error")]
+    ZipError(#[from] zip::result::ZipError),
+    #[error("io error")]
+    IOError(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone, Error)]

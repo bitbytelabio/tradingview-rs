@@ -157,6 +157,11 @@ pub enum ConnectionStatus {
     Connecting,
 }
 
+pub struct SocketSession {
+    pub read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    pub write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+}
+
 #[async_trait]
 pub trait Socket {
     async fn connect(

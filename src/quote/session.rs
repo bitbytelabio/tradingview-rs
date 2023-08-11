@@ -3,8 +3,8 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuoteData, ALL_QUOTE_FIELDS},
-    socket::{DataServer, Socket, SocketEvent, SocketMessage, SocketMessageDe, SocketMessageSer},
-    utils::{gen_session_id, parse_packet},
+    socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketMessageSer},
+    utils::gen_session_id,
 };
 use async_trait::async_trait;
 use futures_util::{

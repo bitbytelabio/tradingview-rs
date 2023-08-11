@@ -6,13 +6,19 @@ use crate::{
     MarketAdjustment, SessionType,
 };
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::engine::Engine as _;
 use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use serde::Serialize;
+use serde_json::Value;
+use std::io::prelude::*;
+use std::io::Cursor;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};
+use zip::ZipArchive;
 
 lazy_static::lazy_static! {
     static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").unwrap();
@@ -119,4 +125,14 @@ pub fn symbol_init(
     }
     let symbol_init_json = serde_json::to_value(&symbol_init)?;
     Ok(format!("={}", symbol_init_json))
+}
+
+pub async fn parse_compressed(data: &str) -> Result<Value> {
+    let decoded_data = BASE64.decode(data)?;
+    let mut zip = ZipArchive::new(Cursor::new(decoded_data))?;
+    let mut file = zip.by_index(0)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    let parsed_data: Value = serde_json::from_str(&contents)?;
+    Ok(parsed_data)
 }
