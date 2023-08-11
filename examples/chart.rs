@@ -1,5 +1,4 @@
 use std::env;
-use tradingview_rs::chart::websocket::ChartSocket;
 use tradingview_rs::socket::DataServer;
 use tradingview_rs::user::User;
 
@@ -16,11 +15,11 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut socket = ChartSocket::new(DataServer::Data)
-        .auth_token(user.auth_token)
-        .build()
-        .await
-        .unwrap();
+    // let mut socket = ChartSocket::new(DataServer::Data)
+    //     .auth_token(user.auth_token)
+    //     .build()
+    //     .await
+    //     .unwrap();
 
     // socket.event_loop().await;
 }

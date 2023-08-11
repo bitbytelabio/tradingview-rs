@@ -1,9 +1,6 @@
 use crate::error::TradingViewError;
 
-pub mod graphic_parser;
 pub mod session;
-pub mod study;
-pub mod websocket;
 
 #[derive(Debug)]
 pub enum ChartEvent {
