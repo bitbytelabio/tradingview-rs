@@ -1,4 +1,4 @@
-use crate::{payload, prelude::*, utils::format_packet, UA};
+use crate::{error::TradingViewError, payload, prelude::*, utils::format_packet, UA};
 use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -37,19 +37,13 @@ pub enum SocketEvent {
     OnReplayResolutions,
     OnReplayDataEnd,
     OnStudyCompleted,
-    OnError(SocketErrorEvent),
+    OnError(TradingViewError),
     UnknownEvent(String),
 }
 
-pub enum SocketErrorEvent {
-    OnSymbolError,
-    OnSeriesError,
-    OnCriticalError,
-}
-
-impl From<&str> for SocketEvent {
-    fn from(s: &str) -> Self {
-        match s {
+impl From<String> for SocketEvent {
+    fn from(s: String) -> Self {
+        match s.as_str() {
             "timescale_update" => SocketEvent::OnChartData,
             "du" => SocketEvent::OnChartDataUpdate,
             "qsd" => SocketEvent::OnQuoteData,
@@ -62,9 +56,9 @@ impl From<&str> for SocketEvent {
             "replay_resolutions" => SocketEvent::OnReplayResolutions,
             "replay_data_end" => SocketEvent::OnReplayDataEnd,
             "study_completed" => SocketEvent::OnStudyCompleted,
-            "symbol_error" => SocketEvent::OnError(SocketErrorEvent::OnSymbolError),
-            "series_error" => SocketEvent::OnError(SocketErrorEvent::OnSeriesError),
-            "critical_error" => SocketEvent::OnError(SocketErrorEvent::OnCriticalError),
+            "symbol_error" => SocketEvent::OnError(TradingViewError::SymbolError),
+            "series_error" => SocketEvent::OnError(TradingViewError::SeriesError),
+            "critical_error" => SocketEvent::OnError(TradingViewError::CriticalError),
             s => SocketEvent::UnknownEvent(s.to_string()),
         }
     }

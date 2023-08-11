@@ -3,10 +3,7 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuotePayload, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
-    socket::{
-        DataServer, Socket, SocketEvent, SocketMessage, SocketMessageType, ON_CRITICAL_ERROR,
-        ON_QUOTE_COMPLETED, ON_QUOTE_DATA,
-    },
+    socket::{DataServer, Socket, SocketEvent, SocketMessage, SocketMessageType},
     utils::{gen_session_id, parse_packet},
 };
 use async_trait::async_trait;
@@ -250,23 +247,31 @@ impl Socket for WebSocket {
                 info!("Received SocketServerInfo: {:#?}", server_info);
             }
             SocketMessageType::SocketMessage(quote_msg) => {
-                if quote_msg.message_type == ON_QUOTE_DATA {
-                    if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
-                        quote_msg.payload.get(1)
-                    {
-                        if quote_payload.status == "ok" {
-                            (self.callbacks.data)(*quote_payload.clone())?;
-                            return Ok(());
-                        } else {
-                            (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
-                            return Ok(());
+                match SocketEvent::from(quote_msg.message_type.clone()) {
+                    SocketEvent::OnQuoteData => {
+                        if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
+                            quote_msg.payload.get(1)
+                        {
+                            if quote_payload.status == "ok" {
+                                (self.callbacks.data)(*quote_payload.clone())?;
+                                return Ok(());
+                            } else {
+                                (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
+                                return Ok(());
+                            }
                         }
                     }
-                } else if quote_msg.message_type == ON_QUOTE_COMPLETED {
-                    (self.callbacks.loaded)(quote_msg)?;
-                    return Ok(());
-                } else if quote_msg.message_type == ON_CRITICAL_ERROR {
-                    //TODO: Handle critical error
+                    SocketEvent::OnQuoteCompleted => {
+                        (self.callbacks.loaded)(quote_msg)?;
+                        return Ok(());
+                    }
+                    SocketEvent::OnError(e) => {
+                        (self.callbacks.error)(e)?;
+                        return Ok(());
+                    }
+                    _ => {
+                        info!("Received SocketMessage");
+                    }
                 }
             }
         }
