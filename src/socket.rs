@@ -1,4 +1,10 @@
-use crate::{error::TradingViewError, payload, prelude::*, utils::format_packet, UA};
+use crate::{
+    error::TradingViewError,
+    payload,
+    prelude::*,
+    utils::{format_packet, parse_packet},
+    UA,
+};
 use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -7,12 +13,14 @@ use futures_util::{
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::net::TcpStream;
+use std::sync::Arc;
+use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
     MaybeTlsStream, WebSocketStream,
 };
+use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 lazy_static::lazy_static! {
@@ -150,8 +158,13 @@ pub enum ConnectionStatus {
     Connecting,
 }
 
-#[async_trait]
-pub trait Socket {
+#[derive(Clone)]
+pub struct SocketSession {
+    read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+}
+
+impl SocketSession {
     async fn connect(
         server: &DataServer,
         auth_token: &str,
@@ -177,9 +190,112 @@ pub trait Socket {
 
         Ok((write, read))
     }
-    async fn send(&mut self, m: &str, p: &[Value]) -> Result<()>;
-    async fn ping(&mut self, ping: &Message) -> Result<()>;
-    async fn close(&mut self) -> Result<()>;
-    async fn event_loop(&mut self);
-    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()>;
+
+    pub async fn new(auth_token: String, server: DataServer) -> Result<SocketSession> {
+        let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
+
+        let write = Arc::from(Mutex::new(write_stream));
+        let read = Arc::from(Mutex::new(read_stream));
+
+        Ok(SocketSession { write, read })
+    }
+
+    pub async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
+        self.write
+            .lock()
+            .await
+            .send(SocketMessageSer::new(m, p).to_message()?)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn ping(&mut self, ping: &Message) -> Result<()> {
+        self.write.lock().await.send(ping.clone()).await?;
+        Ok(())
+    }
+
+    pub async fn close(&mut self) -> Result<()> {
+        self.write.lock().await.close().await?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+pub trait Socket {
+    async fn event_loop(&mut self, session: &mut SocketSession) {
+        let read = session.read.clone();
+        let mut read_guard = read.lock().await;
+        loop {
+            trace!("waiting for next message");
+            match read_guard.next().await {
+                Some(Ok(message)) => self.handle_raw_messages(session, message).await,
+                Some(Err(e)) => {
+                    error!("Error reading message: {:#?}", e);
+                    break;
+                }
+                None => {
+                    debug!("No more messages to read");
+                    break;
+                }
+            }
+        }
+    }
+
+    async fn handle_raw_messages(&mut self, session: &mut SocketSession, raw: Message) {
+        match &raw {
+            Message::Text(text) => {
+                trace!("parsing message: {:?}", text);
+                match parse_packet(text) {
+                    Ok(parsed_messages) => {
+                        self.handle_parsed_messages(session, parsed_messages, &raw)
+                            .await;
+                    }
+                    Err(e) => {
+                        error!("Error parsing message: {:#?}", e);
+                    }
+                }
+            }
+            _ => {
+                warn!("received non-text message: {:?}", raw);
+            }
+        }
+    }
+
+    async fn handle_parsed_messages(
+        &mut self,
+        session: &mut SocketSession,
+        messages: Vec<SocketMessage<SocketMessageDe>>,
+        raw: &Message,
+    ) {
+        for message in messages {
+            match message {
+                SocketMessage::SocketServerInfo(info) => {
+                    info!("received server info: {:?}", info);
+                }
+                SocketMessage::SocketMessage(msg) => {
+                    if let Err(e) = self.handle_event(msg).await {
+                        self.handle_error(e).await;
+                    }
+                }
+                SocketMessage::Other(value) => {
+                    trace!("receive message: {:?}", value);
+                    if value.is_number() {
+                        trace!("handling ping message: {:?}", value);
+                        if let Err(e) = session.ping(&raw).await {
+                            self.handle_error(e).await;
+                        }
+                    } else {
+                        warn!("unhandled message: {:?}", value)
+                    }
+                }
+                SocketMessage::Unknown(s) => {
+                    warn!("unknown message: {:?}", s);
+                }
+            }
+        }
+    }
+
+    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()>;
+
+    async fn handle_error(&mut self, error: Error);
 }

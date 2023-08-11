@@ -2,9 +2,6 @@ use std::env;
 
 use tradingview_rs::user::User;
 
-use tradingview_rs::error::Error;
-type Result<T> = std::result::Result<T, Error>;
-
 use tracing::error;
 
 #[tokio::main]

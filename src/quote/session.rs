@@ -2,34 +2,25 @@ use crate::{
     error::TradingViewError,
     payload,
     prelude::*,
-    quote::{QuoteData, ALL_QUOTE_FIELDS},
-    socket::{DataServer, Socket, SocketEvent, SocketMessage, SocketMessageDe, SocketMessageSer},
-    utils::{gen_session_id, parse_packet},
+    quote::{QuoteData, QuoteValue, ALL_QUOTE_FIELDS},
+    socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
+    utils::gen_session_id,
 };
 use async_trait::async_trait;
-use futures_util::{
-    stream::{SplitSink, SplitStream},
-    SinkExt, StreamExt,
-};
 use serde_json::Value;
-use std::{collections::HashMap, rc::Rc, sync::Arc};
-use tokio::net::TcpStream;
-use tokio::sync::RwLock;
-use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, info, trace, warn};
-
-use super::QuoteValue;
+use std::collections::HashMap;
+use tracing::{error, trace};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
     server: Option<DataServer>,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
+    socket: Option<SocketSession>,
 }
 
 pub struct WebSocket {
-    pub write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-    pub read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    socket: SocketSession,
     quote_session_id: String,
     quote_fields: Vec<Value>,
     prev_quotes: HashMap<String, QuoteValue>,
@@ -43,10 +34,8 @@ fn merge_quotes(quote_old: &QuoteValue, quote_new: &QuoteValue) -> QuoteValue {
         ask_size: quote_new.ask_size.or(quote_old.ask_size),
         bid: quote_new.bid.or(quote_old.bid),
         bid_size: quote_new.bid_size.or(quote_old.bid_size),
-        price_change: quote_new.price_change.or(quote_old.price_change),
-        price_change_percent: quote_new
-            .price_change_percent
-            .or(quote_old.price_change_percent),
+        change: quote_new.change.or(quote_old.change),
+        change_percent: quote_new.change_percent.or(quote_old.change_percent),
         open: quote_new.open.or(quote_old.open),
         high: quote_new.high.or(quote_old.high),
         low: quote_new.low.or(quote_old.low),
@@ -54,6 +43,23 @@ fn merge_quotes(quote_old: &QuoteValue, quote_new: &QuoteValue) -> QuoteValue {
         price: quote_new.price.or(quote_old.price),
         timestamp: quote_new.timestamp.or(quote_old.timestamp),
         volume: quote_new.volume.or(quote_old.volume),
+        description: quote_new
+            .description
+            .clone()
+            .or(quote_old.description.clone()),
+        country: quote_new.country.clone().or(quote_old.country.clone()),
+        currency: quote_new.currency.clone().or(quote_old.currency.clone()),
+        data_provider: quote_new
+            .data_provider
+            .clone()
+            .or(quote_old.data_provider.clone()),
+        symbol: quote_new.symbol.clone().or(quote_old.symbol.clone()),
+        symbol_id: quote_new.symbol_id.clone().or(quote_old.symbol_id.clone()),
+        exchange: quote_new.exchange.clone().or(quote_old.exchange.clone()),
+        market_type: quote_new
+            .market_type
+            .clone()
+            .or(quote_old.market_type.clone()),
     }
 }
 
@@ -64,6 +70,11 @@ pub struct QuoteCallbackFn {
 }
 
 impl WebSocketsBuilder {
+    pub fn socket(&mut self, socket: SocketSession) -> &mut Self {
+        self.socket = Some(socket);
+        self
+    }
+
     pub fn server(&mut self, server: DataServer) -> &mut Self {
         self.server = Some(server);
         self
@@ -102,13 +113,13 @@ impl WebSocketsBuilder {
             }
         };
 
-        let (write_stream, read_stream) = WebSocket::connect(&server, &auth_token).await?;
-        let write = Arc::from(RwLock::new(write_stream));
-        let read = Arc::from(RwLock::new(read_stream));
+        let socket = self
+            .socket
+            .clone()
+            .unwrap_or(SocketSession::new(auth_token.clone(), server).await?);
 
         Ok(WebSocket {
-            write,
-            read,
+            socket,
             quote_session_id: session,
             quote_fields,
             auth_token,
@@ -124,36 +135,40 @@ impl WebSocket {
     }
 
     pub async fn create_session(&mut self) -> Result<()> {
-        self.send(
-            "quote_create_session",
-            &payload!(self.quote_session_id.clone()),
-        )
-        .await?;
+        self.socket
+            .send(
+                "quote_create_session",
+                &payload!(self.quote_session_id.clone()),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.send(
-            "quote_delete_session",
-            &payload!(self.quote_session_id.clone()),
-        )
-        .await?;
+        self.socket
+            .send(
+                "quote_delete_session",
+                &payload!(self.quote_session_id.clone()),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
         self.quote_session_id = gen_session_id("qs");
-        self.send(
-            "quote_create_session",
-            &payload!(self.quote_session_id.clone()),
-        )
-        .await?;
+        self.socket
+            .send(
+                "quote_create_session",
+                &payload!(self.quote_session_id.clone()),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn set_fields(&mut self) -> Result<()> {
-        self.send("quote_set_fields", &self.quote_fields.clone())
+        self.socket
+            .send("quote_set_fields", &self.quote_fields.clone())
             .await?;
         Ok(())
     }
@@ -161,118 +176,40 @@ impl WebSocket {
     pub async fn add_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
         let mut payloads = payload![self.quote_session_id.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
-        self.send("quote_add_symbols", &payloads).await?;
+        self.socket.send("quote_add_symbols", &payloads).await?;
         Ok(())
     }
 
     pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_owned();
-        self.send("set_auth_token", &payload!(auth_token)).await?;
+        self.socket
+            .send("set_auth_token", &payload!(auth_token))
+            .await?;
         Ok(())
     }
 
     pub async fn fast_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
         let mut payloads = payload![self.quote_session_id.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
-        self.send("quote_fast_symbols", &payloads).await?;
+        self.socket.send("quote_fast_symbols", &payloads).await?;
         Ok(())
     }
 
     pub async fn remove_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
         let mut payloads = payload![self.quote_session_id.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
-        self.send("quote_remove_symbols", &payloads).await?;
+        self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(())
     }
 
     pub async fn subscribe(&mut self) {
-        self.event_loop().await;
+        self.event_loop(&mut self.socket.clone()).await;
     }
 }
 
 #[async_trait]
 impl Socket for WebSocket {
-    async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
-        self.write
-            .write()
-            .await
-            .send(SocketMessageSer::new(m, p).to_message()?)
-            .await?;
-        Ok(())
-    }
-
-    async fn ping(&mut self, ping: &Message) -> Result<()> {
-        self.write.write().await.send(ping.clone()).await?;
-        Ok(())
-    }
-
-    async fn close(&mut self) -> Result<()> {
-        self.write.write().await.close().await?;
-        Ok(())
-    }
-
-    async fn event_loop(&mut self) {
-        let read = self.read.clone();
-        let mut read_guard = read.write().await;
-
-        loop {
-            debug!("waiting for next message");
-            match read_guard.next().await {
-                Some(Ok(message)) => match &message {
-                    Message::Text(text) => {
-                        trace!("parsing message: {:?}", text);
-                        match parse_packet(text) {
-                            Ok(values) => {
-                                for value in values {
-                                    match value {
-                                        SocketMessage::SocketServerInfo(info) => {
-                                            info!("received server info: {:?}", info);
-                                        }
-                                        SocketMessage::SocketMessage(msg) => {
-                                            if let Err(e) = self.handle_message(msg).await {
-                                                error!("Error handling message: {:#?}", e);
-                                            }
-                                        }
-                                        SocketMessage::Other(value) => {
-                                            trace!("receive message: {:?}", value);
-                                            if value.is_number() {
-                                                trace!("handling ping message: {:?}", message);
-                                                if let Err(e) = self.ping(&message).await {
-                                                    error!("error handling ping: {:#?}", e);
-                                                }
-                                            } else {
-                                                warn!("unhandled message: {:?}", value)
-                                            }
-                                        }
-                                        SocketMessage::Unknown(s) => {
-                                            warn!("unknown message: {:?}", s);
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("Error parsing message: {:#?}", e);
-                            }
-                        }
-                    }
-                    _ => {
-                        warn!("received non-text message: {:?}", message);
-                    }
-                },
-                Some(Err(e)) => {
-                    error!("Error reading message: {:#?}", e);
-                    break;
-                }
-                None => {
-                    debug!("No more messages to read");
-                    break;
-                }
-            }
-        }
-    }
-
-    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()> {
-        let message = Rc::new(message);
+    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnQuoteData => {
                 trace!("received OnQuoteData: {:#?}", message);
@@ -303,5 +240,9 @@ impl Socket for WebSocket {
             }
         };
         Ok(())
+    }
+
+    async fn handle_error(&mut self, error: Error) {
+        error!("error handling event: {:#?}", error);
     }
 }

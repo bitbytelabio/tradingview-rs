@@ -40,11 +40,11 @@ async fn main() {
 
     socket
         .add_symbols(vec![
-            // "SP:SPX",
+            "SP:SPX",
             "BINANCE:BTCUSDT",
-            // "BINANCE:ETHUSDT",
-            // "BITSTAMP:ETHUSD",
-            // "NASDAQ:TSLA",
+            "BINANCE:ETHUSDT",
+            "BITSTAMP:ETHUSD",
+            "NASDAQ:TSLA",
             // "BINANCE:B",
         ])
         .await
@@ -54,11 +54,10 @@ async fn main() {
 }
 
 fn on_data(data: HashMap<String, QuoteValue>) -> Result<()> {
-    data.iter().for_each(|(k, v)| {
-        info!("{}: {:#?}", k, v);
+    data.iter().for_each(|(_, v)| {
+        let json_string = serde_json::to_string(&v).unwrap();
+        info!("{}", json_string);
     });
-    // let json_string = serde_json::to_string(&data)?;
-    // info!("{}", json_string);
     Ok(())
 }
 
