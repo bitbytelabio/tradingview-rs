@@ -2,7 +2,7 @@ use std::env;
 
 use tradingview_rs::{
     chart::session::{ChartCallbackFn, WebSocket},
-    socket::{DataServer, Socket},
+    socket::DataServer,
     user::User,
     SessionType,
 };
@@ -53,5 +53,5 @@ async fn main() {
         .await
         .unwrap();
 
-    socket.event_loop().await;
+    socket.subscribe().await;
 }

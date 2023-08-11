@@ -14,6 +14,7 @@ use tracing::{debug, error, info, trace, warn};
 pub struct WebSocketsBuilder {
     server: Option<DataServer>,
     auth_token: Option<String>,
+    socket: Option<SocketSession>,
     relay_mode: bool,
 }
 
@@ -33,6 +34,11 @@ pub struct ChartCallbackFn {
 }
 
 impl WebSocketsBuilder {
+    pub fn socket(&mut self, socket: SocketSession) -> &mut Self {
+        self.socket = Some(socket);
+        self
+    }
+
     pub fn server(&mut self, server: DataServer) -> &mut Self {
         self.server = Some(server);
         self
@@ -56,7 +62,10 @@ impl WebSocketsBuilder {
 
         let server = self.server.clone().unwrap_or_default();
 
-        let socket = SocketSession::new(auth_token.clone(), server).await?;
+        let socket = self
+            .socket
+            .clone()
+            .unwrap_or(SocketSession::new(auth_token.clone(), server).await?);
 
         Ok(WebSocket {
             socket,
@@ -358,6 +367,10 @@ impl WebSocket {
             )
             .await?;
         Ok(())
+    }
+
+    pub async fn subscribe(&mut self) {
+        self.event_loop(&mut self.socket.clone()).await;
     }
 }
 

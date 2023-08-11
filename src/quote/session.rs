@@ -8,7 +8,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use serde_json::Value;
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, rc::Rc};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Default)]
@@ -16,6 +16,7 @@ pub struct WebSocketsBuilder {
     server: Option<DataServer>,
     auth_token: Option<String>,
     quote_fields: Option<Vec<String>>,
+    socket: Option<SocketSession>,
 }
 
 pub struct WebSocket {
@@ -54,6 +55,11 @@ pub struct QuoteCallbackFn {
 }
 
 impl WebSocketsBuilder {
+    pub fn socket(&mut self, socket: SocketSession) -> &mut Self {
+        self.socket = Some(socket);
+        self
+    }
+
     pub fn server(&mut self, server: DataServer) -> &mut Self {
         self.server = Some(server);
         self
@@ -92,7 +98,10 @@ impl WebSocketsBuilder {
             }
         };
 
-        let socket = SocketSession::new(auth_token.clone(), server).await?;
+        let socket = self
+            .socket
+            .clone()
+            .unwrap_or(SocketSession::new(auth_token.clone(), server).await?);
 
         Ok(WebSocket {
             socket: socket,
