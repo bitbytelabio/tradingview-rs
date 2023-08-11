@@ -288,7 +288,7 @@ impl WebSocket {
                 series_symbol_id,
                 interval.to_string(),
                 bar_count,
-                ""
+                "60M" // "r,1626220800:1628640000"
             ),
         )
         .await?;
