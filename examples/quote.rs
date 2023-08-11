@@ -1,11 +1,10 @@
+use std::collections::HashMap;
 use std::env;
 
 use tracing::{error, info};
 use tradingview_rs::error::TradingViewError;
-use tradingview_rs::quote::{
-    session::{QuoteCallbackFn, WebSocket},
-    QuotePayload, QuoteSocketMessage,
-};
+use tradingview_rs::quote::session::{QuoteCallbackFn, WebSocket};
+use tradingview_rs::quote::QuoteValue;
 use tradingview_rs::socket::DataServer;
 use tradingview_rs::user::User;
 type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
@@ -41,11 +40,11 @@ async fn main() {
 
     socket
         .add_symbols(vec![
-            "SP:SPX",
+            // "SP:SPX",
             "BINANCE:BTCUSDT",
-            "BINANCE:ETHUSDT",
-            "BITSTAMP:ETHUSD",
-            "NASDAQ:TSLA",
+            // "BINANCE:ETHUSDT",
+            // "BITSTAMP:ETHUSD",
+            // "NASDAQ:TSLA",
             // "BINANCE:B",
         ])
         .await
@@ -54,13 +53,16 @@ async fn main() {
     socket.subscribe().await;
 }
 
-fn on_data(data: QuotePayload) -> Result<()> {
-    let json_string = serde_json::to_string(&data)?;
-    info!("{}", json_string);
+fn on_data(data: HashMap<String, QuoteValue>) -> Result<()> {
+    data.iter().for_each(|(k, v)| {
+        info!("{}: {:#?}", k, v);
+    });
+    // let json_string = serde_json::to_string(&data)?;
+    // info!("{}", json_string);
     Ok(())
 }
 
-fn on_loaded(msg: QuoteSocketMessage) -> Result<()> {
+fn on_loaded(msg: Vec<serde_json::Value>) -> Result<()> {
     info!("Data: {:#?}", msg);
     Ok(())
 }
