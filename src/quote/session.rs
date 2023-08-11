@@ -177,6 +177,10 @@ impl WebSocket {
         self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(())
     }
+
+    pub async fn subscribe(&mut self) {
+        self.event_loop(&mut self.socket.clone()).await;
+    }
 }
 
 #[async_trait]

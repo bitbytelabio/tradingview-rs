@@ -2,7 +2,6 @@ use crate::{
     error::TradingViewError,
     payload,
     prelude::*,
-    quote::QuoteData,
     utils::{format_packet, parse_packet},
     UA,
 };
