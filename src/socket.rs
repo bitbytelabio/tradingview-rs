@@ -1,4 +1,4 @@
-use crate::{payload, prelude::*, utils::format_packet, UA};
+use crate::{error::TradingViewError, payload, prelude::*, utils::format_packet, UA};
 use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -24,13 +24,63 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SocketMessage {
+pub enum SocketEvent {
+    OnChartData,
+    OnChartDataUpdate,
+    OnQuoteData,
+    OnQuoteCompleted,
+    OnSeriesLoading,
+    OnSeriesCompleted,
+    OnSymbolResolved,
+    OnReplayPoint,
+    OnReplayInstanceId,
+    OnReplayResolutions,
+    OnReplayDataEnd,
+    OnStudyCompleted,
+    OnError(TradingViewError),
+    UnknownEvent(String),
+}
+
+impl From<String> for SocketEvent {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "timescale_update" => SocketEvent::OnChartData,
+            "du" => SocketEvent::OnChartDataUpdate,
+            "qsd" => SocketEvent::OnQuoteData,
+            "quote_completed" => SocketEvent::OnQuoteCompleted,
+            "series_loading" => SocketEvent::OnSeriesLoading,
+            "series_completed" => SocketEvent::OnSeriesCompleted,
+            "symbol_resolved" => SocketEvent::OnSymbolResolved,
+            "replay_point" => SocketEvent::OnReplayPoint,
+            "replay_instance_id" => SocketEvent::OnReplayInstanceId,
+            "replay_resolutions" => SocketEvent::OnReplayResolutions,
+            "replay_data_end" => SocketEvent::OnReplayDataEnd,
+            "study_completed" => SocketEvent::OnStudyCompleted,
+            "symbol_error" => SocketEvent::OnError(TradingViewError::SymbolError),
+            "series_error" => SocketEvent::OnError(TradingViewError::SeriesError),
+            "critical_error" => SocketEvent::OnError(TradingViewError::CriticalError),
+            s => SocketEvent::UnknownEvent(s.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SocketMessageSer {
     pub m: Value,
     pub p: Value,
 }
 
-impl SocketMessage {
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct SocketMessageDe {
+    pub m: String,
+    pub p: Vec<Value>,
+    #[serde(default)]
+    pub t: Option<i64>,
+    #[serde(default)]
+    pub t_ms: Option<i64>,
+}
+
+impl SocketMessageSer {
     pub fn new<M, P>(m: M, p: P) -> Self
     where
         M: Serialize,
@@ -38,7 +88,7 @@ impl SocketMessage {
     {
         let m = serde_json::to_value(m).expect("Failed to serialize Socket Message");
         let p = serde_json::to_value(p).expect("Failed to serialize Socket Message");
-        SocketMessage { m, p }
+        SocketMessageSer { m, p }
     }
 
     pub fn to_message(&self) -> Result<Message> {
@@ -66,9 +116,11 @@ pub struct SocketServerInfo {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum SocketMessageType<T> {
+pub enum SocketMessage<T> {
     SocketServerInfo(SocketServerInfo),
     SocketMessage(T),
+    Other(Value),
+    Unknown(String),
 }
 
 #[derive(Default, Clone)]
@@ -120,7 +172,7 @@ pub trait Socket {
         let (mut write, read) = socket.split();
 
         write
-            .send(SocketMessage::new("set_auth_token", payload!(auth_token)).to_message()?)
+            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
             .await?;
 
         Ok((write, read))
@@ -129,5 +181,5 @@ pub trait Socket {
     async fn ping(&mut self, ping: &Message) -> Result<()>;
     async fn close(&mut self) -> Result<()>;
     async fn event_loop(&mut self);
-    async fn handle_message(&mut self, message: Value) -> Result<()>;
+    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()>;
 }

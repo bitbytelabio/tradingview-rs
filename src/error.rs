@@ -40,7 +40,7 @@ pub enum Error {
     UrlParseError(#[from] url::ParseError),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum TradingViewError {
     #[error("series_error")]
     SeriesError,

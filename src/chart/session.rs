@@ -1,7 +1,7 @@
 use crate::{
     payload,
     prelude::*,
-    socket::{DataServer, Socket, SocketMessage},
+    socket::{DataServer, Socket, SocketEvent, SocketMessage, SocketMessageDe, SocketMessageSer},
     utils::{gen_session_id, parse_packet, symbol_init},
     Interval, MarketAdjustment, SessionType, Timezone,
 };
@@ -12,10 +12,10 @@ use futures_util::{
 };
 use iso_currency::Currency;
 use serde_json::Value;
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -30,9 +30,9 @@ pub struct WebSocket {
     chart_session_id: String,
     replay_session_id: String,
     replay_series_id: String,
-    relay_mode: bool,
+    _relay_mode: bool,
     auth_token: String,
-    callbacks: ChartCallbackFn,
+    _callbacks: ChartCallbackFn,
 }
 
 pub struct ChartCallbackFn {
@@ -74,9 +74,9 @@ impl WebSocketsBuilder {
             chart_session_id: String::default(),
             replay_session_id: String::default(),
             replay_series_id: String::default(),
-            relay_mode: self.relay_mode,
+            _relay_mode: self.relay_mode,
             auth_token,
-            callbacks: callback,
+            _callbacks: callback,
         })
     }
 }
@@ -252,10 +252,66 @@ impl WebSocket {
         Ok(())
     }
 
+    pub async fn modify_study(&mut self, study_id: &str, options: &str) -> Result<()> {
+        self.send(
+            "modify_study",
+            &payload!(self.chart_session_id.clone(), study_id, options),
+            //TODO: add study options
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn remove_study(&mut self, study_id: &str) -> Result<()> {
         self.send(
             "remove_study",
             &payload!(self.chart_session_id.clone(), study_id),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn create_series(
+        &mut self,
+        series_id: &str,
+        series_version: &str,
+        series_symbol_id: &str,
+        interval: Interval,
+        bar_count: u64,
+    ) -> Result<()> {
+        self.send(
+            "create_series",
+            &payload!(
+                self.chart_session_id.clone(),
+                series_id,
+                series_version,
+                series_symbol_id,
+                interval.to_string(),
+                bar_count
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn modify_series(
+        &mut self,
+        series_id: &str,
+        series_version: &str,
+        series_symbol_id: &str,
+        interval: Interval,
+        bar_count: u64,
+    ) -> Result<()> {
+        self.send(
+            "modify_series",
+            &payload!(
+                self.chart_session_id.clone(),
+                series_id,
+                series_version,
+                series_symbol_id,
+                interval.to_string(),
+                bar_count
+            ),
         )
         .await?;
         Ok(())
@@ -297,7 +353,7 @@ impl Socket for WebSocket {
         self.write
             .write()
             .await
-            .send(SocketMessage::new(m, p).to_message()?)
+            .send(SocketMessageSer::new(m, p).to_message()?)
             .await?;
         Ok(())
     }
@@ -317,7 +373,7 @@ impl Socket for WebSocket {
         let mut read_guard = read.write().await;
 
         loop {
-            debug!("Waiting for next message");
+            debug!("waiting for next message");
             match read_guard.next().await {
                 Some(Ok(message)) => match &message {
                     Message::Text(text) => {
@@ -326,20 +382,27 @@ impl Socket for WebSocket {
                             Ok(values) => {
                                 for value in values {
                                     match value {
-                                        Value::Number(_) => {
-                                            trace!("handling ping message: {:?}", message);
-                                            if let Err(e) = self.ping(&message).await {
-                                                error!("Error handling ping: {:#?}", e);
-                                            }
+                                        SocketMessage::SocketServerInfo(info) => {
+                                            info!("received server info: {:?}", info);
                                         }
-                                        Value::Object(_) => {
-                                            trace!("handling message: {:?}", value);
-                                            if let Err(e) = self.handle_message(value).await {
+                                        SocketMessage::SocketMessage(msg) => {
+                                            if let Err(e) = self.handle_message(msg).await {
                                                 error!("Error handling message: {:#?}", e);
                                             }
                                         }
-                                        _ => {
-                                            trace!("unhandled message: {:?}", value);
+                                        SocketMessage::Other(value) => {
+                                            trace!("receive message: {:?}", value);
+                                            if value.is_number() {
+                                                trace!("handling ping message: {:?}", message);
+                                                if let Err(e) = self.ping(&message).await {
+                                                    error!("error handling ping: {:#?}", e);
+                                                }
+                                            } else {
+                                                warn!("unhandled message: {:?}", value)
+                                            }
+                                        }
+                                        SocketMessage::Unknown(s) => {
+                                            warn!("unknown message: {:?}", s);
                                         }
                                     }
                                 }
@@ -355,6 +418,7 @@ impl Socket for WebSocket {
                 },
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
+                    break;
                 }
                 None => {
                     debug!("No more messages to read");
@@ -364,28 +428,13 @@ impl Socket for WebSocket {
         }
     }
 
-    async fn handle_message(&mut self, _message: Value) -> Result<()> {
-        // let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)?;
-
-        // match payload {
-        //     SocketMessageType::SocketServerInfo(server_info) => {
-        //         info!("Received SocketServerInfo: {:#?}", server_info);
-        //     }
-        //     SocketMessageType::SocketMessage(quote_msg) => {
-        //         if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
-        //             quote_msg.payload.get(1)
-        //         {
-        //             if quote_payload.status == "ok" {
-        //                 (self.callbacks.data)(*quote_payload.clone())?;
-        //             } else {
-        //                 (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
-        //             }
-        //         } else if quote_msg.message_type == "quote_completed" {
-        //             (self.callbacks.loaded)(quote_msg)?;
-        //         }
-        //     }
-        // }
-
+    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()> {
+        let message = Rc::new(message);
+        match SocketEvent::from(message.m.clone()) {
+            _ => {
+                trace!("received message: {:#?}", message);
+            }
+        };
         Ok(())
     }
 }

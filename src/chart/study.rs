@@ -1,5 +1,0 @@
-
-
-struct Study {
-    id: String,
-}

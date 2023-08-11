@@ -55,27 +55,12 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct QuoteSocketMessage {
-    #[serde(rename = "m")]
-    pub message_type: String,
-    #[serde(rename = "p")]
-    pub payload: Vec<QuotePayloadType>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum QuotePayloadType {
-    String(String),
-    QuotePayload(Box<QuotePayload>),
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct QuotePayload {
-    #[serde(rename = "n")]
+pub struct QuoteData {
+    #[serde(rename(deserialize = "n"))]
     pub name: String,
-    #[serde(rename = "s")]
+    #[serde(rename(deserialize = "s"))]
     pub status: String,
-    #[serde(rename = "v")]
+    #[serde(rename(deserialize = "v"))]
     pub value: QuoteValue,
 }
 
@@ -93,20 +78,18 @@ pub struct QuoteValue {
     pub price_change: Option<f64>,
     #[serde(default, rename(deserialize = "chp"))]
     pub price_change_percent: Option<f64>,
-    #[serde(default)]
-    pub spread: Option<f64>,
-    #[serde(default)]
-    pub open_price: Option<f64>,
-    #[serde(default)]
-    pub high_price: Option<f64>,
-    #[serde(default)]
-    pub low_price: Option<f64>,
-    #[serde(default)]
-    pub prev_close_price: Option<f64>,
+    #[serde(default, rename(deserialize = "open_price"))]
+    pub open: Option<f64>,
+    #[serde(default, rename(deserialize = "high_price"))]
+    pub high: Option<f64>,
+    #[serde(default, rename(deserialize = "low_price"))]
+    pub low: Option<f64>,
+    #[serde(default, rename(deserialize = "prev_close_price"))]
+    pub prev_close: Option<f64>,
     #[serde(default, rename(deserialize = "lp"))]
     pub price: Option<f64>,
     #[serde(default, rename(deserialize = "lp_time"))]
-    pub price_time: Option<i64>,
+    pub timestamp: Option<i64>,
     #[serde(default)]
     pub volume: Option<f64>,
 }

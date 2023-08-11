@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 
-use crate::{prelude::*, MarketAdjustment, SessionType};
+use crate::{
+    prelude::*,
+    socket::{SocketMessage, SocketMessageDe},
+    MarketAdjustment, SessionType,
+};
 
 use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use serde::Serialize;
-use serde_json::Value;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};
 
@@ -55,27 +58,26 @@ pub fn gen_id() -> String {
     result
 }
 
-pub fn parse_packet(message: &str) -> Result<Vec<Value>> {
+pub fn parse_packet(message: &str) -> Result<Vec<SocketMessage<SocketMessageDe>>> {
     if message.is_empty() {
         return Ok(vec![]);
     }
 
     let cleaned_message = CLEANER_REGEX.replace_all(message, "");
-    let packets: Vec<Value> = SPLITTER_REGEX
+    let packets: Vec<SocketMessage<SocketMessageDe>> = SPLITTER_REGEX
         .split(&cleaned_message)
         .filter(|packet| !packet.is_empty())
         .map(|packet| match serde_json::from_str(packet) {
             Ok(value) => value,
             Err(error) => {
                 if error.is_syntax() {
-                    error!("Error parsing packet: invalid JSON: {}", error);
+                    error!("error parsing packet: invalid JSON: {}", error);
                 } else {
-                    error!("Error parsing packet: {}", error);
+                    error!("error parsing packet: {}", error);
                 }
-                Value::Null
+                SocketMessage::Unknown(packet.to_string())
             }
         })
-        .filter(|value| value != &Value::Null)
         .collect();
 
     Ok(packets)
