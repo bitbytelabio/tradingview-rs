@@ -9,7 +9,7 @@ use crate::{
 use async_trait::async_trait;
 use serde_json::Value;
 use std::{collections::HashMap, rc::Rc};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, trace};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -104,7 +104,7 @@ impl WebSocketsBuilder {
             .unwrap_or(SocketSession::new(auth_token.clone(), server).await?);
 
         Ok(WebSocket {
-            socket: socket,
+            socket,
             quote_session_id: session,
             quote_fields,
             auth_token,

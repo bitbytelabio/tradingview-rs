@@ -8,7 +8,7 @@ use crate::{
 use async_trait::async_trait;
 use iso_currency::Currency;
 use std::rc::Rc;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -379,6 +379,9 @@ impl Socket for WebSocket {
     async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
         let message = Rc::new(message);
         match SocketEvent::from(message.m.clone()) {
+            SocketEvent::OnChartData => {
+                info!("received message: {:#?}", message);
+            }
             _ => {
                 info!("received message: {:#?}", message);
             }
