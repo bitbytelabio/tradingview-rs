@@ -162,8 +162,6 @@ pub enum ConnectionStatus {
 pub struct SocketSession {
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-    pub auth_token: String,
-    pub server: DataServer,
 }
 
 impl SocketSession {
@@ -199,12 +197,7 @@ impl SocketSession {
         let write = Arc::from(Mutex::new(write_stream));
         let read = Arc::from(Mutex::new(read_stream));
 
-        Ok(SocketSession {
-            write,
-            read,
-            auth_token,
-            server,
-        })
+        Ok(SocketSession { write, read })
     }
 
     pub async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
@@ -288,7 +281,7 @@ pub trait Socket {
                     trace!("receive message: {:?}", value);
                     if value.is_number() {
                         trace!("handling ping message: {:?}", value);
-                        if let Err(e) = session.ping(raw).await {
+                        if let Err(e) = session.ping(&raw).await {
                             self.handle_error(e).await;
                         }
                     } else {
