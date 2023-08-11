@@ -1,4 +1,10 @@
-use crate::{error::TradingViewError, payload, prelude::*, utils::format_packet, UA};
+use crate::{
+    error::TradingViewError,
+    payload,
+    prelude::*,
+    utils::{format_packet, parse_packet},
+    UA,
+};
 use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
@@ -13,6 +19,7 @@ use tokio_tungstenite::{
     tungstenite::{client::IntoClientRequest, protocol::Message},
     MaybeTlsStream, WebSocketStream,
 };
+use tracing::{error, info, trace, warn};
 use url::Url;
 
 lazy_static::lazy_static! {
@@ -181,5 +188,55 @@ pub trait Socket {
     async fn ping(&mut self, ping: &Message) -> Result<()>;
     async fn close(&mut self) -> Result<()>;
     async fn event_loop(&mut self);
-    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()>;
+    async fn handle_raw_messages(&mut self, raw: Message) {
+        match &raw {
+            Message::Text(text) => {
+                trace!("parsing message: {:?}", text);
+                match parse_packet(text) {
+                    Ok(parsed_messages) => {
+                        self.handle_parsed_messages(parsed_messages, &raw).await;
+                    }
+                    Err(e) => {
+                        error!("Error parsing message: {:#?}", e);
+                    }
+                }
+            }
+            _ => {
+                warn!("received non-text message: {:?}", raw);
+            }
+        }
+    }
+    async fn handle_parsed_messages(
+        &mut self,
+        messages: Vec<SocketMessage<SocketMessageDe>>,
+        raw: &Message,
+    ) {
+        for message in messages {
+            match message {
+                SocketMessage::SocketServerInfo(info) => {
+                    info!("received server info: {:?}", info);
+                }
+                SocketMessage::SocketMessage(msg) => {
+                    if let Err(e) = self.handle_event(msg).await {
+                        error!("Error handling message: {:#?}", e);
+                    }
+                }
+                SocketMessage::Other(value) => {
+                    trace!("receive message: {:?}", value);
+                    if value.is_number() {
+                        trace!("handling ping message: {:?}", value);
+                        if let Err(e) = self.ping(&raw).await {
+                            error!("error handling ping: {:#?}", e);
+                        }
+                    } else {
+                        warn!("unhandled message: {:?}", value)
+                    }
+                }
+                SocketMessage::Unknown(s) => {
+                    warn!("unknown message: {:?}", s);
+                }
+            }
+        }
+    }
+    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()>;
 }

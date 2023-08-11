@@ -386,7 +386,7 @@ impl Socket for WebSocket {
                                             info!("received server info: {:?}", info);
                                         }
                                         SocketMessage::SocketMessage(msg) => {
-                                            if let Err(e) = self.handle_message(msg).await {
+                                            if let Err(e) = self.handle_event(msg).await {
                                                 error!("Error handling message: {:#?}", e);
                                             }
                                         }
@@ -428,7 +428,7 @@ impl Socket for WebSocket {
         }
     }
 
-    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()> {
+    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
         let message = Rc::new(message);
         match SocketEvent::from(message.m.clone()) {
             _ => {
