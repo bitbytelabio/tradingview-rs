@@ -47,7 +47,7 @@ async fn main() {
             "sds_1",
             "s1",
             "sds_sym_1",
-            tradingview_rs::Interval::Daily,
+            tradingview_rs::Interval::FourHours,
             100,
         )
         .await

@@ -1,21 +1,19 @@
-use std::collections::HashMap;
-
 use crate::{
     prelude::*,
     socket::{SocketMessage, SocketMessageDe},
     MarketAdjustment, SessionType,
 };
-
-use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::engine::Engine as _;
+use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
 use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
 use serde::Serialize;
 use serde_json::Value;
-use std::io::prelude::*;
-use std::io::Cursor;
+use std::{
+    collections::HashMap,
+    io::{prelude::*, Cursor},
+};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};
 use zip::ZipArchive;
