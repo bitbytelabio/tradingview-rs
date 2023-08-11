@@ -3,7 +3,7 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuotePayload, QuotePayloadType, QuoteSocketMessage, ALL_QUOTE_FIELDS},
-    socket::{DataServer, Socket, SocketEvent, SocketMessage, SocketMessageType},
+    socket::{DataServer, Socket, SocketEvent, SocketMessage, SocketMessageDe, SocketMessageSer},
     utils::{gen_session_id, parse_packet},
 };
 use async_trait::async_trait;
@@ -172,7 +172,7 @@ impl Socket for WebSocket {
         self.write
             .write()
             .await
-            .send(SocketMessage::new(m, p).to_message()?)
+            .send(SocketMessageSer::new(m, p).to_message()?)
             .await?;
         Ok(())
     }
@@ -192,7 +192,7 @@ impl Socket for WebSocket {
         let mut read_guard = read.write().await;
 
         loop {
-            debug!("Waiting for next message");
+            debug!("waiting for next message");
             match read_guard.next().await {
                 Some(Ok(message)) => match &message {
                     Message::Text(text) => {
@@ -201,20 +201,27 @@ impl Socket for WebSocket {
                             Ok(values) => {
                                 for value in values {
                                     match value {
-                                        Value::Number(_) => {
-                                            trace!("handling ping message: {:?}", message);
-                                            if let Err(e) = self.ping(&message).await {
-                                                error!("Error handling ping: {:#?}", e);
-                                            }
+                                        SocketMessage::SocketServerInfo(info) => {
+                                            info!("received server info: {:?}", info);
                                         }
-                                        Value::Object(_) => {
-                                            trace!("handling message: {:?}", value);
-                                            if let Err(e) = self.handle_message(value).await {
+                                        SocketMessage::SocketMessage(msg) => {
+                                            if let Err(e) = self.handle_message(msg).await {
                                                 error!("Error handling message: {:#?}", e);
                                             }
                                         }
-                                        _ => {
-                                            trace!("unhandled message: {:?}", value);
+                                        SocketMessage::Other(value) => {
+                                            trace!("receive message: {:?}", value);
+                                            if value.is_number() {
+                                                info!("handling ping message: {:?}", message);
+                                                if let Err(e) = self.ping(&message).await {
+                                                    error!("Error handling ping: {:#?}", e);
+                                                }
+                                            } else {
+                                                warn!("unhandled message: {:?}", value)
+                                            }
+                                        }
+                                        SocketMessage::Unknown(s) => {
+                                            warn!("unknown message: {:?}", s);
                                         }
                                     }
                                 }
@@ -230,6 +237,7 @@ impl Socket for WebSocket {
                 },
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
+                    break;
                 }
                 None => {
                     debug!("No more messages to read");
@@ -239,42 +247,30 @@ impl Socket for WebSocket {
         }
     }
 
-    async fn handle_message(&mut self, message: Value) -> Result<()> {
-        let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)?;
-
-        match payload {
-            SocketMessageType::SocketServerInfo(server_info) => {
-                info!("Received SocketServerInfo: {:#?}", server_info);
-            }
-            SocketMessageType::SocketMessage(quote_msg) => {
-                match SocketEvent::from(quote_msg.message_type.clone()) {
-                    SocketEvent::OnQuoteData => {
-                        if let Some(QuotePayloadType::QuotePayload(quote_payload)) =
-                            quote_msg.payload.get(1)
-                        {
-                            if quote_payload.status == "ok" {
-                                (self.callbacks.data)(*quote_payload.clone())?;
-                                return Ok(());
-                            } else {
-                                (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
-                                return Ok(());
-                            }
-                        }
-                    }
-                    SocketEvent::OnQuoteCompleted => {
-                        (self.callbacks.loaded)(quote_msg)?;
-                        return Ok(());
-                    }
-                    SocketEvent::OnError(e) => {
-                        (self.callbacks.error)(e)?;
-                        return Ok(());
-                    }
-                    _ => {
-                        info!("Received SocketMessage");
-                    }
+    async fn handle_message(&mut self, message: SocketMessageDe) -> Result<()> {
+        match SocketEvent::from(message.m.clone()) {
+            SocketEvent::OnQuoteData => {
+                trace!("received OnQuoteData: {:#?}", message);
+                let qsd = serde_json::from_value::<QuotePayload>(message.p[1].clone())?;
+                if qsd.status == "ok" {
+                    (self.callbacks.data)(qsd)?;
+                    return Ok(());
+                } else {
+                    (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
+                    return Ok(());
                 }
             }
-        }
+            SocketEvent::OnQuoteCompleted => {
+                return Ok(());
+            }
+            SocketEvent::OnError(e) => {
+                (self.callbacks.error)(e)?;
+                return Ok(());
+            }
+            _ => {
+                info!("Received SocketMessage");
+            }
+        };
         Ok(())
     }
 }

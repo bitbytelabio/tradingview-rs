@@ -22,5 +22,5 @@ async fn main() {
         .await
         .unwrap();
 
-    socket.event_loop().await;
+    // socket.event_loop().await;
 }

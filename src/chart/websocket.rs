@@ -1,7 +1,7 @@
 use crate::{
     payload,
     prelude::*,
-    socket::{DataServer, SocketMessage},
+    socket::{DataServer, SocketMessageSer},
     utils::{format_packet, gen_id, gen_session_id, parse_packet},
     Interval,
 };
@@ -80,8 +80,8 @@ impl ChartSocketBuilder {
 
     fn initial_messages(&self, session: &str, auth_token: &str) -> Result<VecDeque<Message>> {
         Ok(VecDeque::from(vec![
-            SocketMessage::new("set_auth_token", payload!(auth_token)).to_message()?,
-            SocketMessage::new("chart_create_session", payload!(session)).to_message()?,
+            SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?,
+            SocketMessageSer::new("chart_create_session", payload!(session)).to_message()?,
         ]))
     }
 
@@ -299,34 +299,34 @@ impl ChartSocket {
         Ok(())
     }
 
-    pub async fn event_loop(&mut self) {
-        self.create_chart_series("BINANCE:BTCUSDT", Interval::FiveMinutes, None, 10)
-            .await
-            .unwrap();
+    // pub async fn event_loop(&mut self) {
+    //     self.create_chart_series("BINANCE:BTCUSDT", Interval::FiveMinutes, None, 10)
+    //         .await
+    //         .unwrap();
 
-        while let Some(result) = self.read.next().await {
-            match result {
-                Ok(message) => {
-                    let values = parse_packet(&message.to_string()).unwrap();
-                    for value in values {
-                        match value {
-                            Value::Number(_) => self.handle_ping(&message).await,
-                            Value::Object(_) => match self.handle_message(value).await {
-                                Ok(()) => {}
-                                Err(e) => {
-                                    error!("unable to handle message, with: {:#?}", e);
-                                }
-                            },
-                            _ => (),
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Error reading message: {:#?}", e);
-                }
-            }
-        }
-    }
+    //     while let Some(result) = self.read.next().await {
+    //         match result {
+    //             Ok(message) => {
+    //                 let values = parse_packet(&message.to_string()).unwrap();
+    //                 for value in values {
+    //                     match value {
+    //                         Value::Number(_) => self.handle_ping(&message).await,
+    //                         Value::Object(_) => match self.handle_message(value).await {
+    //                             Ok(()) => {}
+    //                             Err(e) => {
+    //                                 error!("unable to handle message, with: {:#?}", e);
+    //                             }
+    //                         },
+    //                         _ => (),
+    //                     }
+    //                 }
+    //             }
+    //             Err(e) => {
+    //                 error!("Error reading message: {:#?}", e);
+    //             }
+    //         }
+    //     }
+    // }
 
     async fn handle_ping(&mut self, message: &Message) {
         match self.ping(message).await {
@@ -417,7 +417,7 @@ impl ChartSocket {
         M: Serialize,
         P: Serialize,
     {
-        let msg = format_packet(SocketMessage::new(message, payload))?;
+        let msg = format_packet(SocketMessageSer::new(message, payload))?;
         self.messages.push_back(msg);
         self.send_queue().await?;
         Ok(())

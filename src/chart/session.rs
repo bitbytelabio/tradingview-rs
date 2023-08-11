@@ -1,7 +1,7 @@
 use crate::{
     payload,
     prelude::*,
-    socket::{DataServer, Socket, SocketMessage},
+    socket::{DataServer, Socket, SocketMessageDe, SocketMessageSer},
     utils::{gen_session_id, parse_packet, symbol_init},
     Interval, MarketAdjustment, SessionType, Timezone,
 };
@@ -353,7 +353,7 @@ impl Socket for WebSocket {
         self.write
             .write()
             .await
-            .send(SocketMessage::new(m, p).to_message()?)
+            .send(SocketMessageSer::new(m, p).to_message()?)
             .await?;
         Ok(())
     }
@@ -372,56 +372,56 @@ impl Socket for WebSocket {
         let read = self.read.clone();
         let mut read_guard = read.write().await;
 
-        loop {
-            debug!("Waiting for next message");
-            match read_guard.next().await {
-                Some(Ok(message)) => match &message {
-                    Message::Text(text) => {
-                        trace!("parsing message: {:?}", text);
-                        match parse_packet(text) {
-                            Ok(values) => {
-                                for value in values {
-                                    match value {
-                                        Value::Number(_) => {
-                                            trace!("handling ping message: {:?}", message);
-                                            if let Err(e) = self.ping(&message).await {
-                                                error!("Error handling ping: {:#?}", e);
-                                            }
-                                        }
-                                        Value::Object(_) => {
-                                            trace!("handling message: {:?}", value);
-                                            if let Err(e) = self.handle_message(value).await {
-                                                error!("Error handling message: {:#?}", e);
-                                            }
-                                        }
-                                        _ => {
-                                            trace!("unhandled message: {:?}", value);
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("Error parsing message: {:#?}", e);
-                            }
-                        }
-                    }
-                    _ => {
-                        warn!("received non-text message: {:?}", message);
-                    }
-                },
-                Some(Err(e)) => {
-                    error!("Error reading message: {:#?}", e);
-                    continue;
-                }
-                None => {
-                    debug!("No more messages to read");
-                    break;
-                }
-            }
-        }
+        // loop {
+        //     debug!("Waiting for next message");
+        //     match read_guard.next().await {
+        //         Some(Ok(message)) => match &message {
+        //             Message::Text(text) => {
+        //                 trace!("parsing message: {:?}", text);
+        //                 match parse_packet(text) {
+        //                     Ok(values) => {
+        //                         for value in values {
+        //                             match value {
+        //                                 Value::Number(_) => {
+        //                                     trace!("handling ping message: {:?}", message);
+        //                                     if let Err(e) = self.ping(&message).await {
+        //                                         error!("Error handling ping: {:#?}", e);
+        //                                     }
+        //                                 }
+        //                                 Value::Object(_) => {
+        //                                     trace!("handling message: {:?}", value);
+        //                                     if let Err(e) = self.handle_message(value).await {
+        //                                         error!("Error handling message: {:#?}", e);
+        //                                     }
+        //                                 }
+        //                                 _ => {
+        //                                     trace!("unhandled message: {:?}", value);
+        //                                 }
+        //                             }
+        //                         }
+        //                     }
+        //                     Err(e) => {
+        //                         error!("Error parsing message: {:#?}", e);
+        //                     }
+        //                 }
+        //             }
+        //             _ => {
+        //                 warn!("received non-text message: {:?}", message);
+        //             }
+        //         },
+        //         Some(Err(e)) => {
+        //             error!("Error reading message: {:#?}", e);
+        //             continue;
+        //         }
+        //         None => {
+        //             debug!("No more messages to read");
+        //             break;
+        //         }
+        //     }
+        // }
     }
 
-    async fn handle_message(&mut self, _message: Value) -> Result<()> {
+    async fn handle_message(&mut self, _message: SocketMessageDe) -> Result<()> {
         // let payload: SocketMessageType<QuoteSocketMessage> = serde_json::from_value(message)?;
 
         // match payload {
