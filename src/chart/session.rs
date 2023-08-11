@@ -287,7 +287,8 @@ impl WebSocket {
                 series_version,
                 series_symbol_id,
                 interval.to_string(),
-                bar_count
+                bar_count,
+                ""
             ),
         )
         .await?;
@@ -375,47 +376,7 @@ impl Socket for WebSocket {
         loop {
             debug!("waiting for next message");
             match read_guard.next().await {
-                Some(Ok(message)) => match &message {
-                    Message::Text(text) => {
-                        trace!("parsing message: {:?}", text);
-                        match parse_packet(text) {
-                            Ok(values) => {
-                                for value in values {
-                                    match value {
-                                        SocketMessage::SocketServerInfo(info) => {
-                                            info!("received server info: {:?}", info);
-                                        }
-                                        SocketMessage::SocketMessage(msg) => {
-                                            if let Err(e) = self.handle_event(msg).await {
-                                                error!("Error handling message: {:#?}", e);
-                                            }
-                                        }
-                                        SocketMessage::Other(value) => {
-                                            trace!("receive message: {:?}", value);
-                                            if value.is_number() {
-                                                trace!("handling ping message: {:?}", message);
-                                                if let Err(e) = self.ping(&message).await {
-                                                    error!("error handling ping: {:#?}", e);
-                                                }
-                                            } else {
-                                                warn!("unhandled message: {:?}", value)
-                                            }
-                                        }
-                                        SocketMessage::Unknown(s) => {
-                                            warn!("unknown message: {:?}", s);
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("Error parsing message: {:#?}", e);
-                            }
-                        }
-                    }
-                    _ => {
-                        warn!("received non-text message: {:?}", message);
-                    }
-                },
+                Some(Ok(message)) => self.handle_raw_messages(message).await,
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
                     break;
@@ -432,7 +393,7 @@ impl Socket for WebSocket {
         let message = Rc::new(message);
         match SocketEvent::from(message.m.clone()) {
             _ => {
-                trace!("received message: {:#?}", message);
+                debug!("received message: {:#?}", message);
             }
         };
         Ok(())

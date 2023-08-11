@@ -127,7 +127,7 @@ pub fn symbol_init(
     Ok(format!("={}", symbol_init_json))
 }
 
-pub async fn parse_compressed(data: &str) -> Result<Value> {
+pub fn parse_compressed(data: &str) -> Result<Value> {
     let decoded_data = BASE64.decode(data)?;
     let mut zip = ZipArchive::new(Cursor::new(decoded_data))?;
     let mut file = zip.by_index(0)?;

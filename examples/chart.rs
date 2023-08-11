@@ -1,6 +1,11 @@
 use std::env;
 
-use tradingview_rs::user::User;
+use tradingview_rs::{
+    chart::session::{ChartCallbackFn, WebSocket},
+    socket::{DataServer, Socket},
+    user::User,
+    SessionType,
+};
 
 #[tokio::main]
 async fn main() {
@@ -9,17 +14,44 @@ async fn main() {
     let session = env::var("TV_SESSION").unwrap();
     let signature = env::var("TV_SIGNATURE").unwrap();
 
-    let _user = User::build()
+    let user = User::build()
         .session(&session, &signature)
         .get()
         .await
         .unwrap();
 
-    // let mut socket = ChartSocket::new(DataServer::Data)
-    //     .auth_token(user.auth_token)
-    //     .build()
-    //     .await
-    //     .unwrap();
+    let handlers = ChartCallbackFn {};
 
-    // socket.event_loop().await;
+    let mut socket = WebSocket::build()
+        .server(DataServer::ProData)
+        .auth_token(user.auth_token)
+        .connect(handlers)
+        .await
+        .unwrap();
+
+    socket.create_chart_session().await.unwrap();
+
+    socket
+        .resolve_symbol(
+            "sds_sym_1",
+            "HOSE:FPT",
+            Some(tradingview_rs::MarketAdjustment::Splits),
+            Some(iso_currency::Currency::VND),
+            Some(SessionType::Regular),
+        )
+        .await
+        .unwrap();
+
+    socket
+        .create_series(
+            "sds_1",
+            "s1",
+            "sds_sym_1",
+            tradingview_rs::Interval::Daily,
+            100,
+        )
+        .await
+        .unwrap();
+
+    socket.event_loop().await;
 }
