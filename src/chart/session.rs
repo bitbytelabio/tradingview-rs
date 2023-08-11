@@ -30,9 +30,9 @@ pub struct WebSocket {
     chart_session_id: String,
     replay_session_id: String,
     replay_series_id: String,
-    relay_mode: bool,
+    _relay_mode: bool,
     auth_token: String,
-    callbacks: ChartCallbackFn,
+    _callbacks: ChartCallbackFn,
 }
 
 pub struct ChartCallbackFn {
@@ -74,9 +74,9 @@ impl WebSocketsBuilder {
             chart_session_id: String::default(),
             replay_session_id: String::default(),
             replay_series_id: String::default(),
-            relay_mode: self.relay_mode,
+            _relay_mode: self.relay_mode,
             auth_token,
-            callbacks: callback,
+            _callbacks: callback,
         })
     }
 }
