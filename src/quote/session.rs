@@ -3,12 +3,12 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuoteData, QuoteValue, ALL_QUOTE_FIELDS},
-    socket::{DataServer, Events, Socket, SocketSession},
+    socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
     utils::gen_session_id,
 };
 use async_trait::async_trait;
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Default)]
@@ -111,78 +111,111 @@ impl WebSocket {
     }
 
     pub async fn create_session(&mut self) -> Result<()> {
-        SocketSession::send(
-            &mut self.socket,
-            "quote_create_session",
-            &payload!(self.quote_session_id.clone()),
-        )
-        .await?;
+        self.socket
+            .send(
+                "quote_create_session",
+                &payload!(self.quote_session_id.clone()),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        SocketSession::send(
-            &mut self.socket,
-            "quote_delete_session",
-            &payload!(self.quote_session_id.clone()),
-        )
-        .await?;
+        self.socket
+            .send(
+                "quote_delete_session",
+                &payload!(self.quote_session_id.clone()),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
         self.quote_session_id = gen_session_id("qs");
-        SocketSession::send(
-            &mut self.socket,
-            "quote_create_session",
-            &payload!(self.quote_session_id.clone()),
-        )
-        .await?;
+        self.socket
+            .send(
+                "quote_create_session",
+                &payload!(self.quote_session_id.clone()),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn set_fields(&mut self) -> Result<()> {
-        SocketSession::send(
-            &mut self.socket,
-            "quote_set_fields",
-            &self.quote_fields.clone(),
-        )
-        .await?;
+        self.socket
+            .send("quote_set_fields", &self.quote_fields.clone())
+            .await?;
         Ok(())
     }
 
     pub async fn add_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
         let mut payloads = payload![self.quote_session_id.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
-        SocketSession::send(&mut self.socket, "quote_add_symbols", &payloads).await?;
+        self.socket.send("quote_add_symbols", &payloads).await?;
         Ok(())
     }
 
     pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_owned();
-        SocketSession::send(&mut self.socket, "set_auth_token", &payload!(auth_token)).await?;
+        self.socket
+            .send("set_auth_token", &payload!(auth_token))
+            .await?;
         Ok(())
     }
 
     pub async fn fast_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
         let mut payloads = payload![self.quote_session_id.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
-        SocketSession::send(&mut self.socket, "quote_fast_symbols", &payloads).await?;
+        self.socket.send("quote_fast_symbols", &payloads).await?;
         Ok(())
     }
 
     pub async fn remove_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
         let mut payloads = payload![self.quote_session_id.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
-        SocketSession::send(&mut self.socket, "quote_remove_symbols", &payloads).await?;
+        self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(())
     }
 }
 
 #[async_trait]
 impl Socket for WebSocket {
-    async fn load() {
-        todo!()
+    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
+        let message = Rc::new(message);
+        match SocketEvent::from(message.m.clone()) {
+            SocketEvent::OnQuoteData => {
+                trace!("received OnQuoteData: {:#?}", message);
+                let qsd = serde_json::from_value::<QuoteData>(message.p[1].clone())?;
+                if qsd.status == "ok" {
+                    if let Some(prev_quote) = self.prev_quotes.get_mut(&qsd.name) {
+                        *prev_quote = merge_quotes(prev_quote, &qsd.value);
+                    } else {
+                        self.prev_quotes.insert(qsd.name.clone(), qsd.value.clone());
+                    }
+                    (self.callbacks.data)(self.prev_quotes.clone())?;
+                    return Ok(());
+                } else {
+                    (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
+                    return Ok(());
+                }
+            }
+            SocketEvent::OnQuoteCompleted => {
+                (self.callbacks.loaded)(message.p.clone())?;
+                return Ok(());
+            }
+            SocketEvent::OnError(e) => {
+                (self.callbacks.error)(e)?;
+                return Ok(());
+            }
+            _ => {
+                trace!("received message: {:#?}", message);
+            }
+        };
+        Ok(())
+    }
+
+    async fn handle_error(&mut self, error: Error) {
+        error!("error handling event: {:#?}", error);
     }
 }

@@ -1,5 +1,4 @@
 use crate::{
-    chart::session,
     error::TradingViewError,
     payload,
     prelude::*,
@@ -24,8 +23,6 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
-
-type EventCallBack<T> = dyn Fn(&mut T, Events) -> () + Send + Sync;
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -171,29 +168,6 @@ pub struct SocketSession {
 }
 
 impl SocketSession {
-    pub async fn new(auth_token: String, server: DataServer) -> Result<SocketSession> {
-        let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
-
-        let write = Arc::from(Mutex::new(write_stream));
-        let read = Arc::from(Mutex::new(read_stream));
-
-        Ok(SocketSession {
-            write,
-            read,
-            auth_token,
-            server,
-        })
-    }
-}
-
-#[async_trait]
-impl Socket for SocketSession {
-    async fn load() {
-        unimplemented!()
-    }
-}
-#[async_trait]
-pub trait Socket {
     async fn connect(
         server: &DataServer,
         auth_token: &str,
@@ -220,9 +194,22 @@ pub trait Socket {
         Ok((write, read))
     }
 
-    async fn send(session: &mut SocketSession, m: &str, p: &[Value]) -> Result<()> {
-        session
-            .write
+    pub async fn new(auth_token: String, server: DataServer) -> Result<SocketSession> {
+        let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
+
+        let write = Arc::from(Mutex::new(write_stream));
+        let read = Arc::from(Mutex::new(read_stream));
+
+        Ok(SocketSession {
+            write,
+            read,
+            auth_token,
+            server,
+        })
+    }
+
+    pub async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
+        self.write
             .lock()
             .await
             .send(SocketMessageSer::new(m, p).to_message()?)
@@ -230,16 +217,19 @@ pub trait Socket {
         Ok(())
     }
 
-    async fn ping(session: &mut SocketSession, ping: &Message) -> Result<()> {
-        session.write.lock().await.send(ping.clone()).await?;
+    pub async fn ping(&mut self, ping: &Message) -> Result<()> {
+        self.write.lock().await.send(ping.clone()).await?;
         Ok(())
     }
 
-    async fn close(session: &mut SocketSession) -> Result<()> {
-        session.write.lock().await.close().await?;
+    pub async fn close(&mut self) -> Result<()> {
+        self.write.lock().await.close().await?;
         Ok(())
     }
+}
 
+#[async_trait]
+pub trait Socket {
     async fn event_loop(&mut self, session: &mut SocketSession) {
         let read = session.read.clone();
         let mut read_guard = read.lock().await;
@@ -290,13 +280,17 @@ pub trait Socket {
                 SocketMessage::SocketServerInfo(info) => {
                     info!("received server info: {:?}", info);
                 }
-                SocketMessage::SocketMessage(msg) => self.handle_event(msg).await,
+                SocketMessage::SocketMessage(msg) => {
+                    if let Err(e) = self.handle_event(msg).await {
+                        self.handle_error(e).await;
+                    }
+                }
                 SocketMessage::Other(value) => {
                     trace!("receive message: {:?}", value);
                     if value.is_number() {
                         trace!("handling ping message: {:?}", value);
-                        if let Err(e) = SocketSession::ping(session, &raw).await {
-                            error!("error handling ping: {:#?}", e);
+                        if let Err(e) = session.ping(&raw).await {
+                            self.handle_error(e).await;
                         }
                     } else {
                         warn!("unhandled message: {:?}", value)
@@ -309,51 +303,7 @@ pub trait Socket {
         }
     }
 
-    async fn handle_event(&mut self, message: SocketMessageDe) {
-        let message = Arc::new(message);
-        match SocketEvent::from(message.m.clone()) {
-            SocketEvent::OnQuoteData => {
-                let qsd = match serde_json::from_value::<QuoteData>(message.p[1].clone()) {
-                    Ok(qsd) => qsd,
-                    Err(e) => {
-                        error!("error parsing quote data: {:#?}", e);
-                        return;
-                    }
-                };
-                Events::OnQuoteData(qsd)
-            }
-            SocketEvent::OnQuoteCompleted => Events::OnQuoteCompleted(message.p.clone()),
-            SocketEvent::OnError(e) => Events::OnError(e),
-            SocketEvent::OnChartData => Events::OnChartData,
-            SocketEvent::OnChartDataUpdate => Events::OnChartDataUpdate,
-            SocketEvent::OnReplayDataEnd => Events::OnReplayDataEnd,
-            SocketEvent::OnReplayInstanceId => Events::OnReplayInstanceId,
-            SocketEvent::OnReplayPoint => Events::OnReplayPoint,
-            SocketEvent::OnReplayResolutions => Events::OnReplayResolutions,
-            SocketEvent::OnSeriesLoading => Events::OnSeriesLoading,
-            SocketEvent::OnSeriesCompleted => Events::OnSeriesCompleted,
-            SocketEvent::OnStudyCompleted => Events::OnStudyCompleted,
-            SocketEvent::OnSymbolResolved => Events::OnSymbolResolved,
-            SocketEvent::UnknownEvent(s) => Events::UnknownEvent(s),
-        };
-    }
+    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()>;
 
-    async fn load();
-}
-
-pub enum Events {
-    OnQuoteData(QuoteData),
-    OnQuoteCompleted(Vec<Value>),
-    OnError(TradingViewError),
-    OnChartData,
-    OnChartDataUpdate,
-    OnReplayDataEnd,
-    OnReplayInstanceId,
-    OnReplayPoint,
-    OnReplayResolutions,
-    OnSeriesLoading,
-    OnSeriesCompleted,
-    OnStudyCompleted,
-    OnSymbolResolved,
-    UnknownEvent(String),
+    async fn handle_error(&mut self, error: Error);
 }
