@@ -16,7 +16,7 @@ lazy_static::lazy_static! {
         "low_price",
         "open_price",
         "prev_close_price",
-        "currency_code",
+        "currency_id",
         "current_session",
         "description",
         "exchange",
@@ -49,7 +49,7 @@ lazy_static::lazy_static! {
         "sector",
         "dividends_yield",
         "timezone",
-        "country_code",
+        "country",
         "provider_id",
     ];
 }
@@ -75,9 +75,9 @@ pub struct QuoteValue {
     #[serde(default)]
     pub bid_size: Option<f64>,
     #[serde(default, rename(deserialize = "ch"))]
-    pub price_change: Option<f64>,
+    pub change: Option<f64>,
     #[serde(default, rename(deserialize = "chp"))]
-    pub price_change_percent: Option<f64>,
+    pub change_percent: Option<f64>,
     #[serde(default, rename(deserialize = "open_price"))]
     pub open: Option<f64>,
     #[serde(default, rename(deserialize = "high_price"))]
@@ -92,4 +92,20 @@ pub struct QuoteValue {
     pub timestamp: Option<i64>,
     #[serde(default)]
     pub volume: Option<f64>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub country: Option<String>,
+    #[serde(default, rename(deserialize = "currency_id"))]
+    pub currency: Option<String>,
+    #[serde(default, rename(deserialize = "provider_id"))]
+    pub data_provider: Option<String>,
+    #[serde(default, rename(deserialize = "short_name"))]
+    pub symbol: Option<String>,
+    #[serde(default, rename(deserialize = "pro_name"))]
+    pub symbol_id: Option<String>,
+    #[serde(default, rename(deserialize = "exchange"))]
+    pub exchange: Option<String>,
+    #[serde(default, rename(deserialize = "type"))]
+    pub market_type: Option<String>,
 }
