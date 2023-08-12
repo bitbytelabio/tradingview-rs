@@ -192,7 +192,7 @@ impl SocketSession {
         Ok((write, read))
     }
 
-    pub async fn new(auth_token: String, server: DataServer) -> Result<SocketSession> {
+    pub async fn new(server: DataServer, auth_token: String) -> Result<SocketSession> {
         let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
 
         let write = Arc::from(Mutex::new(write_stream));

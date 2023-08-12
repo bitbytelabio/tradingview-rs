@@ -1,9 +1,16 @@
-#![allow(dead_code)]
 use crate::chart::ChartData;
 use rayon::prelude::*;
 use std::sync::Mutex;
 
 pub fn extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+    chart_data
+        .series
+        .iter()
+        .map(|series_data_point| series_data_point.value)
+        .collect()
+}
+
+pub fn par_extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
         .series
         .par_iter()
@@ -26,7 +33,7 @@ pub fn update_ohlcv_data_point(
         data[index] = new_data;
     } else {
         data.push(new_data);
-        data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 }
 pub fn update_ohlcv_data(
@@ -94,7 +101,6 @@ mod tests {
     }
 
     #[test]
-    // #[should_panic(expected = "values don't match")]
     fn test_update_ohlcv_data() {
         let mut old_data = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -185,6 +191,8 @@ mod tests {
             (10.0, 11.0, 12.0, 13.0, 14.0, 15.0),
         ];
         let output = extract_ohlcv_data(&chart_data);
+        let output2 = par_extract_ohlcv_data(&chart_data);
         assert_eq!(output, expected_output);
+        assert_eq!(output2, expected_output);
     }
 }

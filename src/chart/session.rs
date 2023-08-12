@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    chart::{utils::extract_ohlcv_data, ChartData},
+    chart::{
+        utils::{extract_ohlcv_data, par_extract_ohlcv_data},
+        ChartData,
+    },
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
@@ -24,6 +27,7 @@ pub struct WebSocket {
     socket: SocketSession,
     chart_session_id: String,
     replay_session_id: String,
+    current_series: String,
     replay_series_id: String,
     _relay_mode: bool,
     auth_token: String,
@@ -67,7 +71,7 @@ impl WebSocketsBuilder {
         let socket = self
             .socket
             .clone()
-            .unwrap_or(SocketSession::new(auth_token.clone(), server).await?);
+            .unwrap_or(SocketSession::new(server, auth_token.clone()).await?);
 
         Ok(WebSocket {
             socket,
@@ -75,6 +79,7 @@ impl WebSocketsBuilder {
             replay_session_id: String::default(),
             replay_series_id: String::default(),
             _relay_mode: self.relay_mode,
+            current_series: String::default(),
             auth_token,
             _callbacks: callback,
         })
@@ -390,7 +395,7 @@ impl Socket for WebSocket {
                 let csd =
                     serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
                 // info!("{:#?}", message);
-                let data = extract_ohlcv_data(csd.get("sds_1").unwrap());
+                let data = par_extract_ohlcv_data(csd.get("sds_1").unwrap());
                 info!("{:?}", data);
             }
             SocketEvent::OnChartDataUpdate => {
