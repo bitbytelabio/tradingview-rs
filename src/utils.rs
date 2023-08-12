@@ -1,7 +1,8 @@
+#![allow(dead_code)]
 use crate::{
+    models::{MarketAdjustment, SessionType},
     prelude::*,
     socket::{SocketMessage, SocketMessageDe},
-    MarketAdjustment, SessionType,
 };
 use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
 use iso_currency::Currency;
@@ -21,6 +22,14 @@ use zip::ZipArchive;
 lazy_static::lazy_static! {
     static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").unwrap();
     static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
+}
+
+#[macro_export]
+macro_rules! payload {
+    ($($payload:expr),*) => {{
+        let payload_vec = vec![$(serde_json::Value::from($payload)),*];
+        payload_vec
+    }};
 }
 
 pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {

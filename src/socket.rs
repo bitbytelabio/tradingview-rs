@@ -152,7 +152,7 @@ impl std::fmt::Display for DataServer {
     }
 }
 
-pub enum ConnectionStatus {
+pub(crate) enum _ConnectionStatus {
     Connected,
     Disconnected,
     Error,
@@ -222,7 +222,7 @@ impl SocketSession {
 }
 
 #[async_trait]
-pub trait Socket {
+pub(crate) trait Socket {
     async fn event_loop(&mut self, session: &mut SocketSession) {
         let read = session.read.clone();
         let mut read_guard = read.lock().await;
