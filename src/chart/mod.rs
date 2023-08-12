@@ -4,7 +4,7 @@ use serde_json::Value;
 use crate::error::TradingViewError;
 
 pub mod session;
-mod utils;
+pub(crate) mod utils;
 
 #[derive(Debug)]
 pub enum ChartEvent {
