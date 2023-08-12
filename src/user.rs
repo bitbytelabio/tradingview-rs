@@ -16,7 +16,7 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct LoginUserResponse {
+pub(crate) struct LoginUserResponse {
     user: User,
 }
 

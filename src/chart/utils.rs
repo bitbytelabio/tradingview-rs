@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::chart::ChartData;
 use rayon::prelude::*;
 use std::sync::Mutex;
@@ -6,12 +5,20 @@ use std::sync::Mutex;
 pub fn extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
         .series
+        .iter()
+        .map(|series_data_point| series_data_point.value)
+        .collect()
+}
+
+pub fn par_extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+    chart_data
+        .series
         .par_iter()
         .map(|series_data_point| series_data_point.value)
         .collect()
 }
 
-pub fn sort_ohlcv_tuples(tuples: &mut Vec<(f64, f64, f64, f64, f64, f64)>) {
+pub fn sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
     tuples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 }
 
@@ -24,9 +31,11 @@ pub fn update_ohlcv_data_point(
         .position_first(|&x| (x.0 - new_data.0).abs() < f64::EPSILON)
     {
         data[index] = new_data;
+    } else {
+        data.push(new_data);
+        data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 }
-
 pub fn update_ohlcv_data(
     old_data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
     new_data: &Vec<(f64, f64, f64, f64, f64, f64)>,
@@ -119,7 +128,7 @@ mod tests {
             (1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0),
         ];
 
-        assert_eq!(old_data, expected_output);
+        assert_eq!(old_data, expected_output, "values don't match");
     }
 
     #[test]
@@ -182,6 +191,8 @@ mod tests {
             (10.0, 11.0, 12.0, 13.0, 14.0, 15.0),
         ];
         let output = extract_ohlcv_data(&chart_data);
+        let output2 = par_extract_ohlcv_data(&chart_data);
         assert_eq!(output, expected_output);
+        assert_eq!(output2, expected_output);
     }
 }

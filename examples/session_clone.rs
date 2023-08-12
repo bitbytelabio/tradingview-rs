@@ -3,6 +3,7 @@ use std::env;
 use tradingview_rs::{
     chart::session::{ChartCallbackFn, WebSocket},
     socket::DataServer,
+    socket::SocketSession,
     user::User,
 };
 
@@ -21,9 +22,12 @@ async fn main() {
 
     let handlers = ChartCallbackFn {};
 
+    let session = SocketSession::new(DataServer::ProData, user.auth_token)
+        .await
+        .unwrap();
+
     let mut socket = WebSocket::build()
-        .server(DataServer::ProData)
-        .auth_token(user.auth_token)
+        .socket(session)
         .connect(handlers)
         .await
         .unwrap();
