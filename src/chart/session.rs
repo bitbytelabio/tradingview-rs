@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use crate::{
+    chart::ChartData,
     payload,
     prelude::*,
     socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
@@ -7,8 +10,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use std::rc::Rc;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -307,7 +309,7 @@ impl WebSocket {
                     series_symbol_id,
                     interval.to_string(),
                     bar_count,
-                    "60M" // "r,1626220800:1628640000"
+                    "" // "r,1626220800:1628640000" || "60M"
                 ),
             )
             .await?;
@@ -377,14 +379,23 @@ impl WebSocket {
 #[async_trait]
 impl Socket for WebSocket {
     async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
-        let message = Rc::new(message);
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnChartData => {
-                info!("received message: {:#?}", message);
+                // let json_string = serde_json::to_string(&message.clone))?;
+                trace!("received OnChartData: {:?}", message);
+                // if let Some(data) = message.p[1].get("sds_1") {
+                //     let csd = serde_json::from_value::<ChartData>(data.clone())?;
+                //     info!("{:?}", csd);
+                // }
+                let csd =
+                    serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
+
+                info!("{:?}", csd.get("sds_1").unwrap().series);
             }
-            _ => {
-                info!("received message: {:#?}", message);
+            SocketEvent::OnChartDataUpdate => {
+                // info!("OnChartDataUpdate: {:#?}", message);
             }
+            _ => {}
         };
         Ok(())
     }

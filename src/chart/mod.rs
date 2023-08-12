@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::error::TradingViewError;
 
 pub mod session;
@@ -32,4 +34,20 @@ impl std::fmt::Display for ChartType {
         };
         write!(f, "{}", chart_type)
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ChartData {
+    pub node: String,
+    #[serde(rename(deserialize = "s"))]
+    pub series: Vec<SeriesDataPoint>,
+    pub t: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SeriesDataPoint {
+    #[serde(rename(deserialize = "i"))]
+    pub index: u64,
+    #[serde(rename(deserialize = "v"))]
+    pub value: Vec<f64>,
 }

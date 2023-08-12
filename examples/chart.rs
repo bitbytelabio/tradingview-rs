@@ -48,7 +48,7 @@ async fn main() {
             "s1",
             "sds_sym_1",
             tradingview_rs::Interval::FourHours,
-            100,
+            5,
         )
         .await
         .unwrap();
