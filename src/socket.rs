@@ -152,7 +152,7 @@ impl std::fmt::Display for DataServer {
     }
 }
 
-pub enum ConnectionStatus {
+pub(crate) enum _ConnectionStatus {
     Connected,
     Disconnected,
     Error,
@@ -192,7 +192,7 @@ impl SocketSession {
         Ok((write, read))
     }
 
-    pub async fn new(auth_token: String, server: DataServer) -> Result<SocketSession> {
+    pub async fn new(server: DataServer, auth_token: String) -> Result<SocketSession> {
         let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
 
         let write = Arc::from(Mutex::new(write_stream));
@@ -222,7 +222,7 @@ impl SocketSession {
 }
 
 #[async_trait]
-pub trait Socket {
+pub(crate) trait Socket {
     async fn event_loop(&mut self, session: &mut SocketSession) {
         let read = session.read.clone();
         let mut read_guard = read.lock().await;
@@ -282,7 +282,7 @@ pub trait Socket {
                     trace!("receive message: {:?}", value);
                     if value.is_number() {
                         trace!("handling ping message: {:?}", value);
-                        if let Err(e) = session.ping(&raw).await {
+                        if let Err(e) = session.ping(raw).await {
                             self.handle_error(e).await;
                         }
                     } else {

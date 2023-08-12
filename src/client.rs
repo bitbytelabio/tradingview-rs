@@ -1,10 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    model::{IndicatorInfo, IndicatorMetadata, SimpleTA, Symbol, SymbolSearch},
+    models::{IndicatorInfo, IndicatorMetadata, Screener, SimpleTA, Symbol, SymbolSearch},
     prelude::*,
     user::User,
-    Screener,
 };
 use reqwest::Response;
 use tokio::{sync::Semaphore, task::JoinHandle};

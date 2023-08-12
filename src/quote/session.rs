@@ -116,7 +116,7 @@ impl WebSocketsBuilder {
         let socket = self
             .socket
             .clone()
-            .unwrap_or(SocketSession::new(auth_token.clone(), server).await?);
+            .unwrap_or(SocketSession::new(server, auth_token.clone()).await?);
 
         Ok(WebSocket {
             socket,

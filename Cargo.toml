@@ -60,3 +60,6 @@ name = "client"
 
 [[example]]
 name = "user"
+
+[[example]]
+name = "session_clone"

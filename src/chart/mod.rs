@@ -1,10 +1,10 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::error::TradingViewError;
+use crate::{error::TradingViewError, models::Interval};
 
 pub mod session;
-mod utils;
+pub(crate) mod utils;
 
 #[derive(Debug)]
 pub enum ChartEvent {
@@ -61,4 +61,13 @@ pub struct ChartDataChanges {
     pub index_diff: Vec<Value>,
     pub marks: Vec<Value>,
     pub zoffset: i64,
+}
+
+pub struct ChartSeries {
+    pub id: String,
+    pub symbol: String,
+    pub exchange: String,
+    pub currency: String,
+    pub interval: Interval,
+    pub data: Vec<(f64, f64, f64, f64, f64, f64)>,
 }
