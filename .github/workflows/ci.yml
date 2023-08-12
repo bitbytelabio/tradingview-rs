@@ -29,4 +29,4 @@ jobs:
           components: rustfmt, clippy
       - uses: extractions/setup-just@v1
       - name: Run cargo check
-        run: just quick-check
+        run: just quick-test
