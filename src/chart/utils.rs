@@ -24,9 +24,11 @@ pub fn update_ohlcv_data_point(
         .position_first(|&x| (x.0 - new_data.0).abs() < f64::EPSILON)
     {
         data[index] = new_data;
+    } else {
+        data.push(new_data);
+        data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
     }
 }
-
 pub fn update_ohlcv_data(
     old_data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
     new_data: &Vec<(f64, f64, f64, f64, f64, f64)>,
@@ -92,6 +94,7 @@ mod tests {
     }
 
     #[test]
+    // #[should_panic(expected = "values don't match")]
     fn test_update_ohlcv_data() {
         let mut old_data = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -119,7 +122,7 @@ mod tests {
             (1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0),
         ];
 
-        assert_eq!(old_data, expected_output);
+        assert_eq!(old_data, expected_output, "values don't match");
     }
 
     #[test]
