@@ -3,7 +3,7 @@ description: File a bug report
 title: "[Bug]: "
 labels: ["bug", "triage"]
 assignees:
-  - octocat
+  - nguyenthdat
 body:
   - type: markdown
     attributes:
@@ -37,15 +37,14 @@ body:
     validations:
       required: true
   - type: dropdown
-    id: browsers
+    id: OS
     attributes:
-      label: What browsers are you seeing the problem on?
+      label: What operating system are you seeing the problem on?
       multiple: true
       options:
-        - Firefox
-        - Chrome
-        - Safari
-        - Microsoft Edge
+        - Windows
+        - macOS
+        - Linux
   - type: textarea
     id: logs
     attributes:
@@ -56,7 +55,7 @@ body:
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this issue, you agree to follow our [Code of Conduct](https://example.com)
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/bitbytelabio/tradingview-rs/blob/main/CODE_OF_CONDUCT.md)
       options:
         - label: I agree to follow this project's Code of Conduct
           required: true
