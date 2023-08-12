@@ -4,7 +4,6 @@ use tradingview_rs::{
     chart::session::{ChartCallbackFn, WebSocket},
     socket::DataServer,
     user::User,
-    SessionType,
 };
 
 #[tokio::main]

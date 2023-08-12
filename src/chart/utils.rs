@@ -11,7 +11,7 @@ pub fn extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f6
         .collect()
 }
 
-pub fn sort_ohlcv_tuples(tuples: &mut Vec<(f64, f64, f64, f64, f64, f64)>) {
+pub fn sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
     tuples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 }
 

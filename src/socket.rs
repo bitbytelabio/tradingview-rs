@@ -282,7 +282,7 @@ pub trait Socket {
                     trace!("receive message: {:?}", value);
                     if value.is_number() {
                         trace!("handling ping message: {:?}", value);
-                        if let Err(e) = session.ping(&raw).await {
+                        if let Err(e) = session.ping(raw).await {
                             self.handle_error(e).await;
                         }
                     } else {
