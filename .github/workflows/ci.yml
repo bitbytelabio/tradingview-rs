@@ -17,7 +17,7 @@ env:
 jobs:
   build_and_test:
     name: Build and test
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     container:
       image: rust:buster
       options: --user root
