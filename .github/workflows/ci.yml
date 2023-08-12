@@ -2,6 +2,7 @@ name: CI
 
 on:
   workflow_dispatch:
+  push:
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,13 +16,22 @@ env:
   TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
 
 jobs:
-  build_and_test:
-    name: Build and test
+  check:
+    name: Rust project
     runs-on: ubuntu-latest
-    container:
-      image: rust:buster
-      options: --user root
     steps:
-      - uses: actions/checkout@v3
-      - name: Unit tests
-        run: make test
+      - uses: actions/checkout@v2
+      - name: Install latest stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      # `cargo check` command here will use installed `nightly`
+      # as it is set as an "override" for current directory
+
+      - name: Run cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check

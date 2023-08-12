@@ -6,8 +6,11 @@ build:
 test-user:
 	@cargo test -p tradingview-rs --test user_test
 
-test-all:
-	@cargo test --all-features
+quick-test:
+	@cargo test
+
+full-test: quick-test
+	@cargo test --all-features -- --ignored
 
 clippy:
 	@cargo clippy --all-features --fix -- -D warnings
@@ -15,7 +18,7 @@ clippy:
 format:
 	@cargo fmt --all -- --check
 
-checks: build test-all clippy format
+checks: build quick-test clippy format
 	@git status
 
 quote-example:
