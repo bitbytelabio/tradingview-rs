@@ -145,7 +145,10 @@ pub fn parse_compressed(data: &str) -> Result<Value> {
 
 #[cfg(test)]
 mod utils {
-    use crate::{utils::*, MarketAdjustment, SessionType};
+    use crate::{
+        models::{MarketAdjustment, SessionType},
+        utils::*,
+    };
     #[test]
     fn test_parse_packet() {
         let current_dir = std::env::current_dir().unwrap().display().to_string();
