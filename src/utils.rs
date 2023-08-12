@@ -110,10 +110,9 @@ pub fn symbol_init(
     session_type: Option<SessionType>,
 ) -> Result<String> {
     let mut symbol_init: HashMap<String, String> = HashMap::new();
-    symbol_init.insert(
-        "adjustment".to_string(),
-        adjustment.unwrap_or_default().to_string(),
-    );
+    if let Some(a) = adjustment {
+        symbol_init.insert("adjustment".to_string(), a.to_string());
+    }
     symbol_init.insert("symbol".to_string(), symbol.to_string());
     if let Some(c) = currency {
         symbol_init.insert("currency-id".to_string(), c.code().to_string());

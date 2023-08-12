@@ -51,6 +51,7 @@
     "UPCOM",
     "urlencoding",
     "widgetdata",
-    "XETR"
+    "XETR",
+    "zoffset"
   ],
 }

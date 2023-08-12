@@ -43,10 +43,7 @@ mod utils {
     fn test_symbol_init() {
         let test1 = symbol_init("NSE:NIFTY", None, None, None);
         assert!(test1.is_ok());
-        assert_eq!(
-            test1.unwrap(),
-            r#"={"adjustment":"splits","symbol":"NSE:NIFTY"}"#.to_string()
-        );
+        assert_eq!(test1.unwrap(), r#"={"symbol":"NSE:NIFTY"}"#.to_string());
 
         let test2 = symbol_init(
             "HOSE:FPT",

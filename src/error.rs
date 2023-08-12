@@ -54,6 +54,8 @@ pub enum TradingViewError {
     SymbolError,
     #[error("critical_error")]
     CriticalError,
+    #[error("study_error")]
+    StudyError,
     #[error("protocol_error")]
     ProtocolError,
     #[error("error")]

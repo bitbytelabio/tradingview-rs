@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    chart::ChartData,
+    chart::{utils::extract_ohlcv_data, ChartData},
     payload,
     prelude::*,
     socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
@@ -389,11 +389,16 @@ impl Socket for WebSocket {
                 // }
                 let csd =
                     serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
-
-                info!("{:?}", csd.get("sds_1").unwrap().series);
+                // info!("{:#?}", message);
+                let data = extract_ohlcv_data(csd.get("sds_1").unwrap());
+                info!("{:?}", data);
             }
             SocketEvent::OnChartDataUpdate => {
-                // info!("OnChartDataUpdate: {:#?}", message);
+                // info!("{:#?}", message);
+                let csd =
+                    serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
+                let data = extract_ohlcv_data(csd.get("sds_1").unwrap());
+                info!("{:?}", data);
             }
             _ => {}
         };
