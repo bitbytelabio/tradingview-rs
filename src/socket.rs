@@ -67,6 +67,7 @@ impl From<String> for SocketEvent {
             "symbol_error" => SocketEvent::OnError(TradingViewError::SymbolError),
             "series_error" => SocketEvent::OnError(TradingViewError::SeriesError),
             "critical_error" => SocketEvent::OnError(TradingViewError::CriticalError),
+            "study_error" => SocketEvent::OnError(TradingViewError::StudyError),
             s => SocketEvent::UnknownEvent(s.to_string()),
         }
     }

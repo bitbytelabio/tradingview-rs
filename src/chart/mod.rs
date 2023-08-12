@@ -1,6 +1,10 @@
+use serde::Deserialize;
+use serde_json::Value;
+
 use crate::error::TradingViewError;
 
 pub mod session;
+mod utils;
 
 #[derive(Debug)]
 pub enum ChartEvent {
@@ -32,4 +36,29 @@ impl std::fmt::Display for ChartType {
         };
         write!(f, "{}", chart_type)
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChartData {
+    #[serde(default)]
+    pub node: Option<String>,
+    #[serde(rename(deserialize = "s"))]
+    pub series: Vec<SeriesDataPoint>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SeriesDataPoint {
+    #[serde(rename(deserialize = "i"))]
+    pub index: i64,
+    #[serde(rename(deserialize = "v"))]
+    pub value: (f64, f64, f64, f64, f64, f64),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChartDataChanges {
+    pub changes: Vec<f64>,
+    pub index: i64,
+    pub index_diff: Vec<Value>,
+    pub marks: Vec<Value>,
+    pub zoffset: i64,
 }

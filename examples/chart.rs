@@ -32,23 +32,17 @@ async fn main() {
     socket.create_chart_session().await.unwrap();
 
     socket
-        .resolve_symbol(
-            "sds_sym_1",
-            "HOSE:FPT",
-            Some(tradingview_rs::MarketAdjustment::Splits),
-            Some(iso_currency::Currency::VND),
-            Some(SessionType::Regular),
-        )
+        .resolve_symbol("sds_sym_1", "BINANCE:BTCUSDT", None, None, None)
         .await
         .unwrap();
 
     socket
         .create_series(
             "sds_1",
-            "s1",
+            "s2",
             "sds_sym_1",
             tradingview_rs::Interval::FourHours,
-            100,
+            20000,
         )
         .await
         .unwrap();
