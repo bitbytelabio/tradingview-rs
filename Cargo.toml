@@ -49,18 +49,3 @@ criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
 polars = "^0.31"
-
-[[example]]
-name = "quote"
-
-[[example]]
-name = "chart"
-
-[[example]]
-name = "client"
-
-[[example]]
-name = "user"
-
-[[example]]
-name = "shared_session"

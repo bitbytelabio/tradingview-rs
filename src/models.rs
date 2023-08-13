@@ -149,7 +149,7 @@ impl std::fmt::Display for SessionType {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub enum MarketAdjustment {
     #[default]
     Splits,

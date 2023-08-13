@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env, sync::Arc};
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tracing::{error, info};
 use tradingview_rs::error::TradingViewError;
 use tradingview_rs::{
@@ -93,7 +93,7 @@ async fn main() {
     }
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+async fn on_chart_data(data: ChartSeries) -> Result<(), Box<dyn std::error::Error>> {
     info!("on_chart_data: {:?}", data);
     Ok(())
 }
