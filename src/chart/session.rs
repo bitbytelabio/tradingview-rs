@@ -1,3 +1,4 @@
+use futures::future::BoxFuture;
 use std::collections::HashMap;
 
 use crate::{
@@ -6,11 +7,11 @@ use crate::{
     payload,
     prelude::*,
     socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
-    utils::{gen_session_id, symbol_init},
+    utils::{gen_id, gen_session_id, symbol_init},
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use tracing::{debug, error, info, trace};
+use tracing::{error, info, trace, warn};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -22,11 +23,10 @@ pub struct WebSocketsBuilder {
 
 pub struct WebSocket {
     socket: SocketSession,
-    replay_session_id: String,
     series_info: HashMap<String, ChartSeriesInfo>,
     series_count: u16,
-    replay_series_id: String,
     replay_mode: bool,
+    replay_info: HashMap<String, ReplayInfo>,
     auth_token: String,
     callbacks: ChartCallbackFn,
 }
@@ -42,9 +42,14 @@ pub struct ChartSeriesInfo {
 }
 
 #[derive(Debug, Default)]
-pub struct ReplayInfo {}
+pub struct ReplayInfo {
+    timestamp: i64,
+    replay_session_id: String,
+    replay_series_id: String,
+    resolution: Interval,
+}
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Options {
     pub resolution: Interval,
     pub bar_count: u64,
@@ -52,13 +57,20 @@ pub struct Options {
     pub from: Option<u64>,
     pub to: Option<u64>,
     pub replay_mode: Option<bool>,
+    pub replay_from: Option<i64>,
     pub adjustment: Option<MarketAdjustment>,
     pub currency: Option<Currency>,
     pub session_type: Option<SessionType>,
 }
 
+type AsyncCallback<T> = Box<
+    dyn Fn(T) -> BoxFuture<'static, std::result::Result<(), Box<dyn std::error::Error>>>
+        + Send
+        + Sync,
+>;
+
 pub struct ChartCallbackFn {
-    pub on_chart_data: Box<dyn FnMut(ChartSeries) -> Result<()> + Send + Sync>,
+    pub on_chart_data: AsyncCallback<ChartSeries>,
     // pub symbol_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
 }
 
@@ -98,10 +110,9 @@ impl WebSocketsBuilder {
 
         Ok(WebSocket {
             socket,
-            replay_session_id: String::default(),
-            replay_series_id: String::default(),
             replay_mode: self.relay_mode,
             series_info: HashMap::new(),
+            replay_info: HashMap::new(),
             series_count: 0,
             auth_token,
             callbacks: callback,
@@ -153,106 +164,91 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn create_replay_session(&mut self) -> Result<()> {
-        // self.chart_session_id = gen_session_id("rs");
-        // self.socket
-        //     .send(
-        //         "replay_create_session",
-        //         &payload!(self.chart_session_id.clone()),
-        //     )
-        //     .await?;
+    pub async fn create_replay_session(&mut self, session: &str) -> Result<()> {
+        self.socket
+            .send("replay_create_session", &payload!(session))
+            .await?;
         Ok(())
     }
 
-    pub async fn replay_add_series(
+    pub async fn add_replay_series(
         &mut self,
-        chart_session_id: &str,
+        session: &str,
+        series_id: &str,
         symbol: &str,
-        interval: Interval,
-        adjustment: Option<MarketAdjustment>,
-        currency: Option<Currency>,
-        session_type: Option<SessionType>,
+        config: &Options,
     ) -> Result<()> {
-        self.replay_series_id = gen_session_id("rs");
         self.socket
             .send(
                 "replay_add_series",
                 &payload!(
-                    chart_session_id,
-                    self.replay_series_id.clone(),
-                    symbol_init(symbol, adjustment, currency, session_type)?,
-                    interval.to_string()
+                    session,
+                    series_id,
+                    symbol_init(
+                        symbol,
+                        config.adjustment.clone(),
+                        config.currency,
+                        config.session_type.clone(),
+                        None
+                    )?,
+                    config.resolution.to_string()
                 ),
             )
             .await?;
         Ok(())
     }
 
-    pub async fn _delete_chart_session_id(&mut self, session: &str) -> Result<()> {
+    pub async fn delete_chart_session_id(&mut self, session: &str) -> Result<()> {
         self.socket
             .send("chart_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
 
-    pub async fn _delete_replay_session_id(&mut self, session: &str) -> Result<()> {
+    pub async fn delete_replay_session_id(&mut self, session: &str) -> Result<()> {
         self.socket
             .send("replay_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
 
-    pub async fn replay_step(&mut self, step: u64) -> Result<()> {
+    pub async fn replay_step(&mut self, session: &str, series_id: &str, step: u64) -> Result<()> {
         self.socket
-            .send(
-                "replay_step",
-                &payload!(
-                    self.replay_session_id.clone(),
-                    self.replay_series_id.clone(),
-                    step
-                ),
-            )
+            .send("replay_step", &payload!(session, series_id, step))
             .await?;
         Ok(())
     }
 
-    pub async fn replay_start(&mut self, interval: Interval) -> Result<()> {
+    pub async fn replay_start(
+        &mut self,
+        session: &str,
+        series_id: &str,
+        interval: Interval,
+    ) -> Result<()> {
         self.socket
             .send(
                 "replay_start",
-                &payload!(
-                    self.replay_session_id.clone(),
-                    self.replay_series_id.clone(),
-                    interval.to_string()
-                ),
+                &payload!(session, series_id, interval.to_string()),
             )
             .await?;
         Ok(())
     }
 
-    pub async fn replay_stop(&mut self) -> Result<()> {
+    pub async fn replay_stop(&mut self, session: &str, series_id: &str) -> Result<()> {
         self.socket
-            .send(
-                "replay_stop",
-                &payload!(
-                    self.replay_session_id.clone(),
-                    self.replay_series_id.clone()
-                ),
-            )
+            .send("replay_stop", &payload!(session, series_id))
             .await?;
         Ok(())
     }
 
-    pub async fn replay_reset(&mut self, timestamp: i64) -> Result<()> {
+    pub async fn replay_reset(
+        &mut self,
+        session: &str,
+        series_id: &str,
+        timestamp: i64,
+    ) -> Result<()> {
         self.socket
-            .send(
-                "replay_reset",
-                &payload!(
-                    self.replay_session_id.clone(),
-                    self.replay_series_id.clone(),
-                    timestamp
-                ),
-            )
+            .send("replay_reset", &payload!(session, series_id, timestamp))
             .await?;
         Ok(())
     }
@@ -326,10 +322,13 @@ impl WebSocket {
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        interval: Interval,
-        bar_count: u64,
-        range: &str,
+        config: &Options,
     ) -> Result<()> {
+        let range = match (&config.range, config.from, config.to) {
+            (Some(range), _, _) => range.clone(),
+            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
+            _ => String::default(),
+        };
         self.socket
             .send(
                 "create_series",
@@ -338,8 +337,8 @@ impl WebSocket {
                     series_id,
                     series_version,
                     series_symbol_id,
-                    interval.to_string(),
-                    bar_count,
+                    config.resolution.to_string(),
+                    config.bar_count,
                     range // "r,1626220800:1628640000" || "60M"
                 ),
             )
@@ -353,9 +352,13 @@ impl WebSocket {
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        interval: Interval,
-        bar_count: u64,
+        config: &Options,
     ) -> Result<()> {
+        let range = match (&config.range, config.from, config.to) {
+            (Some(range), _, _) => range.clone(),
+            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
+            _ => String::default(),
+        };
         self.socket
             .send(
                 "modify_series",
@@ -364,8 +367,9 @@ impl WebSocket {
                     series_id,
                     series_version,
                     series_symbol_id,
-                    interval.to_string(),
-                    bar_count
+                    config.resolution.to_string(),
+                    config.bar_count,
+                    range // "r,1626220800:1628640000" || "60M" || "LASTSESSION"
                 ),
             )
             .await?;
@@ -384,9 +388,8 @@ impl WebSocket {
         session: &str,
         symbol_series_id: &str,
         symbol: &str,
-        adjustment: Option<MarketAdjustment>,
-        currency: Option<Currency>,
-        session_type: Option<SessionType>,
+        config: &Options,
+        replay_session: Option<String>,
     ) -> Result<()> {
         self.socket
             .send(
@@ -394,7 +397,13 @@ impl WebSocket {
                 &payload!(
                     session,
                     symbol_series_id,
-                    symbol_init(symbol, adjustment, currency, session_type)?
+                    symbol_init(
+                        symbol,
+                        config.adjustment.clone(),
+                        config.currency,
+                        config.session_type.clone(),
+                        replay_session,
+                    )?
                 ),
             )
             .await?;
@@ -403,63 +412,78 @@ impl WebSocket {
 
     pub async fn set_market(&mut self, symbol: &str, config: Options) -> Result<()> {
         self.series_count += 1;
-        let symbol_series_id = format!("sds_sym_{}", self.series_count);
-        let series_id = format!("sds_{}", self.series_count);
-        let series_version = format!("s{}", self.series_count);
+        let series_count = self.series_count;
+        let symbol_series_id = format!("sds_sym_{}", series_count);
+        let series_id = format!("sds_{}", series_count);
+        let series_version = format!("s{}", series_count);
         let chart_session = gen_session_id("cs");
-
-        let range = match (&config.range, config.from, config.to) {
-            (Some(range), _, _) => range.clone(),
-            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
-            _ => String::default(),
-        };
 
         self.replay_mode = config.replay_mode.unwrap_or_default();
 
-        if self.replay_mode {
-            self.replay_session_id = chart_session.clone();
-            self.replay_series_id = series_id.clone();
-        }
-
         self.create_chart_session(&chart_session).await?;
-        self.resolve_symbol(
-            &chart_session,
-            &symbol_series_id,
-            symbol,
-            config.adjustment,
-            config.currency,
-            config.session_type.clone(),
-        )
-        .await?;
+
+        if self.replay_mode && config.replay_from.is_some() {
+            let replay_session_id = gen_session_id("rs");
+            let replay_series_id = gen_id();
+
+            self.create_replay_session(&replay_session_id).await?;
+            self.add_replay_series(&replay_session_id, &replay_series_id, symbol, &config)
+                .await?;
+            self.replay_reset(
+                &replay_session_id,
+                &replay_series_id,
+                config.replay_from.unwrap(),
+            )
+            .await?;
+
+            self.resolve_symbol(
+                &chart_session,
+                &symbol_series_id,
+                symbol,
+                &config,
+                Some(replay_session_id.clone()),
+            )
+            .await?;
+
+            self.replay_info.insert(
+                symbol.to_string(),
+                ReplayInfo {
+                    replay_session_id,
+                    replay_series_id,
+                    timestamp: config.replay_from.unwrap(),
+                    ..Default::default()
+                },
+            );
+        } else {
+            self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config, None)
+                .await?;
+        }
 
         self.create_series(
             &chart_session,
             &series_id,
             &series_version,
             &symbol_series_id,
-            config.resolution,
-            config.bar_count,
-            &range,
+            &config,
         )
         .await?;
 
-        self.series_info.insert(
-            symbol.to_string(),
-            ChartSeriesInfo {
-                chart_session,
-                id: series_id,
-                version: series_version,
-                symbol_series_id,
-                chart_series: ChartSeries {
-                    symbol: symbol.to_string(),
-                    interval: config.resolution,
-                    currency: config.currency,
-                    session_type: config.session_type,
-                    ..Default::default()
-                },
+        let series_info = ChartSeriesInfo {
+            chart_session,
+            id: series_id,
+            version: series_version,
+            symbol_series_id,
+            chart_series: ChartSeries {
+                symbol: symbol.to_string(),
+                interval: config.resolution,
+                currency: config.currency,
+                session_type: config.session_type,
                 ..Default::default()
             },
-        );
+            ..Default::default()
+        };
+
+        self.series_info.insert(symbol.to_string(), series_info);
 
         Ok(())
     }
@@ -498,18 +522,25 @@ impl Socket for WebSocket {
                     }
                 }
                 trace!("receive data: {:?}", ser_data);
-                match (self.callbacks.on_chart_data)(ser_data) {
-                    Ok(_) => {
-                        trace!("successfully called on_chart_data callback");
-                        // self.socket.close().await?;
-                    }
-                    Err(e) => {
-                        error!("failed to call on_chart_data callback: {}", e);
-                    }
-                };
+                // match (self.callbacks.on_chart_data)(ser_data).await {
+                //     Ok(_) => {
+                //         // TODO: SocketEvent::OnChartDataUpdate => {}
+                //     }
+                //     Err(e) => {
+                //         // TODO: SocketEvent::OnChartDataUpdate => {}
+                //         error!("failed to call on_chart_data callback: {}", e);
+                //     }
+                // };
             }
-            // TODO: SocketEvent::OnChartDataUpdate => {}
-            _ => {}
+            SocketEvent::OnSymbolResolved => {
+                let json_string = serde_json::to_string(&message.p).unwrap();
+                error!("{}", json_string);
+            }
+            SocketEvent::OnChartDataUpdate => {}
+            SocketEvent::OnReplayDataEnd => {}
+            _ => {
+                warn!("unhandled event: {:?}", message);
+            }
         };
         Ok(())
     }

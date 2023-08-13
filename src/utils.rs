@@ -117,8 +117,12 @@ pub fn symbol_init(
     adjustment: Option<MarketAdjustment>,
     currency: Option<Currency>,
     session_type: Option<SessionType>,
+    replay: Option<String>,
 ) -> Result<String> {
     let mut symbol_init: HashMap<String, String> = HashMap::new();
+    if let Some(s) = replay {
+        symbol_init.insert("replay".to_string(), s);
+    }
     if let Some(a) = adjustment {
         symbol_init.insert("adjustment".to_string(), a.to_string());
     }
@@ -144,7 +148,7 @@ pub fn parse_compressed(data: &str) -> Result<Value> {
 }
 
 #[cfg(test)]
-mod utils {
+mod tests {
     use crate::{
         models::{MarketAdjustment, SessionType},
         utils::*,
@@ -189,7 +193,7 @@ mod utils {
 
     #[test]
     fn test_symbol_init() {
-        let test1 = symbol_init("NSE:NIFTY", None, None, None);
+        let test1 = symbol_init("NSE:NIFTY", None, None, None, None);
         assert!(test1.is_ok());
         assert_eq!(test1.unwrap(), r#"={"symbol":"NSE:NIFTY"}"#.to_string());
 
@@ -198,11 +202,12 @@ mod utils {
             Some(MarketAdjustment::Dividends),
             Some(iso_currency::Currency::USD),
             Some(SessionType::Extended),
+            Some("aaaaaaaaaaaa".to_string()),
         );
         assert!(test2.is_ok());
         assert_eq!(
             test2.unwrap(),
-            r#"={"adjustment":"dividends","currency-id":"USD","session":"extended","symbol":"HOSE:FPT"}"#.to_string()
+            r#"={"adjustment":"dividends","currency-id":"USD","replay":"aaaaaaaaaaaa","session":"extended","symbol":"HOSE:FPT"}"#.to_string()
         );
     }
 }

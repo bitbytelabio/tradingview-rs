@@ -39,8 +39,10 @@ async fn main() {
         .set_market(
             "BINANCE:BTCUSDT",
             Options {
-                resolution: Interval::OneMinute,
+                resolution: Interval::FourHours,
                 bar_count: 5,
+                replay_mode: Some(true),
+                replay_from: Some(1640224799),
                 ..Default::default()
             },
         )
