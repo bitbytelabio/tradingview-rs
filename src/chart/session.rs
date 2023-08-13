@@ -420,6 +420,11 @@ impl WebSocket {
 
         self.replay_mode = config.replay_mode.unwrap_or_default();
 
+        if self.replay_mode {
+            self.replay_session_id = chart_session.clone();
+            self.replay_series_id = series_id.clone();
+        }
+
         self.create_chart_session(&chart_session).await?;
         self.resolve_symbol(
             &chart_session,

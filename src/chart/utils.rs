@@ -27,8 +27,8 @@ pub fn update_ohlcv_data_point(
     new_data: (f64, f64, f64, f64, f64, f64),
 ) {
     if let Some(index) = data
-        .par_iter()
-        .position_first(|&x| (x.0 - new_data.0).abs() < f64::EPSILON)
+        .iter()
+        .position(|&x| (x.0 - new_data.0).abs() < f64::EPSILON)
     {
         data[index] = new_data;
     } else {
@@ -36,6 +36,7 @@ pub fn update_ohlcv_data_point(
         data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 }
+
 pub fn update_ohlcv_data(
     old_data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
     new_data: &Vec<(f64, f64, f64, f64, f64, f64)>,
