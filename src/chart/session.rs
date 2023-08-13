@@ -412,9 +412,10 @@ impl WebSocket {
 
     pub async fn set_market(&mut self, symbol: &str, config: Options) -> Result<()> {
         self.series_count += 1;
-        let symbol_series_id = format!("sds_sym_{}", self.series_count);
-        let series_id = format!("sds_{}", self.series_count);
-        let series_version = format!("s{}", self.series_count);
+        let series_count = self.series_count;
+        let symbol_series_id = format!("sds_sym_{}", series_count);
+        let series_id = format!("sds_{}", series_count);
+        let series_version = format!("s{}", series_count);
         let chart_session = gen_session_id("cs");
 
         self.replay_mode = config.replay_mode.unwrap_or_default();
@@ -428,7 +429,6 @@ impl WebSocket {
             self.create_replay_session(&replay_session_id).await?;
             self.add_replay_series(&replay_session_id, &replay_series_id, symbol, &config)
                 .await?;
-
             self.replay_reset(
                 &replay_session_id,
                 &replay_series_id,
@@ -468,23 +468,22 @@ impl WebSocket {
         )
         .await?;
 
-        self.series_info.insert(
-            symbol.to_string(),
-            ChartSeriesInfo {
-                chart_session,
-                id: series_id,
-                version: series_version,
-                symbol_series_id,
-                chart_series: ChartSeries {
-                    symbol: symbol.to_string(),
-                    interval: config.resolution,
-                    currency: config.currency,
-                    session_type: config.session_type,
-                    ..Default::default()
-                },
+        let series_info = ChartSeriesInfo {
+            chart_session,
+            id: series_id,
+            version: series_version,
+            symbol_series_id,
+            chart_series: ChartSeries {
+                symbol: symbol.to_string(),
+                interval: config.resolution,
+                currency: config.currency,
+                session_type: config.session_type,
                 ..Default::default()
             },
-        );
+            ..Default::default()
+        };
+
+        self.series_info.insert(symbol.to_string(), series_info);
 
         Ok(())
     }
