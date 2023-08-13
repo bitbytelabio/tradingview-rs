@@ -11,7 +11,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use tracing::{debug, error, info, trace};
+use tracing::{error, info, trace};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -438,38 +438,38 @@ impl WebSocket {
                     ..Default::default()
                 },
             );
-        }
+        } else {
+            self.create_chart_session(&chart_session).await?;
+            self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config)
+                .await?;
 
-        self.create_chart_session(&chart_session).await?;
-        self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config)
+            self.create_series(
+                &chart_session,
+                &series_id,
+                &series_version,
+                &symbol_series_id,
+                &config,
+            )
             .await?;
 
-        self.create_series(
-            &chart_session,
-            &series_id,
-            &series_version,
-            &symbol_series_id,
-            &config,
-        )
-        .await?;
-
-        self.series_info.insert(
-            symbol.to_string(),
-            ChartSeriesInfo {
-                chart_session,
-                id: series_id,
-                version: series_version,
-                symbol_series_id,
-                chart_series: ChartSeries {
-                    symbol: symbol.to_string(),
-                    interval: config.resolution,
-                    currency: config.currency,
-                    session_type: config.session_type,
+            self.series_info.insert(
+                symbol.to_string(),
+                ChartSeriesInfo {
+                    chart_session,
+                    id: series_id,
+                    version: series_version,
+                    symbol_series_id,
+                    chart_series: ChartSeries {
+                        symbol: symbol.to_string(),
+                        interval: config.resolution,
+                        currency: config.currency,
+                        session_type: config.session_type,
+                        ..Default::default()
+                    },
                     ..Default::default()
                 },
-                ..Default::default()
-            },
-        );
+            );
+        }
 
         Ok(())
     }

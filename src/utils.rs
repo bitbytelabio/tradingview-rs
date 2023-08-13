@@ -144,7 +144,7 @@ pub fn parse_compressed(data: &str) -> Result<Value> {
 }
 
 #[cfg(test)]
-mod utils {
+mod tests {
     use crate::{
         models::{MarketAdjustment, SessionType},
         utils::*,
