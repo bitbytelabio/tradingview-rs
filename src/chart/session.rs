@@ -13,7 +13,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use tracing::{error, info, trace};
+use tracing::{debug, error, info, trace};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -25,13 +25,35 @@ pub struct WebSocketsBuilder {
 
 pub struct WebSocket {
     socket: SocketSession,
-    chart_session_id: String,
+    // chart_session_id: String,
     replay_session_id: String,
-    current_series: String,
+    series: HashMap<String, SeriesInfo>,
+    series_count: u16,
     replay_series_id: String,
-    _relay_mode: bool,
+    replay_mode: bool,
     auth_token: String,
-    _callbacks: ChartCallbackFn,
+    callbacks: ChartCallbackFn,
+}
+
+#[derive(Debug)]
+pub struct SeriesInfo {
+    id: String,
+    chart_session: String,
+    version: String,
+    symbol_series_id: String,
+}
+
+#[derive(Default)]
+pub struct Options {
+    pub resolution: Interval,
+    pub bar_count: u64,
+    pub range: Option<String>,
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+    pub replay_mode: Option<bool>,
+    pub adjustment: Option<MarketAdjustment>,
+    pub currency: Option<Currency>,
+    pub session_type: Option<SessionType>,
 }
 
 pub struct ChartCallbackFn {
@@ -75,13 +97,14 @@ impl WebSocketsBuilder {
 
         Ok(WebSocket {
             socket,
-            chart_session_id: String::default(),
+            // chart_session_id: String::default(),
             replay_session_id: String::default(),
             replay_series_id: String::default(),
-            _relay_mode: self.relay_mode,
-            current_series: String::default(),
+            replay_mode: self.relay_mode,
+            series: HashMap::new(),
+            series_count: 0,
             auth_token,
-            _callbacks: callback,
+            callbacks: callback,
         })
     }
 }
@@ -90,6 +113,8 @@ impl WebSocket {
     pub fn build() -> WebSocketsBuilder {
         WebSocketsBuilder::default()
     }
+
+    // TradingView WebSocket methods
 
     pub async fn set_locale(&mut self) -> Result<()> {
         self.socket
@@ -105,12 +130,9 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn set_timezone(&mut self, timezone: Timezone) -> Result<()> {
+    pub async fn set_timezone(&mut self, session: &str, timezone: Timezone) -> Result<()> {
         self.socket
-            .send(
-                "switch_timezone",
-                &payload!(self.chart_session_id.clone(), timezone.to_string()),
-            )
+            .send("switch_timezone", &payload!(session, timezone.to_string()))
             .await?;
 
         Ok(())
@@ -124,30 +146,27 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn create_chart_session(&mut self) -> Result<()> {
-        self.chart_session_id = gen_session_id("cs");
+    pub async fn create_chart_session(&mut self, session: &str) -> Result<()> {
         self.socket
-            .send(
-                "chart_create_session",
-                &payload!(self.chart_session_id.clone()),
-            )
+            .send("chart_create_session", &payload!(session))
             .await?;
         Ok(())
     }
 
     pub async fn create_replay_session(&mut self) -> Result<()> {
-        self.chart_session_id = gen_session_id("rs");
-        self.socket
-            .send(
-                "replay_create_session",
-                &payload!(self.chart_session_id.clone()),
-            )
-            .await?;
+        // self.chart_session_id = gen_session_id("rs");
+        // self.socket
+        //     .send(
+        //         "replay_create_session",
+        //         &payload!(self.chart_session_id.clone()),
+        //     )
+        //     .await?;
         Ok(())
     }
 
     pub async fn replay_add_series(
         &mut self,
+        chart_session_id: &str,
         symbol: &str,
         interval: Interval,
         adjustment: Option<MarketAdjustment>,
@@ -159,7 +178,7 @@ impl WebSocket {
             .send(
                 "replay_add_series",
                 &payload!(
-                    self.chart_session_id.clone(),
+                    chart_session_id,
                     self.replay_series_id.clone(),
                     symbol_init(symbol, adjustment, currency, session_type)?,
                     interval.to_string()
@@ -169,22 +188,16 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn _delete_chart_session_id(&mut self) -> Result<()> {
+    pub async fn _delete_chart_session_id(&mut self, session: &str) -> Result<()> {
         self.socket
-            .send(
-                "chart_delete_session",
-                &payload!(self.chart_session_id.clone()),
-            )
+            .send("chart_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
 
-    pub async fn _delete_replay_session_id(&mut self) -> Result<()> {
+    pub async fn _delete_replay_session_id(&mut self, session: &str) -> Result<()> {
         self.socket
-            .send(
-                "replay_delete_session",
-                &payload!(self.chart_session_id.clone()),
-            )
+            .send("replay_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
@@ -244,77 +257,90 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn request_more_data(&mut self, series_id: &str, num: u64) -> Result<()> {
+    pub async fn request_more_data(
+        &mut self,
+        session: &str,
+        series_id: &str,
+        num: u64,
+    ) -> Result<()> {
         self.socket
-            .send(
-                "request_more_data",
-                &payload!(self.chart_session_id.clone(), series_id, num),
-            )
+            .send("request_more_data", &payload!(session, series_id, num))
             .await?;
         Ok(())
     }
 
-    pub async fn request_more_tickmarks(&mut self, series_id: &str, num: u64) -> Result<()> {
+    pub async fn request_more_tickmarks(
+        &mut self,
+        session: &str,
+        series_id: &str,
+        num: u64,
+    ) -> Result<()> {
         self.socket
-            .send(
-                "request_more_tickmarks",
-                &payload!(self.chart_session_id.clone(), series_id, num),
-            )
+            .send("request_more_tickmarks", &payload!(session, series_id, num))
             .await?;
         Ok(())
     }
 
-    pub async fn create_study(&mut self, study_id: &str, series_id: &str) -> Result<()> {
+    pub async fn create_study(
+        &mut self,
+        session: &str,
+        study_id: &str,
+        series_id: &str,
+    ) -> Result<()> {
         self.socket
             .send(
                 "create_study",
-                &payload!(self.chart_session_id.clone(), study_id, series_id),
+                &payload!(session, study_id, series_id),
                 //TODO: add study options
             )
             .await?;
         Ok(())
     }
 
-    pub async fn modify_study(&mut self, study_id: &str, options: &str) -> Result<()> {
+    pub async fn modify_study(
+        &mut self,
+        session: &str,
+        study_id: &str,
+        options: &str,
+    ) -> Result<()> {
         self.socket
             .send(
                 "modify_study",
-                &payload!(self.chart_session_id.clone(), study_id, options),
+                &payload!(session, study_id, options),
                 //TODO: add study options
             )
             .await?;
         Ok(())
     }
 
-    pub async fn remove_study(&mut self, study_id: &str) -> Result<()> {
+    pub async fn remove_study(&mut self, session: &str, study_id: &str) -> Result<()> {
         self.socket
-            .send(
-                "remove_study",
-                &payload!(self.chart_session_id.clone(), study_id),
-            )
+            .send("remove_study", &payload!(session, study_id))
             .await?;
         Ok(())
     }
 
     pub async fn create_series(
         &mut self,
+        session: &str,
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
         interval: Interval,
         bar_count: u64,
+        range: Option<&str>,
     ) -> Result<()> {
         self.socket
             .send(
                 "create_series",
                 &payload!(
-                    self.chart_session_id.clone(),
+                    session,
                     series_id,
                     series_version,
                     series_symbol_id,
                     interval.to_string(),
                     bar_count,
-                    "" // "r,1626220800:1628640000" || "60M"
+                    range.unwrap_or("") // "r,1626220800:1628640000" || "60M"
                 ),
             )
             .await?;
@@ -323,6 +349,7 @@ impl WebSocket {
 
     pub async fn modify_series(
         &mut self,
+        session: &str,
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
@@ -333,7 +360,7 @@ impl WebSocket {
             .send(
                 "modify_series",
                 &payload!(
-                    self.chart_session_id.clone(),
+                    session,
                     series_id,
                     series_version,
                     series_symbol_id,
@@ -345,18 +372,16 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn remove_series(&mut self, series_id: &str) -> Result<()> {
+    pub async fn remove_series(&mut self, session: &str, series_id: &str) -> Result<()> {
         self.socket
-            .send(
-                "remove_series",
-                &payload!(self.chart_session_id.clone(), series_id),
-            )
+            .send("remove_series", &payload!(session, series_id))
             .await?;
         Ok(())
     }
 
     pub async fn resolve_symbol(
         &mut self,
+        session: &str,
         symbol_series_id: &str,
         symbol: &str,
         adjustment: Option<MarketAdjustment>,
@@ -367,12 +392,63 @@ impl WebSocket {
             .send(
                 "resolve_symbol",
                 &payload!(
-                    self.chart_session_id.clone(),
+                    session,
                     symbol_series_id,
                     symbol_init(symbol, adjustment, currency, session_type)?
                 ),
             )
             .await?;
+        Ok(())
+    }
+
+    pub async fn set_market(&mut self, symbol: &str, config: Options) -> Result<()> {
+        self.series_count += 1;
+        let symbol_series_id = format!("sds_sym_{}", self.series_count);
+        let series_id = format!("sds_{}", self.series_count);
+        let series_version = format!("s{}", self.series_count);
+        let chart_session = gen_session_id("cs");
+
+        self.replay_mode = config.replay_mode.unwrap_or_default();
+        let is_not_range_defined = config.range.is_none();
+        let mut range = config.range.unwrap_or("".to_string());
+
+        if is_not_range_defined && config.from.is_some() && config.to.is_none() {
+            range = format!("r,{}:{}", config.from.unwrap(), config.to.unwrap());
+        }
+
+        self.create_chart_session(&chart_session).await?;
+
+        self.resolve_symbol(
+            &chart_session,
+            &symbol_series_id,
+            symbol,
+            config.adjustment,
+            config.currency,
+            config.session_type,
+        )
+        .await?;
+
+        self.create_series(
+            &chart_session,
+            &series_id,
+            &series_version,
+            &symbol_series_id,
+            config.resolution,
+            config.bar_count,
+            Some(&range),
+        )
+        .await?;
+
+        self.series.insert(
+            symbol.to_string(),
+            SeriesInfo {
+                chart_session,
+                id: series_id,
+                version: series_version,
+                symbol_series_id: symbol_series_id,
+            },
+        );
+
         Ok(())
     }
 
@@ -387,23 +463,28 @@ impl Socket for WebSocket {
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnChartData => {
                 // let json_string = serde_json::to_string(&message.clone))?;
-                trace!("received OnChartData: {:?}", message);
-                // if let Some(data) = message.p[1].get("sds_1") {
-                //     let csd = serde_json::from_value::<ChartData>(data.clone())?;
-                //     info!("{:?}", csd);
-                // }
-                let csd =
-                    serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
+                trace!("received Chart Data: {:?}", message);
+                for (k, v) in &self.series {
+                    trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
+                    if let Some(data) = message.p[1].get(v.id.as_str()) {
+                        let csd = serde_json::from_value::<ChartData>(data.clone())?;
+                        let data = par_extract_ohlcv_data(&csd);
+                        info!("{} - {:?}", k, data);
+                    }
+                }
+
+                // let csd =
+                //     serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
                 // info!("{:#?}", message);
-                let data = par_extract_ohlcv_data(csd.get("sds_1").unwrap());
-                info!("{:?}", data);
+                // let data = par_extract_ohlcv_data(csd.get("sds_1").unwrap());
+                // info!("{:?}", data);
             }
             SocketEvent::OnChartDataUpdate => {
                 // info!("{:#?}", message);
-                let csd =
-                    serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
-                let data = extract_ohlcv_data(csd.get("sds_1").unwrap());
-                info!("{:?}", data);
+                // let csd =
+                //     serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
+                // let data = extract_ohlcv_data(csd.get("sds_1").unwrap());
+                // info!("{:?}", data);
             }
             _ => {}
         };

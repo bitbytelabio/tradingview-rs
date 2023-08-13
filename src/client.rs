@@ -6,7 +6,7 @@ use crate::{
     user::User,
 };
 use reqwest::Response;
-use tokio::{sync::Semaphore, task::JoinHandle};
+use tokio::sync::Semaphore;
 use tracing::{debug, warn};
 
 const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
@@ -184,7 +184,7 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
-    let max_concurrent_tasks = 15;
+    let max_concurrent_tasks = 50;
     let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
     let mut tasks = Vec::new();
