@@ -25,9 +25,8 @@ pub struct WebSocketsBuilder {
 
 pub struct WebSocket {
     socket: SocketSession,
-    // chart_session_id: String,
     replay_session_id: String,
-    series: HashMap<String, SeriesInfo>,
+    series_info: HashMap<String, ChartSeriesInfo>,
     series_count: u16,
     replay_series_id: String,
     replay_mode: bool,
@@ -35,13 +34,17 @@ pub struct WebSocket {
     callbacks: ChartCallbackFn,
 }
 
-#[derive(Debug)]
-pub struct SeriesInfo {
+#[derive(Debug, Default)]
+pub struct ChartSeriesInfo {
     id: String,
     chart_session: String,
     version: String,
     symbol_series_id: String,
+    replay_info: Option<ReplayInfo>,
 }
+
+#[derive(Debug, Default)]
+pub struct ReplayInfo {}
 
 #[derive(Default)]
 pub struct Options {
@@ -101,7 +104,7 @@ impl WebSocketsBuilder {
             replay_session_id: String::default(),
             replay_series_id: String::default(),
             replay_mode: self.relay_mode,
-            series: HashMap::new(),
+            series_info: HashMap::new(),
             series_count: 0,
             auth_token,
             callbacks: callback,
@@ -328,7 +331,7 @@ impl WebSocket {
         series_symbol_id: &str,
         interval: Interval,
         bar_count: u64,
-        range: Option<&str>,
+        range: &str,
     ) -> Result<()> {
         self.socket
             .send(
@@ -340,7 +343,7 @@ impl WebSocket {
                     series_symbol_id,
                     interval.to_string(),
                     bar_count,
-                    range.unwrap_or("") // "r,1626220800:1628640000" || "60M"
+                    range // "r,1626220800:1628640000" || "60M"
                 ),
             )
             .await?;
@@ -408,16 +411,15 @@ impl WebSocket {
         let series_version = format!("s{}", self.series_count);
         let chart_session = gen_session_id("cs");
 
-        self.replay_mode = config.replay_mode.unwrap_or_default();
-        let is_not_range_defined = config.range.is_none();
-        let mut range = config.range.unwrap_or("".to_string());
+        let range = match (&config.range, config.from, config.to) {
+            (Some(range), _, _) => range.clone(),
+            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
+            _ => String::default(),
+        };
 
-        if is_not_range_defined && config.from.is_some() && config.to.is_none() {
-            range = format!("r,{}:{}", config.from.unwrap(), config.to.unwrap());
-        }
+        self.replay_mode = config.replay_mode.unwrap_or_default();
 
         self.create_chart_session(&chart_session).await?;
-
         self.resolve_symbol(
             &chart_session,
             &symbol_series_id,
@@ -435,17 +437,18 @@ impl WebSocket {
             &symbol_series_id,
             config.resolution,
             config.bar_count,
-            Some(&range),
+            &range,
         )
         .await?;
 
-        self.series.insert(
+        self.series_info.insert(
             symbol.to_string(),
-            SeriesInfo {
+            ChartSeriesInfo {
                 chart_session,
                 id: series_id,
                 version: series_version,
-                symbol_series_id: symbol_series_id,
+                symbol_series_id,
+                ..Default::default()
             },
         );
 
@@ -464,7 +467,7 @@ impl Socket for WebSocket {
             SocketEvent::OnChartData => {
                 // let json_string = serde_json::to_string(&message.clone))?;
                 trace!("received Chart Data: {:?}", message);
-                for (k, v) in &self.series {
+                for (k, v) in &self.series_info {
                     trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
                     if let Some(data) = message.p[1].get(v.id.as_str()) {
                         let csd = serde_json::from_value::<ChartData>(data.clone())?;

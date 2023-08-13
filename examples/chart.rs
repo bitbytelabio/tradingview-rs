@@ -47,6 +47,7 @@ async fn main() {
             Options {
                 resolution: Interval::FourHours,
                 bar_count: 5,
+                range: Some("60M".to_string()),
                 ..Default::default()
             },
         )
