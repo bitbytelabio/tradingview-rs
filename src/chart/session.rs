@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    chart::{
-        utils::{extract_ohlcv_data, par_extract_ohlcv_data},
-        ChartData,
-    },
+    chart::{utils::extract_ohlcv_data, ChartData},
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
@@ -13,7 +10,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use rayon::prelude::*;
 use tracing::{debug, error, info, trace};
 
 #[derive(Default)]
@@ -471,18 +467,25 @@ impl Socket for WebSocket {
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnChartData => {
                 trace!("received chart data: {:?}", message);
-                self.series_info.par_iter().for_each(|(k, v)| {
+                self.series_info.iter().for_each(|(k, v)| {
                     trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
                     if let Some(data) = message.p[1].get(v.id.as_str()) {
-                        let csd = serde_json::from_value::<ChartData>(data.clone()).unwrap();
-                        let data = par_extract_ohlcv_data(&csd);
-                        info!("{} - {:?}", k, data);
+                        match serde_json::from_value::<ChartData>(data.clone()) {
+                            Ok(csd) => {
+                                let data = extract_ohlcv_data(&csd);
+                                info!("{} - {:?}", k, data);
+                            }
+                            Err(e) => {
+                                error!("failed to deserialize chart data: {}", e);
+                                return;
+                            }
+                        }
                     }
                 });
             }
             SocketEvent::OnChartDataUpdate => {
                 trace!("received chart data update: {:?}", message);
-                self.series_info.par_iter().for_each(|(k, v)| {
+                self.series_info.iter().for_each(|(k, v)| {
                     trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
                     if let Some(data) = message.p[1].get(v.id.as_str()) {
                         let csd = serde_json::from_value::<ChartData>(data.clone()).unwrap();
@@ -491,7 +494,9 @@ impl Socket for WebSocket {
                     }
                 });
             }
-            _ => {}
+            _ => {
+                debug!("received event: {:?}", message)
+            }
         };
         Ok(())
     }
