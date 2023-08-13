@@ -4,7 +4,10 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info};
 use tradingview_rs::error::TradingViewError;
 use tradingview_rs::{
-    chart::session::{ChartCallbackFn, Options, WebSocket as ChartSocket},
+    chart::{
+        session::{ChartCallbackFn, Options, WebSocket as ChartSocket},
+        ChartSeries,
+    },
     models::Interval,
     quote::{
         session::{QuoteCallbackFn, WebSocket as QuoteSocket},
@@ -29,10 +32,7 @@ async fn main() {
         .unwrap();
 
     let handlers = ChartCallbackFn {
-        on_chart_data: Box::new(|data| -> Result<(), tradingview_rs::error::Error> {
-            println!("on_chart_data: {:?}", data);
-            Ok(())
-        }),
+        on_chart_data: Box::new(|data| Box::pin(on_chart_data(data))),
     };
 
     let session = SocketSession::new(DataServer::ProData, user.auth_token)
@@ -91,6 +91,11 @@ async fn main() {
     loop {
         // wait for receiving data
     }
+}
+
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+    info!("on_chart_data: {:?}", data);
+    Ok(())
 }
 
 fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview_rs::error::Error> {

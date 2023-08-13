@@ -37,6 +37,7 @@ futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
+futures = { version = "^0.3" }
 async-trait = "^0.1"
 iso_currency = { version = "0.4", features = ["with-serde"] }
 zip = "^0.6"

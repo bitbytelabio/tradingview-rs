@@ -1,7 +1,11 @@
 use std::env;
 
+use tracing::info;
 use tradingview_rs::{
-    chart::session::{ChartCallbackFn, Options, WebSocket},
+    chart::{
+        session::{ChartCallbackFn, Options, WebSocket},
+        ChartSeries,
+    },
     models::Interval,
     socket::DataServer,
     user::User,
@@ -21,10 +25,7 @@ async fn main() {
         .unwrap();
 
     let handlers = ChartCallbackFn {
-        on_chart_data: Box::new(|data| -> Result<(), tradingview_rs::error::Error> {
-            println!("on_chart_data: {:?}", data);
-            Ok(())
-        }),
+        on_chart_data: Box::new(|data| Box::pin(on_chart_data(data))),
     };
 
     let mut socket = WebSocket::build()
@@ -69,4 +70,9 @@ async fn main() {
     //     .unwrap();
 
     socket.subscribe().await;
+}
+
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+    info!("on_chart_data: {:?}", data);
+    Ok(())
 }

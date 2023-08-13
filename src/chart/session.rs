@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use futures::future::BoxFuture;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     chart::{utils::extract_ohlcv_data, ChartDataResponse, ChartSeries},
@@ -58,7 +59,7 @@ pub struct Options {
 }
 
 pub struct ChartCallbackFn {
-    pub on_chart_data: Box<dyn FnMut(ChartSeries) -> Result<()> + Send + Sync>,
+    pub on_chart_data: Box<dyn Fn(ChartSeries) -> BoxFuture<'static, Result<()>> + Send + Sync>,
     // pub symbol_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
 }
 
@@ -498,7 +499,7 @@ impl Socket for WebSocket {
                     }
                 }
                 trace!("receive data: {:?}", ser_data);
-                match (self.callbacks.on_chart_data)(ser_data) {
+                match (self.callbacks.on_chart_data)(ser_data).await {
                     Ok(_) => {
                         trace!("successfully called on_chart_data callback");
                         // self.socket.close().await?;
