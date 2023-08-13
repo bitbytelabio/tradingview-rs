@@ -11,7 +11,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -57,7 +57,7 @@ pub struct Options {
     pub from: Option<u64>,
     pub to: Option<u64>,
     pub replay_mode: Option<bool>,
-    pub replay_timestamp: Option<i64>,
+    pub replay_from: Option<i64>,
     pub adjustment: Option<MarketAdjustment>,
     pub currency: Option<Currency>,
     pub session_type: Option<SessionType>,
@@ -174,6 +174,7 @@ impl WebSocket {
     pub async fn add_replay_series(
         &mut self,
         session: &str,
+        series_id: &str,
         symbol: &str,
         config: &Options,
     ) -> Result<()> {
@@ -182,11 +183,13 @@ impl WebSocket {
                 "replay_add_series",
                 &payload!(
                     session,
+                    series_id,
                     symbol_init(
                         symbol,
                         config.adjustment.clone(),
                         config.currency,
-                        config.session_type.clone()
+                        config.session_type.clone(),
+                        None
                     )?,
                     config.resolution.to_string()
                 ),
@@ -386,6 +389,7 @@ impl WebSocket {
         symbol_series_id: &str,
         symbol: &str,
         config: &Options,
+        replay_session: Option<String>,
     ) -> Result<()> {
         self.socket
             .send(
@@ -397,7 +401,8 @@ impl WebSocket {
                         symbol,
                         config.adjustment.clone(),
                         config.currency,
-                        config.session_type.clone()
+                        config.session_type.clone(),
+                        replay_session,
                     )?
                 ),
             )
@@ -414,18 +419,29 @@ impl WebSocket {
 
         self.replay_mode = config.replay_mode.unwrap_or_default();
 
-        if self.replay_mode && config.replay_timestamp.is_some() {
+        self.create_chart_session(&chart_session).await?;
+
+        if self.replay_mode && config.replay_from.is_some() {
             let replay_session_id = gen_session_id("rs");
             let replay_series_id = gen_id();
 
             self.create_replay_session(&replay_session_id).await?;
-            self.add_replay_series(&replay_session_id, symbol, &config)
+            self.add_replay_series(&replay_session_id, &replay_series_id, symbol, &config)
                 .await?;
 
             self.replay_reset(
                 &replay_session_id,
                 &replay_series_id,
-                config.replay_timestamp.unwrap(),
+                config.replay_from.unwrap(),
+            )
+            .await?;
+
+            self.resolve_symbol(
+                &chart_session,
+                &symbol_series_id,
+                symbol,
+                &config,
+                Some(replay_session_id.clone()),
             )
             .await?;
 
@@ -434,42 +450,41 @@ impl WebSocket {
                 ReplayInfo {
                     replay_session_id,
                     replay_series_id,
-                    timestamp: config.replay_timestamp.unwrap(),
+                    timestamp: config.replay_from.unwrap(),
                     ..Default::default()
                 },
             );
         } else {
-            self.create_chart_session(&chart_session).await?;
-            self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config)
+            self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config, None)
                 .await?;
+        }
 
-            self.create_series(
-                &chart_session,
-                &series_id,
-                &series_version,
-                &symbol_series_id,
-                &config,
-            )
-            .await?;
+        self.create_series(
+            &chart_session,
+            &series_id,
+            &series_version,
+            &symbol_series_id,
+            &config,
+        )
+        .await?;
 
-            self.series_info.insert(
-                symbol.to_string(),
-                ChartSeriesInfo {
-                    chart_session,
-                    id: series_id,
-                    version: series_version,
-                    symbol_series_id,
-                    chart_series: ChartSeries {
-                        symbol: symbol.to_string(),
-                        interval: config.resolution,
-                        currency: config.currency,
-                        session_type: config.session_type,
-                        ..Default::default()
-                    },
+        self.series_info.insert(
+            symbol.to_string(),
+            ChartSeriesInfo {
+                chart_session,
+                id: series_id,
+                version: series_version,
+                symbol_series_id,
+                chart_series: ChartSeries {
+                    symbol: symbol.to_string(),
+                    interval: config.resolution,
+                    currency: config.currency,
+                    session_type: config.session_type,
                     ..Default::default()
                 },
-            );
-        }
+                ..Default::default()
+            },
+        );
 
         Ok(())
     }
@@ -508,18 +523,25 @@ impl Socket for WebSocket {
                     }
                 }
                 trace!("receive data: {:?}", ser_data);
-                match (self.callbacks.on_chart_data)(ser_data).await {
-                    Ok(_) => {
-                        // TODO: SocketEvent::OnChartDataUpdate => {}
-                    }
-                    Err(e) => {
-                        // TODO: SocketEvent::OnChartDataUpdate => {}
-                        error!("failed to call on_chart_data callback: {}", e);
-                    }
-                };
+                // match (self.callbacks.on_chart_data)(ser_data).await {
+                //     Ok(_) => {
+                //         // TODO: SocketEvent::OnChartDataUpdate => {}
+                //     }
+                //     Err(e) => {
+                //         // TODO: SocketEvent::OnChartDataUpdate => {}
+                //         error!("failed to call on_chart_data callback: {}", e);
+                //     }
+                // };
             }
-            // TODO: SocketEvent::OnChartDataUpdate => {}
-            _ => {}
+            SocketEvent::OnSymbolResolved => {
+                let json_string = serde_json::to_string(&message.p).unwrap();
+                error!("{}", json_string);
+            }
+            SocketEvent::OnChartDataUpdate => {}
+            SocketEvent::OnReplayDataEnd => {}
+            _ => {
+                warn!("unhandled event: {:?}", message);
+            }
         };
         Ok(())
     }

@@ -36,5 +36,8 @@ client-example:
 shared_session-example:
 	cargo run --package tradingview-rs --example shared_session
 
+replay-example:
+	cargo run --package tradingview-rs --example replay
+
 lines-of-code:
 	@git ls-files | grep '\.rs' | xargs wc -l
