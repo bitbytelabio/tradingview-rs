@@ -7,26 +7,32 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: full
-  TV_SESSION: ${{ secrets.TV_SESSION }}
-  TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
-  TV_USERNAME: ${{ secrets.TV_USERNAME }}
-  TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
-  TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
-  TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
-  TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
 
 jobs:
   check:
     name: Rust project
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Install latest stable
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
+
       - uses: Swatinem/rust-cache@v2
+
       - uses: extractions/setup-just@v1
+
       - name: Run cargo check
         run: just quick-test
+        env:
+          TV_SESSION: ${{ secrets.TV_SESSION }}
+          TV_SIGNATURE: ${{ secrets.TV_SIGNATURE }}
+          TV_USERNAME: ${{ secrets.TV_USERNAME }}
+          TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
+          TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
+          TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
+          TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}

@@ -1,7 +1,8 @@
 use std::env;
 
 use tradingview_rs::{
-    chart::session::{ChartCallbackFn, WebSocket},
+    chart::session::{ChartCallbackFn, Options, WebSocket},
+    models::Interval,
     socket::DataServer,
     socket::SocketSession,
     user::User,
@@ -32,21 +33,15 @@ async fn main() {
         .await
         .unwrap();
 
-    socket.create_chart_session().await.unwrap();
-
     socket
-        .resolve_symbol("sds_sym_1", "BINANCE:BTCUSDT", None, None, None)
-        .await
-        .unwrap();
-
-    socket
-        .create_series(
-            "sds_1",
-            "s2",
-            "sds_sym_1",
-            tradingview_rs::models::Interval::FourHours,
-            20000,
-            None,
+        .set_market(
+            "BINANCE:ETHUSDT",
+            Options {
+                resolution: Interval::FourHours,
+                bar_count: 5,
+                range: Some("60M".to_string()),
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
