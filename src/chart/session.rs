@@ -13,6 +13,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
+use rayon::prelude::*;
 use tracing::{debug, error, info, trace};
 
 #[derive(Default)]
@@ -465,29 +466,26 @@ impl Socket for WebSocket {
     async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnChartData => {
-                // let json_string = serde_json::to_string(&message.clone))?;
-                trace!("received Chart Data: {:?}", message);
-                for (k, v) in &self.series_info {
+                trace!("received chart data: {:?}", message);
+                self.series_info.par_iter().for_each(|(k, v)| {
                     trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
                     if let Some(data) = message.p[1].get(v.id.as_str()) {
-                        let csd = serde_json::from_value::<ChartData>(data.clone())?;
+                        let csd = serde_json::from_value::<ChartData>(data.clone()).unwrap();
                         let data = par_extract_ohlcv_data(&csd);
                         info!("{} - {:?}", k, data);
                     }
-                }
-
-                // let csd =
-                //     serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
-                // info!("{:#?}", message);
-                // let data = par_extract_ohlcv_data(csd.get("sds_1").unwrap());
-                // info!("{:?}", data);
+                });
             }
             SocketEvent::OnChartDataUpdate => {
-                // info!("{:#?}", message);
-                // let csd =
-                //     serde_json::from_value::<HashMap<String, ChartData>>(message.p[1].clone())?;
-                // let data = extract_ohlcv_data(csd.get("sds_1").unwrap());
-                // info!("{:?}", data);
+                trace!("received chart data update: {:?}", message);
+                self.series_info.par_iter().for_each(|(k, v)| {
+                    trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
+                    if let Some(data) = message.p[1].get(v.id.as_str()) {
+                        let csd = serde_json::from_value::<ChartData>(data.clone()).unwrap();
+                        let data = extract_ohlcv_data(&csd);
+                        info!("{} - {:?}", k, data);
+                    }
+                });
             }
             _ => {}
         };
