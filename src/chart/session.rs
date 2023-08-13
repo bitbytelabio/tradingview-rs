@@ -101,7 +101,6 @@ impl WebSocketsBuilder {
 
         Ok(WebSocket {
             socket,
-            // chart_session_id: String::default(),
             replay_session_id: String::default(),
             replay_series_id: String::default(),
             replay_mode: self.relay_mode,
