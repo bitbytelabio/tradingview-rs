@@ -33,8 +33,8 @@ user-example:
 client-example:
 	cargo run --package tradingview-rs --example client
 
-session_clone-example:
-	cargo run --package tradingview-rs --example session_clone
+shared_session-example:
+	cargo run --package tradingview-rs --example shared_session
 
 lines-of-code:
 	@git ls-files | grep '\.rs' | xargs wc -l

@@ -1,8 +1,8 @@
-use crate::chart::ChartData;
+use crate::chart::ChartDataResponse;
 use rayon::prelude::*;
 use std::sync::Mutex;
 
-pub fn extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+pub fn extract_ohlcv_data(chart_data: &ChartDataResponse) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
         .series
         .iter()
@@ -10,7 +10,9 @@ pub fn extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f6
         .collect()
 }
 
-pub fn par_extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+pub fn par_extract_ohlcv_data(
+    chart_data: &ChartDataResponse,
+) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
         .series
         .par_iter()
@@ -18,17 +20,17 @@ pub fn par_extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64
         .collect()
 }
 
-pub fn sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
+pub fn _sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
     tuples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 }
 
-pub fn update_ohlcv_data_point(
+pub fn _update_ohlcv_data_point(
     data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
     new_data: (f64, f64, f64, f64, f64, f64),
 ) {
     if let Some(index) = data
-        .par_iter()
-        .position_first(|&x| (x.0 - new_data.0).abs() < f64::EPSILON)
+        .iter()
+        .position(|&x| (x.0 - new_data.0).abs() < f64::EPSILON)
     {
         data[index] = new_data;
     } else {
@@ -36,21 +38,22 @@ pub fn update_ohlcv_data_point(
         data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 }
-pub fn update_ohlcv_data(
+
+pub fn _update_ohlcv_data(
     old_data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
     new_data: &Vec<(f64, f64, f64, f64, f64, f64)>,
 ) {
     let mutex = Mutex::new(old_data);
     new_data.par_iter().for_each(|op| {
         let mut data = mutex.lock().unwrap();
-        update_ohlcv_data_point(&mut data, *op)
+        _update_ohlcv_data_point(&mut data, *op)
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chart::{ChartData, SeriesDataPoint};
+    use crate::chart::{ChartDataResponse, SeriesDataPoint};
 
     #[test]
     fn test_sort_ohlcv_tuples() {
@@ -62,7 +65,7 @@ mod tests {
             (1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0),
         ];
 
-        sort_ohlcv_tuples(&mut tuples);
+        _sort_ohlcv_tuples(&mut tuples);
 
         let expected_output = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -87,7 +90,7 @@ mod tests {
 
         let new_data = (1691647200.0, 82700.0, 82900.0, 82100.0, 82300.0, 800000.0);
 
-        update_ohlcv_data_point(&mut data, new_data);
+        _update_ohlcv_data_point(&mut data, new_data);
 
         let expected_output = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -117,7 +120,7 @@ mod tests {
             (1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0),
         ];
 
-        update_ohlcv_data(&mut old_data, &new_data);
+        _update_ohlcv_data(&mut old_data, &new_data);
 
         let expected_output = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -133,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_process_chart_data() {
-        let chart_data = ChartData {
+        let chart_data = ChartDataResponse {
             node: None,
             series: vec![
                 SeriesDataPoint {

@@ -62,4 +62,4 @@ name = "client"
 name = "user"
 
 [[example]]
-name = "session_clone"
+name = "shared_session"
