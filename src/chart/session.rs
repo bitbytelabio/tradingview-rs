@@ -1,5 +1,5 @@
 use futures::future::BoxFuture;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use crate::{
     chart::{utils::extract_ohlcv_data, ChartDataResponse, ChartSeries},
@@ -415,21 +415,24 @@ impl WebSocket {
         self.replay_mode = config.replay_mode.unwrap_or_default();
 
         if self.replay_mode && config.replay_timestamp.is_some() {
-            let replay_session = gen_session_id("rs");
+            let replay_session_id = gen_session_id("rs");
             let replay_series_id = gen_id();
-            self.create_replay_session(&replay_session).await?;
-            self.add_replay_series(&replay_session, symbol, &config)
+
+            self.create_replay_session(&replay_session_id).await?;
+            self.add_replay_series(&replay_session_id, symbol, &config)
                 .await?;
+
             self.replay_reset(
-                &replay_session,
+                &replay_session_id,
                 &replay_series_id,
                 config.replay_timestamp.unwrap(),
             )
             .await?;
+
             self.replay_info.insert(
                 symbol.to_string(),
                 ReplayInfo {
-                    replay_session_id: replay_session,
+                    replay_session_id,
                     replay_series_id,
                     timestamp: config.replay_timestamp.unwrap(),
                     ..Default::default()

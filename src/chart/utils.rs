@@ -10,7 +10,7 @@ pub fn extract_ohlcv_data(chart_data: &ChartDataResponse) -> Vec<(f64, f64, f64,
         .collect()
 }
 
-pub fn par_extract_ohlcv_data(
+pub fn _par_extract_ohlcv_data(
     chart_data: &ChartDataResponse,
 ) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
@@ -194,7 +194,7 @@ mod tests {
             (10.0, 11.0, 12.0, 13.0, 14.0, 15.0),
         ];
         let output = extract_ohlcv_data(&chart_data);
-        let output2 = par_extract_ohlcv_data(&chart_data);
+        let output2 = _par_extract_ohlcv_data(&chart_data);
         assert_eq!(output, expected_output);
         assert_eq!(output2, expected_output);
     }
