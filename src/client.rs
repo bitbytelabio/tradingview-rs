@@ -177,18 +177,17 @@ pub async fn search_symbol(
 
 #[tracing::instrument(skip(client))]
 pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<Vec<Symbol>> {
-    let search_type = Arc::new(market_type.unwrap_or("".to_string()));
+    let search_type = Arc::new(market_type.unwrap_or_default());
     let user = Arc::new(client.clone());
 
     let search_symbol_reps = search_symbol(&user, "", "", &search_type, 0, "").await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
-    // Set the maximum number of tasks running concurrently here (e.g., 15).
     let max_concurrent_tasks = 15;
     let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
-    let mut tasks: Vec<JoinHandle<Result<Vec<Symbol>>>> = vec![];
+    let mut tasks = Vec::new();
 
     for i in (50..remaining).step_by(50) {
         let user_clone = Arc::clone(&user);
@@ -196,18 +195,17 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
         let semaphore_clone = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
-            // Acquire the semaphore permit before running the task.
             let _permit = semaphore_clone.acquire().await.unwrap();
-            let resp = search_symbol(&user_clone, "", "", &search_type_clone, i, "").await?;
-            Ok(resp.symbols)
+            search_symbol(&user_clone, "", "", &search_type_clone, i, "")
+                .await
+                .map(|resp| resp.symbols)
         });
 
         tasks.push(task);
     }
 
     for handler in tasks {
-        let resp_symbols = handler.await??;
-        symbols.extend(resp_symbols);
+        symbols.extend(handler.await??);
     }
 
     Ok(symbols)
