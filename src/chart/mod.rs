@@ -1,7 +1,11 @@
-use serde::Deserialize;
+use iso_currency::Currency;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{error::TradingViewError, models::Interval};
+use crate::{
+    error::TradingViewError,
+    models::{Interval, SessionType},
+};
 
 pub mod session;
 pub(crate) mod utils;
@@ -39,7 +43,7 @@ impl std::fmt::Display for ChartType {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ChartData {
+pub struct ChartDataResponse {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "s"))]
@@ -63,11 +67,11 @@ pub struct ChartDataChanges {
     pub zoffset: i64,
 }
 
+#[derive(Debug, Default, Clone, Serialize)]
 pub struct ChartSeries {
-    pub id: String,
     pub symbol: String,
-    pub exchange: String,
-    pub currency: String,
     pub interval: Interval,
+    pub currency: Option<Currency>,
+    pub session_type: Option<SessionType>,
     pub data: Vec<(f64, f64, f64, f64, f64, f64)>,
 }

@@ -129,7 +129,7 @@ impl std::fmt::Display for Screener {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Serialize)]
 pub enum SessionType {
     #[default]
     Regular,
@@ -376,7 +376,7 @@ impl std::fmt::Display for Timezone {
     }
 }
 
-#[derive(Default, Clone, Copy, Debug, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Serialize)]
 pub enum Interval {
     OneSecond,
     FiveSeconds,

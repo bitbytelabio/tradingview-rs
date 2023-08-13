@@ -1,8 +1,8 @@
-use crate::chart::ChartData;
+use crate::chart::ChartDataResponse;
 use rayon::prelude::*;
 use std::sync::Mutex;
 
-pub fn extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+pub fn extract_ohlcv_data(chart_data: &ChartDataResponse) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
         .series
         .iter()
@@ -10,7 +10,9 @@ pub fn extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f6
         .collect()
 }
 
-pub fn par_extract_ohlcv_data(chart_data: &ChartData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+pub fn par_extract_ohlcv_data(
+    chart_data: &ChartDataResponse,
+) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
         .series
         .par_iter()
@@ -51,7 +53,7 @@ pub fn _update_ohlcv_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chart::{ChartData, SeriesDataPoint};
+    use crate::chart::{ChartDataResponse, SeriesDataPoint};
 
     #[test]
     fn test_sort_ohlcv_tuples() {
@@ -134,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_process_chart_data() {
-        let chart_data = ChartData {
+        let chart_data = ChartDataResponse {
             node: None,
             series: vec![
                 SeriesDataPoint {

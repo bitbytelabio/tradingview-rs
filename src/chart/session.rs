@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    chart::{utils::extract_ohlcv_data, ChartData},
+    chart::{utils::extract_ohlcv_data, ChartDataResponse, ChartSeries},
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
@@ -38,6 +38,7 @@ pub struct ChartSeriesInfo {
     version: String,
     symbol_series_id: String,
     replay_info: Option<ReplayInfo>,
+    chart_series: ChartSeries,
 }
 
 #[derive(Debug, Default)]
@@ -57,7 +58,7 @@ pub struct Options {
 }
 
 pub struct ChartCallbackFn {
-    // pub series_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
+    pub on_chart_data: Box<dyn FnMut(ChartSeries) -> Result<()> + Send + Sync>,
     // pub symbol_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
 }
 
@@ -427,7 +428,7 @@ impl WebSocket {
             symbol,
             config.adjustment,
             config.currency,
-            config.session_type,
+            config.session_type.clone(),
         )
         .await?;
 
@@ -449,6 +450,13 @@ impl WebSocket {
                 id: series_id,
                 version: series_version,
                 symbol_series_id,
+                chart_series: ChartSeries {
+                    symbol: symbol.to_string(),
+                    interval: config.resolution,
+                    currency: config.currency,
+                    session_type: config.session_type,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         );
@@ -467,36 +475,41 @@ impl Socket for WebSocket {
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnChartData => {
                 trace!("received chart data: {:?}", message);
-                self.series_info.iter().for_each(|(k, v)| {
+                let mut ser_data: ChartSeries = Default::default();
+                for (k, v) in &self.series_info {
                     trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
                     if let Some(data) = message.p[1].get(v.id.as_str()) {
-                        match serde_json::from_value::<ChartData>(data.clone()) {
+                        match serde_json::from_value::<ChartDataResponse>(data.clone()) {
                             Ok(csd) => {
                                 let data = extract_ohlcv_data(&csd);
                                 info!("{} - {:?}", k, data);
+                                ser_data = ChartSeries {
+                                    symbol: k.to_string(),
+                                    interval: v.chart_series.interval,
+                                    currency: v.chart_series.currency,
+                                    session_type: v.chart_series.session_type.clone(),
+                                    data,
+                                };
                             }
                             Err(e) => {
                                 error!("failed to deserialize chart data: {}", e);
-                                return;
                             }
                         }
                     }
-                });
-            }
-            SocketEvent::OnChartDataUpdate => {
-                trace!("received chart data update: {:?}", message);
-                self.series_info.iter().for_each(|(k, v)| {
-                    trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
-                    if let Some(data) = message.p[1].get(v.id.as_str()) {
-                        let csd = serde_json::from_value::<ChartData>(data.clone()).unwrap();
-                        let data = extract_ohlcv_data(&csd);
-                        info!("{} - {:?}", k, data);
+                }
+                trace!("receive data: {:?}", ser_data);
+                match (self.callbacks.on_chart_data)(ser_data) {
+                    Ok(_) => {
+                        trace!("successfully called on_chart_data callback");
+                        // self.socket.close().await?;
                     }
-                });
+                    Err(e) => {
+                        error!("failed to call on_chart_data callback: {}", e);
+                    }
+                };
             }
-            _ => {
-                debug!("received event: {:?}", message)
-            }
+            // TODO: SocketEvent::OnChartDataUpdate => {}
+            _ => {}
         };
         Ok(())
     }

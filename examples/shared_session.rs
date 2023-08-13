@@ -28,7 +28,12 @@ async fn main() {
         .await
         .unwrap();
 
-    let handlers = ChartCallbackFn {};
+    let handlers = ChartCallbackFn {
+        on_chart_data: Box::new(|data| -> Result<(), tradingview_rs::error::Error> {
+            println!("on_chart_data: {:?}", data);
+            Ok(())
+        }),
+    };
 
     let session = SocketSession::new(DataServer::ProData, user.auth_token)
         .await

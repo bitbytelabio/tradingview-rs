@@ -256,8 +256,20 @@ pub(crate) trait Socket {
                     }
                 }
             }
-            _ => {
-                warn!("received non-text message: {:?}", raw);
+            Message::Close(msg) => {
+                info!("connection closed with code: {:?}", msg);
+            }
+            Message::Binary(msg) => {
+                warn!("received binary message: {:?}", msg);
+            }
+            Message::Ping(msg) => {
+                warn!("received ping message: {:?}", msg);
+            }
+            Message::Pong(msg) => {
+                warn!("received pong message: {:?}", msg);
+            }
+            Message::Frame(f) => {
+                warn!("received frame message: {:?}", f);
             }
         }
     }

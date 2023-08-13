@@ -20,7 +20,12 @@ async fn main() {
         .await
         .unwrap();
 
-    let handlers = ChartCallbackFn {};
+    let handlers = ChartCallbackFn {
+        on_chart_data: Box::new(|data| -> Result<(), tradingview_rs::error::Error> {
+            println!("on_chart_data: {:?}", data);
+            Ok(())
+        }),
+    };
 
     let mut socket = WebSocket::build()
         .server(DataServer::ProData)
@@ -33,26 +38,26 @@ async fn main() {
         .set_market(
             "BINANCE:BTCUSDT",
             Options {
-                resolution: Interval::FourHours,
-                bar_count: 1,
+                resolution: Interval::OneMinute,
+                bar_count: 50_000,
                 ..Default::default()
             },
         )
         .await
         .unwrap();
 
-    socket
-        .set_market(
-            "BINANCE:ETHUSDT",
-            Options {
-                resolution: Interval::FourHours,
-                bar_count: 5,
-                range: Some("60M".to_string()),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
+    // socket
+    //     .set_market(
+    //         "BINANCE:ETHUSDT",
+    //         Options {
+    //             resolution: Interval::FourHours,
+    //             bar_count: 5,
+    //             range: Some("60M".to_string()),
+    //             ..Default::default()
+    //         },
+    //     )
+    //     .await
+    //     .unwrap();
 
     // socket
     //     .resolve_symbol("ser_1", "BINANCE:BTCUSDT", None, None, None)
