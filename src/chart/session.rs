@@ -542,9 +542,24 @@ impl Socket for WebSocket {
             SocketEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
             }
+
+            SocketEvent::OnReplayResolutions => {}
+            SocketEvent::OnReplayPoint => {}
+            SocketEvent::OnReplayOk => {}
+            SocketEvent::OnReplayInstanceId => {}
             SocketEvent::OnReplayDataEnd => {}
+
+            SocketEvent::OnStudyCompleted => {}
+
+            SocketEvent::OnError(error) => {
+                error!("received error: {:?}", error);
+                self.handle_error(Error::TradingViewError(error)).await;
+            }
+            SocketEvent::UnknownEvent(e) => {
+                warn!("received unknown event: {:?}", e);
+            }
             _ => {
-                warn!("unhandled event: {:?}", message);
+                debug!("unhandled event on this session: {:?}", message);
             }
         };
         Ok(())
