@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::env;
 
 use tracing::{error, info};
-use tradingview_rs::error::TradingViewError;
 use tradingview_rs::quote::session::{QuoteCallbackFn, WebSocket};
 use tradingview_rs::quote::QuoteValue;
 use tradingview_rs::socket::DataServer;
