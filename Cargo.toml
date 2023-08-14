@@ -48,3 +48,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
 polars = "^0.31"
+
+[[bench]]
+harness = false
+name = "utils"

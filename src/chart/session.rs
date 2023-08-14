@@ -9,10 +9,12 @@ use crate::{
     payload,
     prelude::*,
     socket::{AsyncCallback, DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
+    tools::par_extract_ohlcv_data,
     utils::{gen_id, gen_session_id, symbol_init},
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
+use rayon::prelude::IndexedParallelIterator;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, trace, warn};
 
@@ -505,7 +507,11 @@ impl Socket for WebSocket {
                     let task = tokio::task::spawn(async move {
                         if let Some(data) = message.p[1].get(value.id.as_str()) {
                             let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
-                            let resp_data = extract_ohlcv_data(&csd);
+                            let resp_data = if csd.series.len() > 20_000 {
+                                par_extract_ohlcv_data(&csd)
+                            } else {
+                                extract_ohlcv_data(&csd)
+                            };
                             debug!("series data received: {} - {:?}", key, data);
                             Ok(Some(ChartSeries {
                                 symbol_id: key.to_string(),
@@ -542,7 +548,6 @@ impl Socket for WebSocket {
             SocketEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
             }
-
             SocketEvent::OnReplayResolutions => {
                 info!("received replay resolutions: {:?}", message);
             }

@@ -49,7 +49,7 @@ pub struct ChartDataResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SeriesDataPoint {
     #[serde(rename(deserialize = "i"))]
-    pub index: i64,
+    pub index: u64,
     #[serde(rename(deserialize = "v"))]
     pub value: (f64, f64, f64, f64, f64, f64),
 }

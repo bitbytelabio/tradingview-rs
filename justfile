@@ -9,6 +9,9 @@ test-user:
 quick-test:
 	@cargo test
 
+bench:
+	@cargo bench --all-features
+
 full-test: quick-test
 	@cargo test --all-features -- --ignored
 
