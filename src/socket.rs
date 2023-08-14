@@ -48,6 +48,7 @@ pub enum SocketEvent {
     OnReplayInstanceId,
     OnReplayResolutions,
     OnReplayDataEnd,
+    OnStudyLoading,
     OnStudyCompleted,
     OnError(TradingViewError),
     UnknownEvent(String),
@@ -58,17 +59,24 @@ impl From<String> for SocketEvent {
         match s.as_str() {
             "timescale_update" => SocketEvent::OnChartData,
             "du" => SocketEvent::OnChartDataUpdate,
+
             "qsd" => SocketEvent::OnQuoteData,
             "quote_completed" => SocketEvent::OnQuoteCompleted,
+
             "series_loading" => SocketEvent::OnSeriesLoading,
             "series_completed" => SocketEvent::OnSeriesCompleted,
+
             "symbol_resolved" => SocketEvent::OnSymbolResolved,
+
             "replay_ok" => SocketEvent::OnReplayOk,
             "replay_point" => SocketEvent::OnReplayPoint,
             "replay_instance_id" => SocketEvent::OnReplayInstanceId,
             "replay_resolutions" => SocketEvent::OnReplayResolutions,
             "replay_data_end" => SocketEvent::OnReplayDataEnd,
+
+            "study_loading" => SocketEvent::OnSeriesLoading,
             "study_completed" => SocketEvent::OnStudyCompleted,
+
             "symbol_error" => SocketEvent::OnError(TradingViewError::SymbolError),
             "series_error" => SocketEvent::OnError(TradingViewError::SeriesError),
             "critical_error" => SocketEvent::OnError(TradingViewError::CriticalError),

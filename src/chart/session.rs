@@ -14,7 +14,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use rayon::prelude::IndexedParallelIterator;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, trace, warn};
 
@@ -37,21 +36,27 @@ pub struct WebSocket {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ChartSeriesInfo {
+struct ChartSeriesInfo {
     id: String,
-    chart_session: String,
-    version: String,
-    symbol_series_id: String,
-    replay_info: Option<ReplayInfo>,
+    _chart_session: String,
+    _version: String,
+    _symbol_series_id: String,
+    _replay_info: Option<ReplayInfo>,
     chart_series: ChartSeries,
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ReplayInfo {
-    timestamp: i64,
-    replay_session_id: String,
-    replay_series_id: String,
-    resolution: Interval,
+struct ReplayInfo {
+    _timestamp: i64,
+    _replay_session_id: String,
+    _replay_series_id: String,
+    _resolution: Interval,
+}
+
+#[derive(Debug, Clone, Default)]
+struct StudyInfo {
+    id: String,
+    indicator: String,
 }
 
 #[derive(Default, Clone)]
@@ -125,7 +130,7 @@ impl WebSocket {
         WebSocketsBuilder::default()
     }
 
-    // TradingView WebSocket methods
+    // Begin TradingView WebSocket methods
 
     pub async fn set_locale(&mut self) -> Result<()> {
         self.socket
@@ -286,7 +291,7 @@ impl WebSocket {
         self.socket
             .send(
                 "create_study",
-                &payload!(session, study_id, series_id),
+                &payload!(session, study_id, "st1", series_id),
                 //TODO: add study options
             )
             .await?;
@@ -302,7 +307,7 @@ impl WebSocket {
         self.socket
             .send(
                 "modify_study",
-                &payload!(session, study_id, options),
+                &payload!(session, study_id, "st1", options),
                 //TODO: add study options
             )
             .await?;
@@ -339,7 +344,7 @@ impl WebSocket {
                     series_symbol_id,
                     config.resolution.to_string(),
                     config.bar_count,
-                    range // "r,1626220800:1628640000" || "60M"
+                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
                 ),
             )
             .await?;
@@ -369,7 +374,7 @@ impl WebSocket {
                     series_symbol_id,
                     config.resolution.to_string(),
                     config.bar_count,
-                    range // "r,1626220800:1628640000" || "60M" || "LASTSESSION"
+                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
                 ),
             )
             .await?;
@@ -410,6 +415,8 @@ impl WebSocket {
         Ok(())
     }
 
+    // End TradingView WebSocket methods
+
     pub async fn set_market(&mut self, symbol: &str, config: Options) -> Result<()> {
         self.series_count += 1;
         let series_count = self.series_count;
@@ -448,9 +455,9 @@ impl WebSocket {
             self.replay_info.insert(
                 symbol.to_string(),
                 ReplayInfo {
-                    replay_session_id,
-                    replay_series_id,
-                    timestamp: config.replay_from.unwrap(),
+                    _replay_session_id: replay_session_id,
+                    _replay_series_id: replay_series_id,
+                    _timestamp: config.replay_from.unwrap(),
                     ..Default::default()
                 },
             );
@@ -469,10 +476,10 @@ impl WebSocket {
         .await?;
 
         let series_info = ChartSeriesInfo {
-            chart_session,
+            _chart_session: chart_session,
             id: series_id,
-            version: series_version,
-            symbol_series_id,
+            _version: series_version,
+            _symbol_series_id: symbol_series_id,
             chart_series: ChartSeries {
                 symbol_id: symbol.to_string(),
                 interval: config.resolution,
@@ -563,9 +570,12 @@ impl Socket for WebSocket {
             SocketEvent::OnReplayDataEnd => {
                 info!("received replay data end: {:?}", message);
             }
-
-            SocketEvent::OnStudyCompleted => {}
-
+            SocketEvent::OnStudyLoading => {
+                info!("received study loading message: {:?}", message);
+            }
+            SocketEvent::OnStudyCompleted => {
+                info!("received study completed message: {:?}", message);
+            }
             SocketEvent::OnError(error) => {
                 error!("received error: {:?}", error);
                 self.handle_error(Error::TradingViewError(error)).await;
