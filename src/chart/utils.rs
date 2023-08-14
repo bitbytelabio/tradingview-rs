@@ -51,7 +51,7 @@ pub fn update_ohlcv_data(
     });
 }
 
-pub fn get_string_value(values: &Vec<Value>, index: usize) -> String {
+pub fn get_string_value(values: &[Value], index: usize) -> String {
     match values.get(index) {
         Some(value) => match value.as_str() {
             Some(string_value) => string_value.to_string(),
