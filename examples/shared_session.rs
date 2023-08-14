@@ -2,7 +2,6 @@ use std::{collections::HashMap, env, sync::Arc};
 
 use tokio::sync::Mutex;
 use tracing::{error, info};
-use tradingview_rs::error::TradingViewError;
 use tradingview_rs::{
     chart::{
         session::{ChartCallbackFn, Options, WebSocket as ChartSocket},
@@ -33,6 +32,8 @@ async fn main() {
 
     let handlers = ChartCallbackFn {
         on_chart_data: Box::new(|data| Box::pin(on_chart_data(data))),
+        on_symbol_resolved: Box::new(|data| Box::pin(on_symbol_resolved(data))),
+        on_series_completed: Box::new(|data| Box::pin(on_series_completed(data))),
     };
 
     let session = SocketSession::new(DataServer::ProData, user.auth_token)
@@ -48,9 +49,9 @@ async fn main() {
     let mut quote_socket = QuoteSocket::build()
         .socket(session)
         .connect(QuoteCallbackFn {
-            data: Box::new(on_data),
-            loaded: Box::new(on_loaded),
-            error: Box::new(on_error),
+            data: Box::new(|data| Box::pin(on_data(data))),
+            loaded: Box::new(|data| Box::pin(on_loaded(data))),
+            error: Box::new(|data| Box::pin(on_error(data))),
         })
         .await
         .unwrap();
@@ -90,15 +91,16 @@ async fn main() {
 
     loop {
         // wait for receiving data
+        // dummy loop
     }
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), Box<dyn std::error::Error>> {
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
     info!("on_chart_data: {:?}", data);
     Ok(())
 }
 
-fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview_rs::error::Error> {
+async fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview_rs::error::Error> {
     data.iter().for_each(|(_, v)| {
         let json_string = serde_json::to_string(&v).unwrap();
         info!("{}", json_string);
@@ -106,12 +108,26 @@ fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview_rs::erro
     Ok(())
 }
 
-fn on_loaded(msg: Vec<serde_json::Value>) -> Result<(), tradingview_rs::error::Error> {
+async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<(), tradingview_rs::error::Error> {
     info!("Data: {:#?}", msg);
     Ok(())
 }
 
-fn on_error(err: TradingViewError) -> Result<(), tradingview_rs::error::Error> {
+async fn on_error(err: tradingview_rs::error::Error) -> Result<(), tradingview_rs::error::Error> {
     error!("Error: {:#?}", err);
+    Ok(())
+}
+
+async fn on_symbol_resolved(
+    data: tradingview_rs::chart::SymbolInfo,
+) -> Result<(), tradingview_rs::error::Error> {
+    info!("on_symbol_resolved: {:?}", data);
+    Ok(())
+}
+
+async fn on_series_completed(
+    data: tradingview_rs::chart::SeriesCompletedMessage,
+) -> Result<(), tradingview_rs::error::Error> {
+    info!("on_series_completed: {:?}", data);
     Ok(())
 }

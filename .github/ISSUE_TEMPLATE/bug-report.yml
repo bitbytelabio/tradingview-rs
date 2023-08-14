@@ -26,14 +26,13 @@ body:
       value: "A bug happened!"
     validations:
       required: true
-  - type: dropdown
+  - type: textarea
     id: version
     attributes:
       label: Version
-      description: What version of our software are you running?
-      options:
-        - 1.0.2 (Default)
-        - 1.0.3 (Edge)
+      description: What Rust version are you running?
+      placeholder: ex. 1.71.1
+      value: "1.71.1"
     validations:
       required: true
   - type: dropdown

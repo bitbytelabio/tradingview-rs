@@ -44,6 +44,8 @@ pub enum Error {
     ZipError(#[from] zip::result::ZipError),
     #[error("io error")]
     IOError(#[from] std::io::Error),
+    #[error("TradingView error")]
+    TradingViewError(#[from] TradingViewError),
 }
 
 #[derive(Debug, Clone, Error)]

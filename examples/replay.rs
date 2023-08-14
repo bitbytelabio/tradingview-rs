@@ -26,6 +26,8 @@ async fn main() {
 
     let handlers = ChartCallbackFn {
         on_chart_data: Box::new(|data| Box::pin(on_chart_data(data))),
+        on_symbol_resolved: Box::new(|data| Box::pin(on_symbol_resolved(data))),
+        on_series_completed: Box::new(|data| Box::pin(on_series_completed(data))),
     };
 
     let mut socket = WebSocket::build()
@@ -39,10 +41,10 @@ async fn main() {
         .set_market(
             "BINANCE:BTCUSDT",
             Options {
-                resolution: Interval::FourHours,
-                bar_count: 5,
+                resolution: Interval::OneMinute,
+                bar_count: 50_000,
                 replay_mode: Some(true),
-                replay_from: Some(1640224799),
+                replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
                 ..Default::default()
             },
         )
@@ -74,7 +76,22 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), Box<dyn std::error::Error>> {
-    info!("on_chart_data: {:?}", data);
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+    let end = data.data.first().unwrap().0;
+    info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
+    Ok(())
+}
+
+async fn on_symbol_resolved(
+    data: tradingview_rs::chart::SymbolInfo,
+) -> Result<(), tradingview_rs::error::Error> {
+    info!("on_symbol_resolved: {:?}", data);
+    Ok(())
+}
+
+async fn on_series_completed(
+    data: tradingview_rs::chart::SeriesCompletedMessage,
+) -> Result<(), tradingview_rs::error::Error> {
+    info!("on_series_completed: {:?}", data);
     Ok(())
 }
