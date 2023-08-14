@@ -74,7 +74,7 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), Box<dyn std::error::Error>> {
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
     info!("on_chart_data: {:?}", data);
     Ok(())
 }

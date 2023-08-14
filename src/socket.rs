@@ -7,6 +7,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures_util::{
+    future::BoxFuture,
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
@@ -22,6 +23,8 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
+
+pub(crate) type AsyncCallback<T> = Box<dyn Fn(T) -> BoxFuture<'static, Result<()>> + Send + Sync>;
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -234,11 +237,11 @@ pub(crate) trait Socket {
                 Some(Ok(message)) => self.handle_raw_messages(session, message).await,
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
-                    break;
+                    self.handle_error(Error::WebSocketError(e)).await;
                 }
                 None => {
-                    debug!("No more messages to read");
-                    break;
+                    debug!("no messages to read");
+                    continue;
                 }
             }
         }
@@ -254,24 +257,25 @@ pub(crate) trait Socket {
                             .await;
                     }
                     Err(e) => {
-                        error!("Error parsing message: {:#?}", e);
+                        error!("error parsing message: {:?}", e);
+                        self.handle_error(e).await;
                     }
                 }
             }
             Message::Close(msg) => {
-                info!("connection closed with code: {:?}", msg);
+                warn!("connection closed with code: {:?}", msg);
             }
             Message::Binary(msg) => {
-                warn!("received binary message: {:?}", msg);
+                debug!("received binary message: {:?}", msg);
             }
             Message::Ping(msg) => {
-                warn!("received ping message: {:?}", msg);
+                trace!("received ping message: {:?}", msg);
             }
             Message::Pong(msg) => {
-                warn!("received pong message: {:?}", msg);
+                trace!("received pong message: {:?}", msg);
             }
             Message::Frame(f) => {
-                warn!("received frame message: {:?}", f);
+                debug!("received frame message: {:?}", f);
             }
         }
     }
@@ -288,7 +292,7 @@ pub(crate) trait Socket {
                     info!("received server info: {:?}", info);
                 }
                 SocketMessage::SocketMessage(msg) => {
-                    if let Err(e) = self.handle_event(msg).await {
+                    if let Err(e) = self.handle_message_data(msg).await {
                         self.handle_error(e).await;
                     }
                 }
@@ -310,7 +314,7 @@ pub(crate) trait Socket {
         }
     }
 
-    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()>;
+    async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()>;
 
     async fn handle_error(&mut self, error: Error);
 }

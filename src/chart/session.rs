@@ -1,4 +1,3 @@
-use futures::future::BoxFuture;
 use std::collections::HashMap;
 
 use crate::{
@@ -6,7 +5,7 @@ use crate::{
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
-    socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
+    socket::{AsyncCallback, DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
     utils::{gen_id, gen_session_id, symbol_init},
 };
 use async_trait::async_trait;
@@ -63,14 +62,9 @@ pub struct Options {
     pub session_type: Option<SessionType>,
 }
 
-type AsyncCallback<T> = Box<
-    dyn Fn(T) -> BoxFuture<'static, std::result::Result<(), Box<dyn std::error::Error>>>
-        + Send
-        + Sync,
->;
-
 pub struct ChartCallbackFn {
     pub on_chart_data: AsyncCallback<ChartSeries>,
+    // pub on_symbol_resolve: AsyncCallback<>,
     // pub symbol_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
 }
 
@@ -495,7 +489,7 @@ impl WebSocket {
 
 #[async_trait]
 impl Socket for WebSocket {
-    async fn handle_event(&mut self, message: SocketMessageDe) -> Result<()> {
+    async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnChartData => {
                 trace!("received chart data: {:?}", message);
