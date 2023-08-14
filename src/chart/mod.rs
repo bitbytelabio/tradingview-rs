@@ -70,6 +70,14 @@ pub struct ChartSeries {
     pub data: Vec<(f64, f64, f64, f64, f64, f64)>,
 }
 
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct SeriesCompletedMessage {
+    pub session: String,
+    pub id: String,
+    pub update_mode: String,
+    pub version: String,
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SymbolInfo {

@@ -1,5 +1,6 @@
 use crate::chart::ChartDataResponse;
 use rayon::prelude::*;
+use serde_json::Value;
 use std::sync::Mutex;
 
 pub fn extract_ohlcv_data(chart_data: &ChartDataResponse) -> Vec<(f64, f64, f64, f64, f64, f64)> {
@@ -50,10 +51,21 @@ pub fn update_ohlcv_data(
     });
 }
 
+pub fn get_string_value(values: &Vec<Value>, index: usize) -> String {
+    match values.get(index) {
+        Some(value) => match value.as_str() {
+            Some(string_value) => string_value.to_string(),
+            None => "".to_string(),
+        },
+        None => "".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::chart::{ChartDataResponse, SeriesDataPoint};
+    use serde_json::json;
 
     #[test]
     fn test_sort_ohlcv_tuples() {
@@ -197,5 +209,16 @@ mod tests {
         let output2 = par_extract_ohlcv_data(&chart_data);
         assert_eq!(output, expected_output);
         assert_eq!(output2, expected_output);
+    }
+
+    #[test]
+    fn test_get_string_value() {
+        let values = vec![json!("hello"), json!(null), json!(123), json!("world")];
+
+        assert_eq!(get_string_value(&values, 0), "hello".to_string());
+        assert_eq!(get_string_value(&values, 1), "".to_string());
+        assert_eq!(get_string_value(&values, 2), "".to_string());
+        assert_eq!(get_string_value(&values, 3), "world".to_string());
+        assert_eq!(get_string_value(&values, 4), "".to_string());
     }
 }

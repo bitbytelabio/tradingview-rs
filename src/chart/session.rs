@@ -1,7 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    chart::{utils::extract_ohlcv_data, ChartDataResponse, ChartSeries, SymbolInfo},
+    chart::{
+        utils::{extract_ohlcv_data, get_string_value},
+        ChartDataResponse, ChartSeries, SeriesCompletedMessage, SymbolInfo,
+    },
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
@@ -65,8 +68,8 @@ pub struct Options {
 
 pub struct ChartCallbackFn {
     pub on_chart_data: AsyncCallback<ChartSeries>,
-    pub on_symbol_resolve: AsyncCallback<SymbolInfo>,
-    // pub symbol_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
+    pub on_symbol_resolved: AsyncCallback<SymbolInfo>,
+    pub on_series_completed: AsyncCallback<SeriesCompletedMessage>,
 }
 
 impl WebSocketsBuilder {
@@ -490,7 +493,7 @@ impl WebSocket {
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         match SocketEvent::from(message.m.clone()) {
-            SocketEvent::OnChartData => {
+            SocketEvent::OnChartData | SocketEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
                 let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
                 let message = Arc::new(message);
@@ -503,7 +506,7 @@ impl Socket for WebSocket {
                         if let Some(data) = message.p[1].get(value.id.as_str()) {
                             let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
                             let resp_data = extract_ohlcv_data(&csd);
-                            debug!("Series data received: {} - {:?}", key, data);
+                            debug!("series data received: {} - {:?}", key, data);
                             Ok(Some(ChartSeries {
                                 symbol_id: key.to_string(),
                                 interval: value.chart_series.interval,
@@ -523,13 +526,22 @@ impl Socket for WebSocket {
             }
             SocketEvent::OnSymbolResolved => {
                 let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
-
-                info!("{:?}", symbol_info);
+                debug!("received symbol information: {:?}", symbol_info);
+                (self.callbacks.on_symbol_resolved)(symbol_info).await?;
             }
-            SocketEvent::OnChartDataUpdate => {}
-            SocketEvent::OnSeriesCompleted => {}
-            SocketEvent::OnSeriesLoading => {}
-
+            SocketEvent::OnSeriesCompleted => {
+                let message = SeriesCompletedMessage {
+                    session: get_string_value(&message.p, 0),
+                    id: get_string_value(&message.p, 1),
+                    update_mode: get_string_value(&message.p, 2),
+                    version: get_string_value(&message.p, 3),
+                };
+                info!("series is completed: {:#?}", message);
+                (self.callbacks.on_series_completed)(message).await?;
+            }
+            SocketEvent::OnSeriesLoading => {
+                trace!("series is loading: {:#?}", message);
+            }
             SocketEvent::OnReplayDataEnd => {}
             _ => {
                 warn!("unhandled event: {:?}", message);
