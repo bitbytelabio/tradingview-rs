@@ -2,7 +2,6 @@ use std::{collections::HashMap, env, sync::Arc};
 
 use tokio::sync::Mutex;
 use tracing::{error, info};
-use tradingview_rs::error::TradingViewError;
 use tradingview_rs::{
     chart::{
         session::{ChartCallbackFn, Options, WebSocket as ChartSocket},
