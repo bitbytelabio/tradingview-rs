@@ -89,9 +89,9 @@ pub struct SocketMessageDe {
     pub m: String,
     pub p: Vec<Value>,
     #[serde(default)]
-    pub t: Option<i64>,
+    pub t: Option<u64>,
     #[serde(default)]
-    pub t_ms: Option<i64>,
+    pub t_ms: Option<u64>,
 }
 
 impl SocketMessageSer {

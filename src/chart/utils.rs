@@ -10,7 +10,7 @@ pub fn extract_ohlcv_data(chart_data: &ChartDataResponse) -> Vec<(f64, f64, f64,
         .collect()
 }
 
-pub fn _par_extract_ohlcv_data(
+pub fn par_extract_ohlcv_data(
     chart_data: &ChartDataResponse,
 ) -> Vec<(f64, f64, f64, f64, f64, f64)> {
     chart_data
@@ -20,11 +20,11 @@ pub fn _par_extract_ohlcv_data(
         .collect()
 }
 
-pub fn _sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
+pub fn sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
     tuples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 }
 
-pub fn _update_ohlcv_data_point(
+pub fn update_ohlcv_data_point(
     data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
     new_data: (f64, f64, f64, f64, f64, f64),
 ) {
@@ -39,14 +39,14 @@ pub fn _update_ohlcv_data_point(
     }
 }
 
-pub fn _update_ohlcv_data(
+pub fn update_ohlcv_data(
     old_data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
     new_data: &Vec<(f64, f64, f64, f64, f64, f64)>,
 ) {
     let mutex = Mutex::new(old_data);
     new_data.par_iter().for_each(|op| {
         let mut data = mutex.lock().unwrap();
-        _update_ohlcv_data_point(&mut data, *op)
+        update_ohlcv_data_point(&mut data, *op)
     });
 }
 
@@ -65,7 +65,7 @@ mod tests {
             (1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0),
         ];
 
-        _sort_ohlcv_tuples(&mut tuples);
+        sort_ohlcv_tuples(&mut tuples);
 
         let expected_output = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -90,7 +90,7 @@ mod tests {
 
         let new_data = (1691647200.0, 82700.0, 82900.0, 82100.0, 82300.0, 800000.0);
 
-        _update_ohlcv_data_point(&mut data, new_data);
+        update_ohlcv_data_point(&mut data, new_data);
 
         let expected_output = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -120,7 +120,7 @@ mod tests {
             (1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0),
         ];
 
-        _update_ohlcv_data(&mut old_data, &new_data);
+        update_ohlcv_data(&mut old_data, &new_data);
 
         let expected_output = vec![
             (1691560800.0, 83800.0, 83900.0, 83000.0, 83100.0, 708100.0),
@@ -194,7 +194,7 @@ mod tests {
             (10.0, 11.0, 12.0, 13.0, 14.0, 15.0),
         ];
         let output = extract_ohlcv_data(&chart_data);
-        let output2 = _par_extract_ohlcv_data(&chart_data);
+        let output2 = par_extract_ohlcv_data(&chart_data);
         assert_eq!(output, expected_output);
         assert_eq!(output2, expected_output);
     }

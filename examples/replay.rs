@@ -26,6 +26,7 @@ async fn main() {
 
     let handlers = ChartCallbackFn {
         on_chart_data: Box::new(|data| Box::pin(on_chart_data(data))),
+        on_symbol_resolve: Box::new(|data| Box::pin(on_symbol_resolve(data))),
     };
 
     let mut socket = WebSocket::build()
@@ -76,5 +77,12 @@ async fn main() {
 
 async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
     info!("on_chart_data: {:?}", data);
+    Ok(())
+}
+
+async fn on_symbol_resolve(
+    data: tradingview_rs::chart::SymbolInfo,
+) -> Result<(), tradingview_rs::error::Error> {
+    info!("on_symbol_resolve: {:?}", data);
     Ok(())
 }

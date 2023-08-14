@@ -65,7 +65,47 @@ pub struct ChartDataChanges {
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct ChartSeries {
-    pub symbol: String,
+    pub symbol_id: String,
     pub interval: Interval,
     pub data: Vec<(f64, f64, f64, f64, f64, f64)>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SymbolInfo {
+    #[serde(rename(deserialize = "pro_name"))]
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub exchange: String,
+    #[serde(rename = "listed_exchange")]
+    pub listed_exchange: String,
+    #[serde(rename = "provider_id")]
+    pub provider_id: String,
+    #[serde(rename = "base_currency")]
+    pub base_currency: String,
+    #[serde(rename = "base_currency_id")]
+    pub base_currency_id: String,
+    #[serde(rename = "currency_id")]
+    pub currency_id: String,
+    #[serde(rename = "currency_code")]
+    pub currency_code: String,
+    pub session_holidays: String,
+    pub subsessions: Vec<Subsession>,
+    pub timezone: String,
+    #[serde(rename(deserialize = "type"))]
+    pub market_type: String,
+    pub typespecs: Vec<String>,
+    pub aliases: Vec<String>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Subsession {
+    pub description: String,
+    pub id: String,
+    pub private: bool,
+    pub session: String,
+    #[serde(rename(deserialize = "session-display"))]
+    pub session_display: String,
 }

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    chart::{utils::extract_ohlcv_data, ChartDataResponse, ChartSeries},
+    chart::{utils::extract_ohlcv_data, ChartDataResponse, ChartSeries, SymbolInfo},
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
@@ -65,7 +65,7 @@ pub struct Options {
 
 pub struct ChartCallbackFn {
     pub on_chart_data: AsyncCallback<ChartSeries>,
-    // pub on_symbol_resolve: AsyncCallback<>,
+    pub on_symbol_resolve: AsyncCallback<SymbolInfo>,
     // pub symbol_loaded: Box<dyn FnMut(Value) -> Result<()> + Send + Sync>,
 }
 
@@ -469,7 +469,7 @@ impl WebSocket {
             version: series_version,
             symbol_series_id,
             chart_series: ChartSeries {
-                symbol: symbol.to_string(),
+                symbol_id: symbol.to_string(),
                 interval: config.resolution,
                 ..Default::default()
             },
@@ -505,7 +505,7 @@ impl Socket for WebSocket {
                             let resp_data = extract_ohlcv_data(&csd);
                             debug!("Series data received: {} - {:?}", key, data);
                             Ok(Some(ChartSeries {
-                                symbol: key.to_string(),
+                                symbol_id: key.to_string(),
                                 interval: value.chart_series.interval,
                                 data: resp_data,
                             }))
@@ -522,10 +522,15 @@ impl Socket for WebSocket {
                 }
             }
             SocketEvent::OnSymbolResolved => {
-                let json_string = serde_json::to_string(&message.p)?;
-                warn!("{}", json_string);
+                let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
+
+                info!("{:?}", symbol_info);
             }
-            SocketEvent::OnChartDataUpdate | SocketEvent::OnReplayDataEnd => {}
+            SocketEvent::OnChartDataUpdate => {}
+            SocketEvent::OnSeriesCompleted => {}
+            SocketEvent::OnSeriesLoading => {}
+
+            SocketEvent::OnReplayDataEnd => {}
             _ => {
                 warn!("unhandled event: {:?}", message);
             }
