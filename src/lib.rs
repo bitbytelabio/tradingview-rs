@@ -18,3 +18,5 @@ pub mod tools {
     };
     pub use crate::utils::{clean_em_tags, format_packet, parse_compressed, parse_packet};
 }
+
+pub mod api {}

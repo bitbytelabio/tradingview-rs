@@ -21,7 +21,7 @@ async fn main() {
     // let user_clone = user;
     // let search_type = Arc::new("".to_owned());
 
-    match tradingview_rs::client::list_symbols(&user, None).await {
+    match tradingview_rs::client::mics::list_symbols(&user, None).await {
         Ok(symbols) => {
             println!("{:#?}", symbols.len());
         }
