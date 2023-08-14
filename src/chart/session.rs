@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     chart::{utils::extract_ohlcv_data, ChartDataResponse, ChartSeries},
@@ -10,7 +10,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
-use tracing::{error, info, trace, warn};
+use tokio::task::JoinHandle;
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -30,7 +31,7 @@ pub struct WebSocket {
     callbacks: ChartCallbackFn,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ChartSeriesInfo {
     id: String,
     chart_session: String,
@@ -40,7 +41,7 @@ pub struct ChartSeriesInfo {
     chart_series: ChartSeries,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ReplayInfo {
     timestamp: i64,
     replay_session_id: String,
@@ -470,8 +471,6 @@ impl WebSocket {
             chart_series: ChartSeries {
                 symbol: symbol.to_string(),
                 interval: config.resolution,
-                currency: config.currency,
-                session_type: config.session_type,
                 ..Default::default()
             },
             ..Default::default()
@@ -493,38 +492,35 @@ impl Socket for WebSocket {
         match SocketEvent::from(message.m.clone()) {
             SocketEvent::OnChartData => {
                 trace!("received chart data: {:?}", message);
-                let mut ser_data: ChartSeries = Default::default();
-                for (k, v) in &self.series_info {
-                    trace!("received k: {}, v: {:?}, m: {:?}", k, v, message);
-                    if let Some(data) = message.p[1].get(v.id.as_str()) {
-                        match serde_json::from_value::<ChartDataResponse>(data.clone()) {
-                            Ok(csd) => {
-                                let data = extract_ohlcv_data(&csd);
-                                info!("{} - {:?}", k, data);
-                                ser_data = ChartSeries {
-                                    symbol: k.to_string(),
-                                    interval: v.chart_series.interval,
-                                    currency: v.chart_series.currency,
-                                    session_type: v.chart_series.session_type.clone(),
-                                    data,
-                                };
-                            }
-                            Err(e) => {
-                                error!("failed to deserialize chart data: {}", e);
-                            }
+                let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
+                let message = Arc::new(message);
+                for (key, value) in &self.series_info {
+                    trace!("received k: {}, v: {:?}, m: {:?}", key, value, message);
+                    let key = Arc::new(key.clone());
+                    let value = Arc::new(value.clone());
+                    let message = Arc::clone(&message);
+                    let task = tokio::task::spawn(async move {
+                        if let Some(data) = message.p[1].get(value.id.as_str()) {
+                            let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
+                            let resp_data: Vec<(f64, f64, f64, f64, f64, f64)> =
+                                extract_ohlcv_data(&csd);
+                            debug!("Series data received: {} - {:?}", key, data);
+                            return Ok(Some(ChartSeries {
+                                symbol: key.to_string(),
+                                interval: value.chart_series.interval,
+                                data: resp_data,
+                            }));
+                        } else {
+                            Ok(None)
                         }
+                    });
+                    tasks.push(task);
+                }
+                for handler in tasks {
+                    if let Some(data) = handler.await?? {
+                        (self.callbacks.on_chart_data)(data).await?;
                     }
                 }
-                trace!("receive data: {:?}", ser_data);
-                // match (self.callbacks.on_chart_data)(ser_data).await {
-                //     Ok(_) => {
-                //         // TODO: SocketEvent::OnChartDataUpdate => {}
-                //     }
-                //     Err(e) => {
-                //         // TODO: SocketEvent::OnChartDataUpdate => {}
-                //         error!("failed to call on_chart_data callback: {}", e);
-                //     }
-                // };
             }
             SocketEvent::OnSymbolResolved => {
                 let json_string = serde_json::to_string(&message.p).unwrap();

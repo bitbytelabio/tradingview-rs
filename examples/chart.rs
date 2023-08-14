@@ -40,7 +40,7 @@ async fn main() {
             "BINANCE:BTCUSDT",
             Options {
                 resolution: Interval::OneMinute,
-                bar_count: 5,
+                bar_count: 50_000,
                 ..Default::default()
             },
         )

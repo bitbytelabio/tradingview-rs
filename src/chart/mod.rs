@@ -1,11 +1,7 @@
-use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-    error::TradingViewError,
-    models::{Interval, SessionType},
-};
+use crate::{error::TradingViewError, models::Interval};
 
 pub mod session;
 pub(crate) mod utils;
@@ -71,7 +67,5 @@ pub struct ChartDataChanges {
 pub struct ChartSeries {
     pub symbol: String,
     pub interval: Interval,
-    pub currency: Option<Currency>,
-    pub session_type: Option<SessionType>,
     pub data: Vec<(f64, f64, f64, f64, f64, f64)>,
 }
