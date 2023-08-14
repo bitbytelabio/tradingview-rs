@@ -502,14 +502,13 @@ impl Socket for WebSocket {
                     let task = tokio::task::spawn(async move {
                         if let Some(data) = message.p[1].get(value.id.as_str()) {
                             let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
-                            let resp_data: Vec<(f64, f64, f64, f64, f64, f64)> =
-                                extract_ohlcv_data(&csd);
+                            let resp_data = extract_ohlcv_data(&csd);
                             debug!("Series data received: {} - {:?}", key, data);
-                            return Ok(Some(ChartSeries {
+                            Ok(Some(ChartSeries {
                                 symbol: key.to_string(),
                                 interval: value.chart_series.interval,
                                 data: resp_data,
-                            }));
+                            }))
                         } else {
                             Ok(None)
                         }
@@ -523,11 +522,10 @@ impl Socket for WebSocket {
                 }
             }
             SocketEvent::OnSymbolResolved => {
-                let json_string = serde_json::to_string(&message.p).unwrap();
-                error!("{}", json_string);
+                let json_string = serde_json::to_string(&message.p)?;
+                warn!("{}", json_string);
             }
-            SocketEvent::OnChartDataUpdate => {}
-            SocketEvent::OnReplayDataEnd => {}
+            SocketEvent::OnChartDataUpdate | SocketEvent::OnReplayDataEnd => {}
             _ => {
                 warn!("unhandled event: {:?}", message);
             }
