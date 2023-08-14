@@ -3,13 +3,13 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuoteData, QuoteValue, ALL_QUOTE_FIELDS},
-    socket::{DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
+    socket::{AsyncCallback, DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
     utils::gen_session_id,
 };
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -64,9 +64,9 @@ fn merge_quotes(quote_old: &QuoteValue, quote_new: &QuoteValue) -> QuoteValue {
 }
 
 pub struct QuoteCallbackFn {
-    pub data: Box<dyn FnMut(HashMap<String, QuoteValue>) -> Result<()> + Send + Sync>,
-    pub loaded: Box<dyn FnMut(Vec<Value>) -> Result<()> + Send + Sync>,
-    pub error: Box<dyn FnMut(TradingViewError) -> Result<()> + Send + Sync>,
+    pub data: AsyncCallback<HashMap<String, QuoteValue>>,
+    pub loaded: AsyncCallback<Vec<Value>>,
+    pub error: AsyncCallback<Error>,
 }
 
 impl WebSocketsBuilder {
@@ -220,23 +220,24 @@ impl Socket for WebSocket {
                     } else {
                         self.prev_quotes.insert(qsd.name.clone(), qsd.value.clone());
                     }
-                    (self.callbacks.data)(self.prev_quotes.clone())?;
+                    (self.callbacks.data)(self.prev_quotes.clone()).await?;
                     return Ok(());
                 } else {
-                    (self.callbacks.error)(TradingViewError::QuoteDataStatusError)?;
+                    (self.callbacks.error)(Error::TradingViewError(
+                        TradingViewError::QuoteDataStatusError,
+                    ))
+                    .await?;
                     return Ok(());
                 }
             }
             SocketEvent::OnQuoteCompleted => {
-                (self.callbacks.loaded)(message.p.clone())?;
-                return Ok(());
+                (self.callbacks.loaded)(message.p.clone()).await?;
             }
             SocketEvent::OnError(e) => {
-                (self.callbacks.error)(e)?;
-                return Ok(());
+                self.handle_error(Error::TradingViewError(e)).await;
             }
             _ => {
-                trace!("received message: {:#?}", message);
+                debug!("unhandled event on this session: {:?}", message);
             }
         };
         Ok(())

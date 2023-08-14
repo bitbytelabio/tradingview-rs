@@ -23,9 +23,9 @@ async fn main() {
         .unwrap();
 
     let handlers = QuoteCallbackFn {
-        data: Box::new(on_data),
-        loaded: Box::new(on_loaded),
-        error: Box::new(on_error),
+        data: Box::new(|data| Box::pin(on_data(data))),
+        loaded: Box::new(|data| Box::pin(on_loaded(data))),
+        error: Box::new(|data| Box::pin(on_error(data))),
     };
 
     let mut socket = WebSocket::build()
@@ -53,7 +53,7 @@ async fn main() {
     socket.subscribe().await;
 }
 
-fn on_data(data: HashMap<String, QuoteValue>) -> Result<()> {
+async fn on_data(data: HashMap<String, QuoteValue>) -> Result<()> {
     data.iter().for_each(|(_, v)| {
         let json_string = serde_json::to_string(&v).unwrap();
         info!("{}", json_string);
@@ -61,12 +61,12 @@ fn on_data(data: HashMap<String, QuoteValue>) -> Result<()> {
     Ok(())
 }
 
-fn on_loaded(msg: Vec<serde_json::Value>) -> Result<()> {
+async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<()> {
     info!("Data: {:#?}", msg);
     Ok(())
 }
 
-fn on_error(err: TradingViewError) -> Result<()> {
+async fn on_error(err: tradingview_rs::error::Error) -> Result<()> {
     error!("Error: {:#?}", err);
     Ok(())
 }
