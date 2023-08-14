@@ -41,10 +41,10 @@ async fn main() {
         .set_market(
             "BINANCE:BTCUSDT",
             Options {
-                resolution: Interval::FourHours,
-                bar_count: 5,
+                resolution: Interval::OneMinute,
+                bar_count: 50_000,
                 replay_mode: Some(true),
-                replay_from: Some(1640224799),
+                replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
                 ..Default::default()
             },
         )
@@ -77,7 +77,8 @@ async fn main() {
 }
 
 async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
-    info!("on_chart_data: {:?}", data);
+    let end = data.data.first().unwrap().0;
+    info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
     Ok(())
 }
 

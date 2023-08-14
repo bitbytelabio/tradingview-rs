@@ -42,7 +42,7 @@ async fn main() {
             "BINANCE:BTCUSDT",
             Options {
                 resolution: Interval::OneMinute,
-                bar_count: 1,
+                bar_count: 50_000,
                 ..Default::default()
             },
         )
@@ -75,7 +75,9 @@ async fn main() {
 }
 
 async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
-    info!("on_chart_data: {:?}", data);
+    // info!("on_chart_data: {:?}", data);
+    let end = data.data.first().unwrap().0;
+    info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
     Ok(())
 }
 

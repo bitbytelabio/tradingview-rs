@@ -543,11 +543,21 @@ impl Socket for WebSocket {
                 trace!("series is loading: {:#?}", message);
             }
 
-            SocketEvent::OnReplayResolutions => {}
-            SocketEvent::OnReplayPoint => {}
-            SocketEvent::OnReplayOk => {}
-            SocketEvent::OnReplayInstanceId => {}
-            SocketEvent::OnReplayDataEnd => {}
+            SocketEvent::OnReplayResolutions => {
+                info!("received replay resolutions: {:?}", message);
+            }
+            SocketEvent::OnReplayPoint => {
+                info!("received replay point: {:?}", message);
+            }
+            SocketEvent::OnReplayOk => {
+                info!("received replay ok: {:?}", message);
+            }
+            SocketEvent::OnReplayInstanceId => {
+                info!("received replay instance id: {:?}", message);
+            }
+            SocketEvent::OnReplayDataEnd => {
+                info!("received replay data end: {:?}", message);
+            }
 
             SocketEvent::OnStudyCompleted => {}
 
