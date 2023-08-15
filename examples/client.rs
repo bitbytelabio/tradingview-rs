@@ -1,11 +1,11 @@
 use std::env;
 
 use tradingview_rs::{
-    models::{FinancialPeriod, IndicatorInfo},
+    models::{IndicatorInfo},
     user::User,
 };
 
-use tracing::{error, info};
+
 
 #[tokio::main]
 async fn main() {
@@ -45,7 +45,7 @@ async fn main() {
     let test1: Vec<IndicatorInfo> = indicators
         .iter()
         .filter(|x| {
-            x.extra.is_fundamental_study && x.extra.is_hidden_study == false
+            x.extra.is_fundamental_study && !x.extra.is_hidden_study
             // && x.extra
             //     .financial_period
             //     .as_ref()

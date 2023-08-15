@@ -16,13 +16,13 @@ pub fn generate_chart_random_data(length: u64) -> ChartDataResponse {
         );
         let data_point = SeriesDataPoint {
             index: i,
-            value: value,
+            value,
         };
         series.push(data_point);
     }
 
     ChartDataResponse {
         node: None,
-        series: series,
+        series,
     }
 }
