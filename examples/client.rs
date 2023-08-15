@@ -1,11 +1,9 @@
 use std::env;
 
 use tradingview_rs::{
-    models::{IndicatorInfo},
+    models::{FinancialPeriod, IndicatorInfo},
     user::User,
 };
-
-
 
 #[tokio::main]
 async fn main() {
@@ -45,17 +43,18 @@ async fn main() {
     let test1: Vec<IndicatorInfo> = indicators
         .iter()
         .filter(|x| {
-            x.extra.is_fundamental_study && !x.extra.is_hidden_study
-            // && x.extra
-            //     .financial_period
-            //     .as_ref()
-            //     .unwrap_or(&FinancialPeriod::UnknownPeriod("".to_owned()))
-            //     == &FinancialPeriod::FiscalQuarter
+            x.extra.is_fundamental_study
+                && !x.extra.is_hidden_study
+                && x.extra
+                    .financial_period
+                    .as_ref()
+                    .unwrap_or(&FinancialPeriod::UnknownPeriod("".to_owned()))
+                    == &FinancialPeriod::FiscalYear
         })
         .cloned()
         .collect();
 
-    println!("{:#?}", test1.len());
+    println!("{:#?}", test1.first());
 
     // println!("{:#?}", symbols.len());
 

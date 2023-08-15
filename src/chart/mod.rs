@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use crate::{error::TradingViewError, models::Interval};
 
+mod graphic_parser;
 pub mod session;
 pub(crate) mod utils;
 

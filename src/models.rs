@@ -22,13 +22,7 @@ impl std::fmt::Display for BuiltinIndicators {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Indicator {
-    pub info: IndicatorInfo,
-    pub metadata: IndicatorMetadata,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndicatorInfo {
     pub user_id: i64,
@@ -37,13 +31,12 @@ pub struct IndicatorInfo {
     pub script_id_part: String,
     pub script_access: String,
     pub version: String,
-    #[serde(rename(deserialize = "extra"))]
-    pub extra: IndicatorInfoExtra,
+    pub extra: IndiInfoExtra,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
-pub struct IndicatorInfoExtra {
+pub struct IndiInfoExtra {
     pub financial_period: Option<FinancialPeriod>,
     pub fund_id: Option<String>,
     pub fundamental_category: Option<String>,
@@ -63,32 +56,58 @@ pub struct IndicatorInfoExtra {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct IndicatorMetadata {
+#[derive(Debug, Clone, Deserialize)]
+pub struct PineIndicatorTranslate {
+    pub success: bool,
+    pub result: IndiMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct IndiMetadata {
     #[serde(rename(deserialize = "IL"))]
     pub il: String,
     #[serde(rename(deserialize = "ilTemplate"))]
     pub il_template: String,
     #[serde(rename(deserialize = "metaInfo"))]
-    pub metainfo: IndicatorMetaInfo,
+    pub meta_info: IndiMetaInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct IndicatorMetaInfo {
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct IndiMetaInfo {
     pub id: String,
-    #[serde(default, rename(deserialize = "_metainfoVersion"))]
-    pub version: i32,
-    #[serde(rename(deserialize = "scriptIdPart"))]
-    pub pine_id: String,
-    #[serde(default)]
+    pub script_id_part: String,
     pub description: String,
-    pub inputs: Vec<HashMap<String, Value>>,
-    #[serde(default)]
+    pub short_description: String,
+    pub financial_period: Option<FinancialPeriod>,
+    pub is_fundamental_study: bool,
     pub is_hidden_study: bool,
-    #[serde(default)]
+    pub is_tv_script: bool,
+    pub is_tv_script_stub: bool,
     pub is_price_study: bool,
-    #[serde(rename(deserialize = "defaults"))]
-    pub default: HashMap<String, Value>,
+    pub inputs: Vec<IndiInput>,
+    pub defaults: IndiDefaultInput,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct IndiInput {
+    pub defval: String,
+    pub id: String,
+    pub name: String,
+    pub is_hidden: bool,
+    pub is_fake: bool,
+    pub optional: bool,
+    pub options: Vec<String>,
+    #[serde(rename(deserialize = "type"))]
+    pub format_type: String,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct IndiDefaultInput {
+    pub pine_features: String,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Default)]

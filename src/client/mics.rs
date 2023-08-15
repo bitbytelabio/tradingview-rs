@@ -2,8 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     models::{
-        BuiltinIndicators, IndicatorInfo, IndicatorMetadata, Screener, SimpleTA, Symbol,
-        SymbolSearch,
+        BuiltinIndicators, IndiMetadata, IndicatorInfo, Screener, SimpleTA, Symbol, SymbolSearch,
     },
     prelude::*,
     user::User,
@@ -317,7 +316,7 @@ pub async fn get_builtin_indicators(
 pub async fn get_indicator_metadata(
     client: &User,
     indicator: &IndicatorInfo,
-) -> Result<IndicatorMetadata> {
+) -> Result<IndiMetadata> {
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
@@ -335,7 +334,7 @@ pub async fn get_indicator_metadata(
         ));
     }
 
-    let result: IndicatorMetadata = serde_json::from_value(data["result"].clone())?;
+    let result: IndiMetadata = serde_json::from_value(data["result"].clone())?;
 
     Ok(result)
 }
