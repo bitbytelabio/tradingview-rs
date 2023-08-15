@@ -1,12 +1,15 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    models::{IndicatorInfo, IndicatorMetadata, Screener, SimpleTA, Symbol, SymbolSearch},
+    models::{
+        BuiltinIndicators, IndicatorInfo, IndicatorMetadata, Screener, SimpleTA, Symbol,
+        SymbolSearch,
+    },
     prelude::*,
     user::User,
 };
 use reqwest::Response;
-use tokio::sync::Semaphore;
+use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::{debug, warn};
 
 const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
@@ -271,22 +274,42 @@ pub async fn get_private_indicators(client: &User) -> Result<Vec<IndicatorInfo>>
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_builtin_indicators(client: &User) -> Result<Vec<IndicatorInfo>> {
-    let indicator_types = vec!["standard", "candlestick", "fundamental"];
+pub async fn get_builtin_indicators(
+    client: &User,
+    indicator_type: BuiltinIndicators,
+) -> Result<Vec<IndicatorInfo>> {
+    let indicator_types = match indicator_type {
+        BuiltinIndicators::All => vec!["fundamental", "standard", "candlestick"],
+        BuiltinIndicators::Fundamental => vec!["fundamental"],
+        BuiltinIndicators::Standard => vec!["standard"],
+        BuiltinIndicators::Candlestick => vec!["candlestick"],
+    };
     let mut indicators: Vec<IndicatorInfo> = vec![];
+
+    let user = Arc::new(client.clone());
+    let mut tasks: Vec<JoinHandle<Result<Vec<IndicatorInfo>>>> = Vec::new();
+
     for indicator_type in indicator_types {
+        let client = Arc::clone(&user);
         let url = format!(
             "https://pine-facade.tradingview.com/pine-facade/list/?filter={}",
             indicator_type
         );
+        let task = tokio::spawn(async move {
+            let data = get(&client, &url)
+                .await?
+                .json::<Vec<IndicatorInfo>>()
+                .await?;
+            Ok(data)
+        });
 
-        let mut data = get(client, &url)
-            .await?
-            .json::<Vec<IndicatorInfo>>()
-            .await?;
-
-        indicators.append(&mut data);
+        tasks.push(task);
     }
+
+    for handler in tasks {
+        indicators.extend(handler.await??);
+    }
+
     Ok(indicators)
 }
 
@@ -298,7 +321,7 @@ pub async fn get_indicator_metadata(
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
-        encode(&indicator.id),
+        encode(&indicator.script_id_part),
         encode(&indicator.version)
     );
     debug!("URL: {}", url);
@@ -315,4 +338,46 @@ pub async fn get_indicator_metadata(
     let result: IndicatorMetadata = serde_json::from_value(data["result"].clone())?;
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::client::mics::*;
+
+    #[test]
+    fn test_get_screener() {
+        let exchanges = vec![
+            ("NASDAQ", Ok(Screener::America)),
+            ("ASX", Ok(Screener::Australia)),
+            ("TSX", Ok(Screener::Canada)),
+            ("EGX", Ok(Screener::Egypt)),
+            ("FWB", Ok(Screener::Germany)),
+            ("BSE", Ok(Screener::India)),
+            ("TASE", Ok(Screener::Israel)),
+            ("MIL", Ok(Screener::Italy)),
+            ("LUXSE", Ok(Screener::Luxembourg)),
+            ("NEWCONNECT", Ok(Screener::Poland)),
+            ("NGM", Ok(Screener::Sweden)),
+            ("BIST", Ok(Screener::Turkey)),
+            ("LSE", Ok(Screener::UK)),
+            ("HNX", Ok(Screener::Vietnam)),
+            ("invalid", Err(Error::InvalidExchange)),
+        ];
+
+        for (exchange, expected) in exchanges {
+            let result = get_screener(exchange);
+            match (result, expected) {
+                (Ok(actual), Ok(expected)) => {
+                    assert_eq!(actual, expected, "Exchange: {}", exchange)
+                }
+                (Err(actual), Err(expected)) => assert_eq!(
+                    actual.to_string(),
+                    expected.to_string(),
+                    "Exchange: {}",
+                    exchange
+                ),
+                _ => panic!("Unexpected result for exchange: {}", exchange),
+            }
+        }
+    }
 }

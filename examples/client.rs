@@ -1,8 +1,11 @@
 use std::env;
 
-use tradingview_rs::user::User;
+use tradingview_rs::{
+    models::{FinancialPeriod, IndicatorInfo},
+    user::User,
+};
 
-use tracing::error;
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() {
@@ -21,14 +24,38 @@ async fn main() {
     // let user_clone = user;
     // let search_type = Arc::new("".to_owned());
 
-    match tradingview_rs::client::mics::list_symbols(&user, None).await {
-        Ok(symbols) => {
-            println!("{:#?}", symbols.len());
-        }
-        Err(e) => {
-            error!("{:#?}", e);
-        }
-    }
+    // match tradingview_rs::client::mics::list_symbols(&user, None).await {
+    //     Ok(symbols) => {
+    //         println!("{:#?}", symbols.len());
+    //     }
+    //     Err(e) => {
+    //         error!("{:#?}", e);
+    //     }
+    // }
+
+    let indicators = tradingview_rs::client::mics::get_builtin_indicators(
+        &user,
+        tradingview_rs::models::BuiltinIndicators::Fundamental,
+    )
+    .await
+    .unwrap();
+
+    // info!("{:#?}", indicators);
+
+    let test1: Vec<IndicatorInfo> = indicators
+        .iter()
+        .filter(|x| {
+            x.extra.is_fundamental_study && x.extra.is_hidden_study == false
+            // && x.extra
+            //     .financial_period
+            //     .as_ref()
+            //     .unwrap_or(&FinancialPeriod::UnknownPeriod("".to_owned()))
+            //     == &FinancialPeriod::FiscalQuarter
+        })
+        .cloned()
+        .collect();
+
+    println!("{:#?}", test1.len());
 
     // println!("{:#?}", symbols.len());
 

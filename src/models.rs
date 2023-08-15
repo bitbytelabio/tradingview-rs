@@ -1,7 +1,26 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BuiltinIndicators {
+    All,
+    Fundamental,
+    Standard,
+    Candlestick,
+}
+
+impl std::fmt::Display for BuiltinIndicators {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            BuiltinIndicators::All => write!(f, "all"),
+            BuiltinIndicators::Fundamental => write!(f, "fundamental"),
+            BuiltinIndicators::Standard => write!(f, "standard"),
+            BuiltinIndicators::Candlestick => write!(f, "candlestick"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Indicator {
@@ -10,14 +29,38 @@ pub struct Indicator {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndicatorInfo {
-    #[serde(rename(deserialize = "scriptName"))]
-    pub name: String,
-    #[serde(rename(deserialize = "scriptIdPart"))]
-    pub id: String,
+    pub user_id: i64,
+    pub script_name: String,
+    pub script_source: String,
+    pub script_id_part: String,
+    pub script_access: String,
     pub version: String,
-    #[serde(flatten, rename(deserialize = "extra"))]
-    pub info: HashMap<String, Value>,
+    #[serde(rename(deserialize = "extra"))]
+    pub extra: IndicatorInfoExtra,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct IndicatorInfoExtra {
+    pub financial_period: Option<FinancialPeriod>,
+    pub fund_id: Option<String>,
+    pub fundamental_category: Option<String>,
+    pub is_auto: bool,
+    pub is_beta: bool,
+    pub is_built_in: bool,
+    pub is_candle_stick: bool,
+    pub is_fundamental_study: bool,
+    pub is_hidden_study: bool,
+    pub is_mtf_resolution: bool,
+    pub is_new: bool,
+    pub is_pine_editor_new_template: bool,
+    pub is_updated: bool,
+    pub kind: String,
+    pub short_description: String,
+    pub source_inputs_count: i64,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -501,18 +544,30 @@ impl std::fmt::Display for LanguageCode {
     }
 }
 
-/// `FY` stands for Fiscal Year. This is the 12-month period that a company or organization uses for accounting and budgeting purposes. It may not coincide with the calendar year, depending on the company’s preferences. For example, some companies may have their fiscal year end on June 30th, while others may have it on December 31st.
-///
-/// `FQ` stands for Fiscal Quarter. This is a three-month period within a fiscal year that a company or organization uses to report its financial results. There are usually four fiscal quarters in a fiscal year, numbered from Q1 to Q4. For example, if a company’s fiscal year ends on June 30th, then its Q1 would be from July 1st to September 30th, and its Q4 would be from April 1st to June 30th.
-///
-/// `FH` stands for Fiscal Half-Year. This is a six-month period within a fiscal year that a company or organization uses to report its financial results. There are usually two fiscal half-years in a fiscal year, numbered from H1 to H2. For example, if a company’s fiscal year ends on June 30th, then its H1 would be from July 1st to December 31st, and its H2 would be from January 1st to June 30th.
-///
-/// `TTM` stands for Trailing Twelve Months. This is the past 12 consecutive months of a company’s or organization’s performance data that is used for reporting financial figures. It does not necessarily coincide with a fiscal year or a calendar year, but rather it is updated every month or quarter with the most recent data available. For example, if the current month is August 2023, then the TTM would be from September 2022 to August 2023. TTM is useful for analyzing the most recent financial trends and performance of a company or organization without being affected by seasonality or one-time events.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
 pub enum FinancialPeriod {
-    FiscalYear,
-    FiscalQuarter,
-    FiscalHalfYear,
-    TrailingTwelveMonths,
+    FiscalYear,           // FY
+    FiscalQuarter,        // FQ
+    FiscalHalfYear,       // FH
+    TrailingTwelveMonths, // TTM
+    UnknownPeriod(String),
+}
+
+impl<'de> Deserialize<'de> for FinancialPeriod {
+    fn deserialize<D>(deserializer: D) -> Result<FinancialPeriod, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        match s.as_str() {
+            "FY" => Ok(FinancialPeriod::FiscalYear),
+            "FQ" => Ok(FinancialPeriod::FiscalQuarter),
+            "FH" => Ok(FinancialPeriod::FiscalHalfYear),
+            "TTM" => Ok(FinancialPeriod::TrailingTwelveMonths),
+            _ => Ok(FinancialPeriod::UnknownPeriod(s)),
+        }
+    }
 }
 
 impl std::fmt::Display for FinancialPeriod {
@@ -522,6 +577,7 @@ impl std::fmt::Display for FinancialPeriod {
             FinancialPeriod::FiscalQuarter => write!(f, "FQ"),
             FinancialPeriod::FiscalHalfYear => write!(f, "FH"),
             FinancialPeriod::TrailingTwelveMonths => write!(f, "TTM"),
+            FinancialPeriod::UnknownPeriod(ref s) => write!(f, "{}", s),
         }
     }
 }
