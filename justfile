@@ -44,3 +44,6 @@ replay-example:
 
 lines-of-code:
 	@git ls-files | grep '\.rs' | xargs wc -l
+
+creds-scan:
+	@ggshield secret scan repo ./
