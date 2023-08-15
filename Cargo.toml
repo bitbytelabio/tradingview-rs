@@ -47,4 +47,4 @@ rayon = "^1"
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
-polars = "^0.31"
+polars = "^0.32"
