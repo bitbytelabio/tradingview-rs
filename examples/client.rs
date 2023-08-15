@@ -1,9 +1,7 @@
 use std::env;
 
-use tradingview_rs::{
-    models::{FinancialPeriod, IndicatorInfo},
-    user::User,
-};
+use tracing::info;
+use tradingview_rs::{client::mics::*, models::pine_indicator::*, user::User};
 
 #[tokio::main]
 async fn main() {
@@ -17,72 +15,13 @@ async fn main() {
         .await
         .unwrap();
 
-    // let client = Client::new(user);
+    let indicators = get_builtin_indicators(&user, BuiltinIndicators::Standard)
+        .await
+        .unwrap();
 
-    // let user_clone = user;
-    // let search_type = Arc::new("".to_owned());
+    let info = indicators.first().unwrap();
+    info!("{:#?}", info);
 
-    // match tradingview_rs::client::mics::list_symbols(&user, None).await {
-    //     Ok(symbols) => {
-    //         println!("{:#?}", symbols.len());
-    //     }
-    //     Err(e) => {
-    //         error!("{:#?}", e);
-    //     }
-    // }
-
-    let indicators = tradingview_rs::client::mics::get_builtin_indicators(
-        &user,
-        tradingview_rs::models::BuiltinIndicators::Fundamental,
-    )
-    .await
-    .unwrap();
-
-    // info!("{:#?}", indicators);
-
-    let test1: Vec<IndicatorInfo> = indicators
-        .iter()
-        .filter(|x| {
-            x.extra.is_fundamental_study
-                && !x.extra.is_hidden_study
-                && x.extra
-                    .financial_period
-                    .as_ref()
-                    .unwrap_or(&FinancialPeriod::UnknownPeriod("".to_owned()))
-                    == &FinancialPeriod::FiscalYear
-        })
-        .cloned()
-        .collect();
-
-    println!("{:#?}", test1.first());
-
-    // println!("{:#?}", symbols.len());
-
-    // let chart_token = client.get_chart_token("jUwT1z48").await.unwrap();
-    // print!("{:#?}", chart_token);
-
-    // client.get_ta("HOSE", &["FPT", "HVN", "VNM"]).await;
-    // let rsp = client.search_symbol().await;
-    // println!("{:#?}", rsp);
-
-    // let resp = client
-    //     .get_drawing("jUwT1z48", "NASDAQ:AAPL", "_shared")
-    //     .await
-    //     .unwrap();
-
-    // println!("{:#?}", resp);
-
-    // let indicators = client.get_builtin_indicators().await.unwrap();
-    // for indicator in indicators {
-    //     let resp = client.get_indicator_metadata(&indicator).await;
-
-    //     match resp {
-    //         Ok(resp) => {
-    //             println!("{:#?}", resp);
-    //         }
-    //         Err(e) => {
-    //             error!("{:#?}", e);
-    //         }
-    //     }
-    // }
+    let metadata = get_indicator_metadata(&user, &info).await.unwrap();
+    info!("{:#?}", metadata);
 }

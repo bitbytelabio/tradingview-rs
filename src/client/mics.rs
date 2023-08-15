@@ -2,7 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     models::{
-        BuiltinIndicators, IndiMetadata, IndicatorInfo, Screener, SimpleTA, Symbol, SymbolSearch,
+        pine_indicator::{self, BuiltinIndicators, Info, Metadata},
+        Screener, SimpleTA, Symbol, SymbolSearch,
     },
     prelude::*,
     user::User,
@@ -261,13 +262,13 @@ where
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_private_indicators(client: &User) -> Result<Vec<IndicatorInfo>> {
+pub async fn get_private_indicators(client: &User) -> Result<Vec<Info>> {
     let indicators = get(
         client,
         "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
     )
     .await?
-    .json::<Vec<IndicatorInfo>>()
+    .json::<Vec<Info>>()
     .await?;
     Ok(indicators)
 }
@@ -276,17 +277,17 @@ pub async fn get_private_indicators(client: &User) -> Result<Vec<IndicatorInfo>>
 pub async fn get_builtin_indicators(
     client: &User,
     indicator_type: BuiltinIndicators,
-) -> Result<Vec<IndicatorInfo>> {
+) -> Result<Vec<Info>> {
     let indicator_types = match indicator_type {
         BuiltinIndicators::All => vec!["fundamental", "standard", "candlestick"],
         BuiltinIndicators::Fundamental => vec!["fundamental"],
         BuiltinIndicators::Standard => vec!["standard"],
         BuiltinIndicators::Candlestick => vec!["candlestick"],
     };
-    let mut indicators: Vec<IndicatorInfo> = vec![];
+    let mut indicators: Vec<Info> = vec![];
 
     let user = Arc::new(client.clone());
-    let mut tasks: Vec<JoinHandle<Result<Vec<IndicatorInfo>>>> = Vec::new();
+    let mut tasks: Vec<JoinHandle<Result<Vec<Info>>>> = Vec::new();
 
     for indicator_type in indicator_types {
         let client = Arc::clone(&user);
@@ -295,10 +296,7 @@ pub async fn get_builtin_indicators(
             indicator_type
         );
         let task = tokio::spawn(async move {
-            let data = get(&client, &url)
-                .await?
-                .json::<Vec<IndicatorInfo>>()
-                .await?;
+            let data = get(&client, &url).await?.json::<Vec<Info>>().await?;
             Ok(data)
         });
 
@@ -313,10 +311,7 @@ pub async fn get_builtin_indicators(
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_indicator_metadata(
-    client: &User,
-    indicator: &IndicatorInfo,
-) -> Result<IndiMetadata> {
+pub async fn get_indicator_metadata(client: &User, indicator: &Info) -> Result<Metadata> {
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
@@ -324,19 +319,15 @@ pub async fn get_indicator_metadata(
         encode(&indicator.version)
     );
     debug!("URL: {}", url);
-    let data: serde_json::Value = get(client, &url).await?.json().await?;
+    let resp: pine_indicator::TranslateResponse = get(client, &url).await?.json().await?;
 
-    if !data["success"].as_bool().unwrap_or(false)
-        || !data["result"]["metaInfo"]["inputs"].is_array()
-    {
-        return Err(Error::IndicatorDataNotFound(
-            data["reason"].as_str().unwrap_or_default().to_string(),
-        ));
+    if resp.success {
+        return Ok(resp.result);
     }
 
-    let result: IndiMetadata = serde_json::from_value(data["result"].clone())?;
-
-    Ok(result)
+    Err(Error::Generic(
+        "Failed to get indicator metadata".to_string(),
+    ))
 }
 
 #[cfg(test)]

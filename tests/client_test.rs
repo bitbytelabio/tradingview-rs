@@ -16,7 +16,8 @@ mod tests {
             .await
             .unwrap();
 
-        let indicators = get_builtin_indicators(&user, BuiltinIndicators::All).await;
+        let indicators =
+            get_builtin_indicators(&user, pine_indicator::BuiltinIndicators::All).await;
         assert!(indicators.is_ok());
         assert!(indicators.unwrap().len() > 0);
     }
