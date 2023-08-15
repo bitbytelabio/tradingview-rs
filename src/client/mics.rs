@@ -7,6 +7,7 @@ use crate::{
     },
     prelude::*,
     user::User,
+    utils::build_request,
 };
 use reqwest::Response;
 use tokio::{sync::Semaphore, task::JoinHandle};
@@ -37,14 +38,17 @@ fn get_screener(exchange: &str) -> Result<Screener> {
     Ok(screener)
 }
 
-async fn get(client: &User, url: &str) -> Result<Response> {
-    let cookie = format!(
-        "sessionid={}; sessionid_sign={};",
-        client.session, client.signature
-    );
-    let client: reqwest::Client = crate::utils::build_request(Some(&cookie))?;
-    let response = client.get(url).send().await?;
-    Ok(response)
+async fn get(client: Option<&User>, url: &str) -> Result<Response> {
+    if let Some(client) = client {
+        let cookie = format!(
+            "sessionid={}; sessionid_sign={};",
+            client.session, client.signature
+        );
+        let client = build_request(Some(&cookie))?;
+        let response = client.get(url).send().await?;
+        return Ok(response);
+    }
+    Ok(build_request(None)?.get(url).send().await?)
 }
 
 async fn post<T: serde::Serialize>(client: &User, url: &str, body: T) -> Result<Response> {
@@ -155,16 +159,15 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
     }
 }
 
-#[tracing::instrument(skip(client))]
+#[tracing::instrument]
 pub async fn search_symbol(
-    client: &User,
     search: &str,
     exchange: &str,
     search_type: &str,
     start: u64,
     country: &str,
 ) -> Result<SymbolSearch> {
-    let search_data: SymbolSearch = get(client, &format!(
+    let search_data: SymbolSearch = get(None, &format!(
                 "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&hl=1&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
                 search = search,
                 exchange = exchange,
@@ -178,12 +181,11 @@ pub async fn search_symbol(
     Ok(search_data)
 }
 
-#[tracing::instrument(skip(client))]
-pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<Vec<Symbol>> {
+#[tracing::instrument]
+pub async fn list_symbols(market_type: Option<String>) -> Result<Vec<Symbol>> {
     let search_type = Arc::new(market_type.unwrap_or_default());
-    let user = Arc::new(client.clone());
 
-    let search_symbol_reps = search_symbol(&user, "", "", &search_type, 0, "").await?;
+    let search_symbol_reps = search_symbol("", "", &search_type, 0, "").await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
@@ -193,13 +195,12 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
     let mut tasks = Vec::new();
 
     for i in (50..remaining).step_by(50) {
-        let user_clone = Arc::clone(&user);
-        let search_type_clone = Arc::clone(&search_type);
-        let semaphore_clone = Arc::clone(&semaphore);
+        let search_type = Arc::clone(&search_type);
+        let semaphore = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
-            let _permit = semaphore_clone.acquire().await.unwrap();
-            search_symbol(&user_clone, "", "", &search_type_clone, i, "")
+            let _permit = semaphore.acquire().await.unwrap();
+            search_symbol("", "", &search_type, i, "")
                 .await
                 .map(|resp| resp.symbols)
         });
@@ -217,7 +218,7 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
 #[tracing::instrument(skip(client))]
 pub async fn get_chart_token(client: &User, layout_id: &str) -> Result<String> {
     let data: serde_json::Value = get(
-        client,
+        Some(client),
         &format!(
             "https://www.tradingview.com/chart-token/?image_url={}&user_id={}",
             layout_id, client.id
@@ -258,13 +259,13 @@ where
             symbol = symbol
         );
 
-    Ok(get(client, &url).await?.json().await?)
+    Ok(get(Some(client), &url).await?.json().await?)
 }
 
 #[tracing::instrument(skip(client))]
 pub async fn get_private_indicators(client: &User) -> Result<Vec<Info>> {
     let indicators = get(
-        client,
+        Some(client),
         "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
     )
     .await?
@@ -273,11 +274,8 @@ pub async fn get_private_indicators(client: &User) -> Result<Vec<Info>> {
     Ok(indicators)
 }
 
-#[tracing::instrument(skip(client))]
-pub async fn get_builtin_indicators(
-    client: &User,
-    indicator_type: BuiltinIndicators,
-) -> Result<Vec<Info>> {
+#[tracing::instrument]
+pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result<Vec<Info>> {
     let indicator_types = match indicator_type {
         BuiltinIndicators::All => vec!["fundamental", "standard", "candlestick"],
         BuiltinIndicators::Fundamental => vec!["fundamental"],
@@ -286,17 +284,15 @@ pub async fn get_builtin_indicators(
     };
     let mut indicators: Vec<Info> = vec![];
 
-    let user = Arc::new(client.clone());
     let mut tasks: Vec<JoinHandle<Result<Vec<Info>>>> = Vec::new();
 
     for indicator_type in indicator_types {
-        let client = Arc::clone(&user);
         let url = format!(
             "https://pine-facade.tradingview.com/pine-facade/list/?filter={}",
             indicator_type
         );
         let task = tokio::spawn(async move {
-            let data = get(&client, &url).await?.json::<Vec<Info>>().await?;
+            let data = get(None, &url).await?.json::<Vec<Info>>().await?;
             Ok(data)
         });
 
@@ -311,7 +307,7 @@ pub async fn get_builtin_indicators(
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_indicator_metadata(client: &User, indicator: &Info) -> Result<Metadata> {
+pub async fn get_indicator_metadata(client: Option<&User>, indicator: &Info) -> Result<Metadata> {
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",

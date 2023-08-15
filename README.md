@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This is a data source library for algorithmic trading written in Rust. It is currently in **alpha** stage and not ready for production use.
+This is a data source library for algorithmic trading written in Rust inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API). It is currently in **alpha** stage and not ready for production use.
 
 ## Features
 
