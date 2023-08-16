@@ -3,7 +3,9 @@ use crate::{
     payload,
     prelude::*,
     quote::{QuoteData, QuoteValue, ALL_QUOTE_FIELDS},
-    socket::{AsyncCallback, DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
+    socket::{
+        AsyncCallback, DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent,
+    },
     utils::gen_session_id,
 };
 use async_trait::async_trait;
@@ -210,8 +212,8 @@ impl WebSocket {
 #[async_trait]
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        match SocketEvent::from(message.m.clone()) {
-            SocketEvent::OnQuoteData => {
+        match TradingViewDataEvent::from(message.m.clone()) {
+            TradingViewDataEvent::OnQuoteData => {
                 trace!("received OnQuoteData: {:#?}", message);
                 let qsd = serde_json::from_value::<QuoteData>(message.p[1].clone())?;
                 if qsd.status == "ok" {
@@ -230,10 +232,10 @@ impl Socket for WebSocket {
                     return Ok(());
                 }
             }
-            SocketEvent::OnQuoteCompleted => {
+            TradingViewDataEvent::OnQuoteCompleted => {
                 (self.callbacks.loaded)(message.p.clone()).await?;
             }
-            SocketEvent::OnError(e) => {
+            TradingViewDataEvent::OnError(e) => {
                 self.handle_error(Error::TradingViewError(e)).await;
             }
             _ => {

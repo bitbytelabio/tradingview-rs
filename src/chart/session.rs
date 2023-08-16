@@ -8,7 +8,9 @@ use crate::{
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
-    socket::{AsyncCallback, DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
+    socket::{
+        AsyncCallback, DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent,
+    },
     tools::par_extract_ohlcv_data,
     utils::{gen_id, gen_session_id, symbol_init},
 };
@@ -501,8 +503,8 @@ impl WebSocket {
 #[async_trait]
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        match SocketEvent::from(message.m.clone()) {
-            SocketEvent::OnChartData | SocketEvent::OnChartDataUpdate => {
+        match TradingViewDataEvent::from(message.m.clone()) {
+            TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
                 let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
                 let message = Arc::new(message);
@@ -537,12 +539,12 @@ impl Socket for WebSocket {
                     }
                 }
             }
-            SocketEvent::OnSymbolResolved => {
+            TradingViewDataEvent::OnSymbolResolved => {
                 let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
                 debug!("received symbol information: {:?}", symbol_info);
                 (self.callbacks.on_symbol_resolved)(symbol_info).await?;
             }
-            SocketEvent::OnSeriesCompleted => {
+            TradingViewDataEvent::OnSeriesCompleted => {
                 let message = SeriesCompletedMessage {
                     session: get_string_value(&message.p, 0),
                     id: get_string_value(&message.p, 1),
@@ -552,35 +554,35 @@ impl Socket for WebSocket {
                 info!("series is completed: {:#?}", message);
                 (self.callbacks.on_series_completed)(message).await?;
             }
-            SocketEvent::OnSeriesLoading => {
+            TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
             }
-            SocketEvent::OnReplayResolutions => {
+            TradingViewDataEvent::OnReplayResolutions => {
                 info!("received replay resolutions: {:?}", message);
             }
-            SocketEvent::OnReplayPoint => {
+            TradingViewDataEvent::OnReplayPoint => {
                 info!("received replay point: {:?}", message);
             }
-            SocketEvent::OnReplayOk => {
+            TradingViewDataEvent::OnReplayOk => {
                 info!("received replay ok: {:?}", message);
             }
-            SocketEvent::OnReplayInstanceId => {
+            TradingViewDataEvent::OnReplayInstanceId => {
                 info!("received replay instance id: {:?}", message);
             }
-            SocketEvent::OnReplayDataEnd => {
+            TradingViewDataEvent::OnReplayDataEnd => {
                 info!("received replay data end: {:?}", message);
             }
-            SocketEvent::OnStudyLoading => {
+            TradingViewDataEvent::OnStudyLoading => {
                 info!("received study loading message: {:?}", message);
             }
-            SocketEvent::OnStudyCompleted => {
+            TradingViewDataEvent::OnStudyCompleted => {
                 info!("received study completed message: {:?}", message);
             }
-            SocketEvent::OnError(error) => {
+            TradingViewDataEvent::OnError(error) => {
                 error!("received error: {:?}", error);
                 self.handle_error(Error::TradingViewError(error)).await;
             }
-            SocketEvent::UnknownEvent(e) => {
+            TradingViewDataEvent::UnknownEvent(e) => {
                 warn!("received unknown event: {:?}", e);
             }
             _ => {

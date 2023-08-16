@@ -35,7 +35,7 @@ lazy_static::lazy_static! {
     };
 }
 
-pub enum SocketEvent {
+pub enum TradingViewDataEvent {
     OnChartData,
     OnChartDataUpdate,
     OnQuoteData,
@@ -54,34 +54,34 @@ pub enum SocketEvent {
     UnknownEvent(String),
 }
 
-impl From<String> for SocketEvent {
+impl From<String> for TradingViewDataEvent {
     fn from(s: String) -> Self {
         match s.as_str() {
-            "timescale_update" => SocketEvent::OnChartData,
-            "du" => SocketEvent::OnChartDataUpdate,
+            "timescale_update" => TradingViewDataEvent::OnChartData,
+            "du" => TradingViewDataEvent::OnChartDataUpdate,
 
-            "qsd" => SocketEvent::OnQuoteData,
-            "quote_completed" => SocketEvent::OnQuoteCompleted,
+            "qsd" => TradingViewDataEvent::OnQuoteData,
+            "quote_completed" => TradingViewDataEvent::OnQuoteCompleted,
 
-            "series_loading" => SocketEvent::OnSeriesLoading,
-            "series_completed" => SocketEvent::OnSeriesCompleted,
+            "series_loading" => TradingViewDataEvent::OnSeriesLoading,
+            "series_completed" => TradingViewDataEvent::OnSeriesCompleted,
 
-            "symbol_resolved" => SocketEvent::OnSymbolResolved,
+            "symbol_resolved" => TradingViewDataEvent::OnSymbolResolved,
 
-            "replay_ok" => SocketEvent::OnReplayOk,
-            "replay_point" => SocketEvent::OnReplayPoint,
-            "replay_instance_id" => SocketEvent::OnReplayInstanceId,
-            "replay_resolutions" => SocketEvent::OnReplayResolutions,
-            "replay_data_end" => SocketEvent::OnReplayDataEnd,
+            "replay_ok" => TradingViewDataEvent::OnReplayOk,
+            "replay_point" => TradingViewDataEvent::OnReplayPoint,
+            "replay_instance_id" => TradingViewDataEvent::OnReplayInstanceId,
+            "replay_resolutions" => TradingViewDataEvent::OnReplayResolutions,
+            "replay_data_end" => TradingViewDataEvent::OnReplayDataEnd,
 
-            "study_loading" => SocketEvent::OnSeriesLoading,
-            "study_completed" => SocketEvent::OnStudyCompleted,
+            "study_loading" => TradingViewDataEvent::OnSeriesLoading,
+            "study_completed" => TradingViewDataEvent::OnStudyCompleted,
 
-            "symbol_error" => SocketEvent::OnError(TradingViewError::SymbolError),
-            "series_error" => SocketEvent::OnError(TradingViewError::SeriesError),
-            "critical_error" => SocketEvent::OnError(TradingViewError::CriticalError),
-            "study_error" => SocketEvent::OnError(TradingViewError::StudyError),
-            s => SocketEvent::UnknownEvent(s.to_string()),
+            "symbol_error" => TradingViewDataEvent::OnError(TradingViewError::SymbolError),
+            "series_error" => TradingViewDataEvent::OnError(TradingViewError::SeriesError),
+            "critical_error" => TradingViewDataEvent::OnError(TradingViewError::CriticalError),
+            "study_error" => TradingViewDataEvent::OnError(TradingViewError::StudyError),
+            s => TradingViewDataEvent::UnknownEvent(s.to_string()),
         }
     }
 }
