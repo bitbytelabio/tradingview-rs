@@ -218,11 +218,12 @@ pub struct PineIndicator {
     pub description: String,
     /** {string} Indicator short description */
     pub short_description: String,
-    pub financial_period: Option<FinancialPeriod>,
-    /** {Object<string, IndicatorInput>} Indicator inputs */
-    pub inputs: HashMap<String, PineInput>,
+    /** {IndicatorInput} Indicator inputs */
+    pub inputs: PineInput,
     /** {Object<string, string>} Indicator plots */
     pub plots: HashMap<String, String>,
     /** {IndicatorType} Indicator script */
     pub indicator_type: IndicatorType,
 }
+
+impl PineIndicator {}
