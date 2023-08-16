@@ -92,6 +92,7 @@ async fn main() {
     loop {
         // wait for receiving data
         // dummy loop
+        std::thread::sleep(std::time::Duration::from_secs(360000));
     }
 }
 

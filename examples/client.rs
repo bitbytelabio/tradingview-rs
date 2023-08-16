@@ -12,6 +12,6 @@ async fn main() {
     let info = indicators.first().unwrap();
     info!("{:#?}", info);
 
-    let metadata = get_indicator_metadata(None, &info).await.unwrap();
+    let metadata = get_indicator_metadata(None, info).await.unwrap();
     info!("{:#?}", metadata);
 }
