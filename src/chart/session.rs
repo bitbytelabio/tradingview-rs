@@ -55,8 +55,8 @@ struct ReplayInfo {
 
 #[derive(Debug, Clone, Default)]
 struct StudyInfo {
-    id: String,
-    indicator: String,
+    _id: String,
+    _indicator: String,
 }
 
 #[derive(Default, Clone)]
