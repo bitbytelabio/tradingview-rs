@@ -315,8 +315,8 @@ pub async fn get_indicator_metadata(
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
-        encode(&indicator.script_id_part),
-        encode(&indicator.version)
+        encode(&indicator.script_id),
+        encode(&indicator.script_version)
     );
     debug!("URL: {}", url);
     let resp: pine_indicator::TranslateResponse = get(client, &url).await?.json().await?;
