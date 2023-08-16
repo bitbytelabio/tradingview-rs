@@ -23,12 +23,12 @@ fn extract_ohlcv_data_benchmark(c: &mut Criterion) {
         b.iter(|| extract_ohlcv_data(&a5k))
     });
 
-    let a100 = black_box(data::generate_chart_random_data(5_000));
+    let a100 = black_box(data::generate_chart_random_data(100));
     c.bench_function("extract ohlcv data 100", |b| {
         b.iter(|| extract_ohlcv_data(&a100))
     });
 
-    let a1 = black_box(data::generate_chart_random_data(5_000));
+    let a1 = black_box(data::generate_chart_random_data(1));
     c.bench_function("extract ohlcv data 1", |b| {
         b.iter(|| extract_ohlcv_data(&a1))
     });
@@ -55,12 +55,12 @@ fn par_extract_ohlcv_data_benchmark(c: &mut Criterion) {
         b.iter(|| par_extract_ohlcv_data(&a5k))
     });
 
-    let a100 = black_box(data::generate_chart_random_data(5_000));
+    let a100 = black_box(data::generate_chart_random_data(100));
     c.bench_function("par extract ohlcv data 100", |b| {
         b.iter(|| par_extract_ohlcv_data(&a100))
     });
 
-    let a1 = black_box(data::generate_chart_random_data(5_000));
+    let a1 = black_box(data::generate_chart_random_data(1));
     c.bench_function("par extract ohlcv data 1", |b| {
         b.iter(|| par_extract_ohlcv_data(&a1))
     });
