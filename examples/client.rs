@@ -5,7 +5,7 @@ use tradingview_rs::{client::mics::*, models::pine_indicator::*};
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let indicators = get_builtin_indicators(BuiltinIndicators::Standard)
+    let indicators = get_builtin_indicators(BuiltinIndicators::Fundamental)
         .await
         .unwrap();
 

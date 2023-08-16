@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     models::{
-        pine_indicator::{self, BuiltinIndicators, Info, Metadata},
+        pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata},
         Screener, SimpleTA, Symbol, SymbolSearch,
     },
     prelude::*,
@@ -10,6 +10,7 @@ use crate::{
     utils::build_request,
 };
 use reqwest::Response;
+use serde::Serialize;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::{debug, warn};
 
@@ -51,12 +52,12 @@ async fn get(client: Option<&User>, url: &str) -> Result<Response> {
     Ok(build_request(None)?.get(url).send().await?)
 }
 
-async fn post<T: serde::Serialize>(client: &User, url: &str, body: T) -> Result<Response> {
+async fn post<T: Serialize>(client: &User, url: &str, body: T) -> Result<Response> {
     let cookie = format!(
         "sessionid={}; sessionid_sign={};",
         client.session, client.signature
     );
-    let client: reqwest::Client = crate::utils::build_request(Some(&cookie))?;
+    let client: reqwest::Client = build_request(Some(&cookie))?;
     let response = client.post(url).json(&body).send().await?;
     Ok(response)
 }
@@ -263,28 +264,28 @@ where
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_private_indicators(client: &User) -> Result<Vec<Info>> {
+pub async fn get_private_indicators(client: &User) -> Result<Vec<PineInfo>> {
     let indicators = get(
         Some(client),
         "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
     )
     .await?
-    .json::<Vec<Info>>()
+    .json::<Vec<PineInfo>>()
     .await?;
     Ok(indicators)
 }
 
 #[tracing::instrument]
-pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result<Vec<Info>> {
+pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result<Vec<PineInfo>> {
     let indicator_types = match indicator_type {
         BuiltinIndicators::All => vec!["fundamental", "standard", "candlestick"],
         BuiltinIndicators::Fundamental => vec!["fundamental"],
         BuiltinIndicators::Standard => vec!["standard"],
         BuiltinIndicators::Candlestick => vec!["candlestick"],
     };
-    let mut indicators: Vec<Info> = vec![];
+    let mut indicators: Vec<PineInfo> = vec![];
 
-    let mut tasks: Vec<JoinHandle<Result<Vec<Info>>>> = Vec::new();
+    let mut tasks: Vec<JoinHandle<Result<Vec<PineInfo>>>> = Vec::new();
 
     for indicator_type in indicator_types {
         let url = format!(
@@ -292,7 +293,7 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
             indicator_type
         );
         let task = tokio::spawn(async move {
-            let data = get(None, &url).await?.json::<Vec<Info>>().await?;
+            let data = get(None, &url).await?.json::<Vec<PineInfo>>().await?;
             Ok(data)
         });
 
@@ -307,7 +308,10 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_indicator_metadata(client: Option<&User>, indicator: &Info) -> Result<Metadata> {
+pub async fn get_indicator_metadata(
+    client: Option<&User>,
+    indicator: &PineInfo,
+) -> Result<PineMetadata> {
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
