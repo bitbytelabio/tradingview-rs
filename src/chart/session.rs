@@ -5,7 +5,7 @@ use crate::{
         utils::{extract_ohlcv_data, get_string_value},
         ChartDataResponse, ChartSeries, SeriesCompletedMessage, SymbolInfo,
     },
-    models::{Interval, MarketAdjustment, SessionType, Timezone},
+    models::{pine_indicator::PineIndicator, Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
     socket::{
@@ -16,6 +16,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use iso_currency::Currency;
+use serde_json::Value;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, trace, warn};
 
@@ -289,12 +290,32 @@ impl WebSocket {
         session: &str,
         study_id: &str,
         series_id: &str,
+        indicator: PineIndicator,
     ) -> Result<()> {
+        let mut inputs: HashMap<String, Value> = HashMap::new();
+        inputs.insert(
+            "pineId".to_string(),
+            Value::String(indicator.info.script_id),
+        );
+        inputs.insert(
+            "pineVersion".to_string(),
+            Value::String(indicator.info.script_version),
+        );
+        inputs.insert(
+            "text".to_string(),
+            Value::from(indicator.options.il_template),
+        );
+
         self.socket
             .send(
                 "create_study",
-                &payload!(session, study_id, "st1", series_id),
-                //TODO: add study options
+                &payload!(
+                    session,
+                    study_id,
+                    "st1",
+                    series_id,
+                    indicator.pine_type.to_string()
+                ),
             )
             .await?;
         Ok(())

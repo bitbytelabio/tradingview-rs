@@ -30,9 +30,11 @@ pub struct PineInfo {
     pub user_id: i64,
     pub script_name: String,
     pub script_source: String,
-    pub script_id_part: String,
+    #[serde(rename(deserialize = "scriptIdPart"))]
+    pub script_id: String,
     pub script_access: String,
-    pub version: String,
+    #[serde(rename(deserialize = "version"))]
+    pub script_version: String,
     pub extra: PineInfoExtra,
 }
 
@@ -71,7 +73,7 @@ pub struct PineMetadata {
     #[serde(rename(deserialize = "ilTemplate"))]
     pub il_template: String,
     #[serde(rename(deserialize = "metaInfo"))]
-    pub meta_info: PineMetadataInfo,
+    pub info: PineMetadataInfo,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize)]
@@ -93,10 +95,18 @@ pub struct PineMetadataInfo {
     pub defaults: HashMap<String, Value>,
     pub palettes: HashMap<String, Value>,
     pub pine: HashMap<String, String>,
-    pub plots: Vec<HashMap<String, String>>,
+    pub plots: Vec<Plot>,
     pub styles: HashMap<String, Value>,
     pub uses_private_lib: bool,
     pub warnings: Vec<Value>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Plot {
+    pub id: String,
+    pub plot_type: String,
+    pub target: Option<String>,
 }
 
 /**
@@ -164,7 +174,9 @@ impl<'de> Deserialize<'de> for PineInputType {
     }
 }
 
-pub enum IndicatorType {
+#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+pub enum PineType {
+    #[default]
     Script,
     StrategyScript,
     VolumeBasicStudies,
@@ -176,7 +188,7 @@ pub enum IndicatorType {
     VisibleVolumeByPrice,
 }
 
-impl std::fmt::Display for IndicatorType {
+impl std::fmt::Display for PineType {
     /**
      * @typedef {'Script@tv-scripting-101!'
      *  | 'StrategyScript@tv-scripting-101!'} IndicatorType Indicator type
@@ -190,19 +202,19 @@ impl std::fmt::Display for IndicatorType {
      */
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            IndicatorType::Script => write!(f, "Script@tv-scripting-101!"),
-            IndicatorType::StrategyScript => write!(f, "StrategyScript@tv-scripting-101!"),
-            IndicatorType::VolumeBasicStudies => write!(f, "Volume@tv-basicstudies-144"),
-            IndicatorType::FixedBasicStudies => write!(f, "VbPFixed@tv-basicstudies-139!"),
-            IndicatorType::FixedVolumeByPrice => write!(f, "VbPFixed@tv-volumebyprice-53!"),
-            IndicatorType::SessionVolumeByPrice => write!(f, "VbPSessions@tv-volumebyprice-53"),
-            IndicatorType::SessionRoughVolumeByPrice => {
+            PineType::Script => write!(f, "Script@tv-scripting-101!"),
+            PineType::StrategyScript => write!(f, "StrategyScript@tv-scripting-101!"),
+            PineType::VolumeBasicStudies => write!(f, "Volume@tv-basicstudies-144"),
+            PineType::FixedBasicStudies => write!(f, "VbPFixed@tv-basicstudies-139!"),
+            PineType::FixedVolumeByPrice => write!(f, "VbPFixed@tv-volumebyprice-53!"),
+            PineType::SessionVolumeByPrice => write!(f, "VbPSessions@tv-volumebyprice-53"),
+            PineType::SessionRoughVolumeByPrice => {
                 write!(f, "VbPSessionsRough@tv-volumebyprice-53!")
             }
-            IndicatorType::SessionDetailedVolumeByPrice => {
+            PineType::SessionDetailedVolumeByPrice => {
                 write!(f, "VbPSessionsDetailed@tv-volumebyprice-53!")
             }
-            IndicatorType::VisibleVolumeByPrice => write!(f, "VbPVisible@tv-volumebyprice-53"),
+            PineType::VisibleVolumeByPrice => write!(f, "VbPVisible@tv-volumebyprice-53"),
         }
     }
 }
@@ -210,20 +222,9 @@ impl std::fmt::Display for IndicatorType {
 pub struct PineOptions {}
 
 pub struct PineIndicator {
-    /** {string} Indicator ID */
-    pub pine_id: String,
-    /** {string} Indicator version */
-    pub pine_version: String,
-    /** {string} Indicator description */
-    pub description: String,
-    /** {string} Indicator short description */
-    pub short_description: String,
-    /** {IndicatorInput} Indicator inputs */
-    pub inputs: PineInput,
-    /** {Object<string, string>} Indicator plots */
-    pub plots: HashMap<String, String>,
-    /** {IndicatorType} Indicator script */
-    pub indicator_type: IndicatorType,
+    pub pine_type: PineType,
+    pub info: PineInfo,
+    pub options: PineMetadata,
 }
 
 impl PineIndicator {}
