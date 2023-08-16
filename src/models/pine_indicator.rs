@@ -1,9 +1,9 @@
-use std::{collections::HashMap, default};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use super::FinancialPeriod;
+use crate::models::FinancialPeriod;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BuiltinIndicators {
@@ -99,11 +99,27 @@ pub struct PineMetadataInfo {
     pub warnings: Vec<Value>,
 }
 
+/**
+ * @typedef {Struct} PineInput
+ * @property {string} name Input name
+ * @property {string} inline Input inline name
+ * @property {string} [id] Input internal ID
+ * @property {string} [tooltip] Input tooltip
+ * @property {'text' | 'source' | 'integer'
+ *  | 'float' | 'resolution' | 'bool' | 'color' | 'usertype'
+ * } type Input type
+ * @property {string | number | boolean} value Input default value
+ * @property {boolean} isHidden If the input is hidden
+ * @property {boolean} isFake If the input is fake
+ * @property {string[]} [options] Input options if the input is a select
+ */
+
 #[derive(Debug, Default, Clone, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PineInput {
-    pub id: String,
     pub name: String,
+    pub inline: String,
+    pub id: String,
     pub defval: Value,
     pub is_hidden: bool,
     pub is_fake: bool,
@@ -111,5 +127,102 @@ pub struct PineInput {
     pub options: Vec<String>,
     pub tooltip: Option<String>,
     #[serde(rename(deserialize = "type"))]
-    pub input_type: String,
+    pub input_type: PineInputType,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub enum PineInputType {
+    #[default]
+    Text,
+    Sources,
+    Integer,
+    Float,
+    Resolution,
+    Bool,
+    Color,
+    UserType,
+    Unknown,
+}
+
+impl<'de> Deserialize<'de> for PineInputType {
+    fn deserialize<D>(deserializer: D) -> Result<PineInputType, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        match s.as_str() {
+            "text" => Ok(PineInputType::Text),
+            "source" => Ok(PineInputType::Sources),
+            "integer" => Ok(PineInputType::Integer),
+            "float" => Ok(PineInputType::Float),
+            "resolution" => Ok(PineInputType::Resolution),
+            "bool" => Ok(PineInputType::Bool),
+            "color" => Ok(PineInputType::Color),
+            "usertype" => Ok(PineInputType::UserType),
+            _ => Ok(PineInputType::Unknown),
+        }
+    }
+}
+
+pub enum IndicatorType {
+    Script,
+    StrategyScript,
+    VolumeBasicStudies,
+    FixedBasicStudies,
+    FixedVolumeByPrice,
+    SessionVolumeByPrice,
+    SessionRoughVolumeByPrice,
+    SessionDetailedVolumeByPrice,
+    VisibleVolumeByPrice,
+}
+
+impl std::fmt::Display for IndicatorType {
+    /**
+     * @typedef {'Script@tv-scripting-101!'
+     *  | 'StrategyScript@tv-scripting-101!'} IndicatorType Indicator type
+     * @typedef {'Volume@tv-basicstudies-144'
+     *  | 'VbPFixed@tv-basicstudies-139!'
+     *  | 'VbPFixed@tv-volumebyprice-53!'
+     *  | 'VbPSessions@tv-volumebyprice-53'
+     *  | 'VbPSessionsRough@tv-volumebyprice-53!'
+     *  | 'VbPSessionsDetailed@tv-volumebyprice-53!'
+     *  | 'VbPVisible@tv-volumebyprice-53'} BuiltInIndicatorType Built-in indicator type
+     */
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            IndicatorType::Script => write!(f, "Script@tv-scripting-101!"),
+            IndicatorType::StrategyScript => write!(f, "StrategyScript@tv-scripting-101!"),
+            IndicatorType::VolumeBasicStudies => write!(f, "Volume@tv-basicstudies-144"),
+            IndicatorType::FixedBasicStudies => write!(f, "VbPFixed@tv-basicstudies-139!"),
+            IndicatorType::FixedVolumeByPrice => write!(f, "VbPFixed@tv-volumebyprice-53!"),
+            IndicatorType::SessionVolumeByPrice => write!(f, "VbPSessions@tv-volumebyprice-53"),
+            IndicatorType::SessionRoughVolumeByPrice => {
+                write!(f, "VbPSessionsRough@tv-volumebyprice-53!")
+            }
+            IndicatorType::SessionDetailedVolumeByPrice => {
+                write!(f, "VbPSessionsDetailed@tv-volumebyprice-53!")
+            }
+            IndicatorType::VisibleVolumeByPrice => write!(f, "VbPVisible@tv-volumebyprice-53"),
+        }
+    }
+}
+
+pub struct PineOptions {}
+
+pub struct PineIndicator {
+    /** {string} Indicator ID */
+    pub pine_id: String,
+    /** {string} Indicator version */
+    pub pine_version: String,
+    /** {string} Indicator description */
+    pub description: String,
+    /** {string} Indicator short description */
+    pub short_description: String,
+    pub financial_period: Option<FinancialPeriod>,
+    /** {Object<string, IndicatorInput>} Indicator inputs */
+    pub inputs: HashMap<String, PineInput>,
+    /** {Object<string, string>} Indicator plots */
+    pub plots: HashMap<String, String>,
+    /** {IndicatorType} Indicator script */
+    pub indicator_type: IndicatorType,
 }
