@@ -7,6 +7,7 @@
     "BIST",
     "BITSTAMP",
     "BTCUSDT",
+    "defval",
     "Deque",
     "Fakaofo",
     "flate",
@@ -54,6 +55,8 @@
     "uacq",
     "UPCOM",
     "urlencoding",
+    "usertype",
+    "volumebyprice",
     "widgetdata",
     "XETR",
     "zoffset"

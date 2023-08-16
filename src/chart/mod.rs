@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use crate::{error::TradingViewError, models::Interval};
 
+mod graphic_parser;
 pub mod session;
 pub(crate) mod utils;
 
@@ -49,7 +50,7 @@ pub struct ChartDataResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SeriesDataPoint {
     #[serde(rename(deserialize = "i"))]
-    pub index: i64,
+    pub index: u64,
     #[serde(rename(deserialize = "v"))]
     pub value: (f64, f64, f64, f64, f64, f64),
 }

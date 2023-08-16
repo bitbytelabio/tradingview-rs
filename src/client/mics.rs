@@ -1,12 +1,17 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    models::{IndicatorInfo, IndicatorMetadata, Screener, SimpleTA, Symbol, SymbolSearch},
+    models::{
+        pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata},
+        Screener, SimpleTA, Symbol, SymbolSearch,
+    },
     prelude::*,
     user::User,
+    utils::build_request,
 };
 use reqwest::Response;
-use tokio::sync::Semaphore;
+use serde::Serialize;
+use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::{debug, warn};
 
 const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
@@ -34,22 +39,25 @@ fn get_screener(exchange: &str) -> Result<Screener> {
     Ok(screener)
 }
 
-async fn get(client: &User, url: &str) -> Result<Response> {
-    let cookie = format!(
-        "sessionid={}; sessionid_sign={};",
-        client.session, client.signature
-    );
-    let client: reqwest::Client = crate::utils::build_request(Some(&cookie))?;
-    let response = client.get(url).send().await?;
-    Ok(response)
+async fn get(client: Option<&User>, url: &str) -> Result<Response> {
+    if let Some(client) = client {
+        let cookie = format!(
+            "sessionid={}; sessionid_sign={};",
+            client.session, client.signature
+        );
+        let client = build_request(Some(&cookie))?;
+        let response = client.get(url).send().await?;
+        return Ok(response);
+    }
+    Ok(build_request(None)?.get(url).send().await?)
 }
 
-async fn post<T: serde::Serialize>(client: &User, url: &str, body: T) -> Result<Response> {
+async fn post<T: Serialize>(client: &User, url: &str, body: T) -> Result<Response> {
     let cookie = format!(
         "sessionid={}; sessionid_sign={};",
         client.session, client.signature
     );
-    let client: reqwest::Client = crate::utils::build_request(Some(&cookie))?;
+    let client: reqwest::Client = build_request(Some(&cookie))?;
     let response = client.post(url).json(&body).send().await?;
     Ok(response)
 }
@@ -152,16 +160,15 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
     }
 }
 
-#[tracing::instrument(skip(client))]
+#[tracing::instrument]
 pub async fn search_symbol(
-    client: &User,
     search: &str,
     exchange: &str,
     search_type: &str,
     start: u64,
     country: &str,
 ) -> Result<SymbolSearch> {
-    let search_data: SymbolSearch = get(client, &format!(
+    let search_data: SymbolSearch = get(None, &format!(
                 "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&hl=1&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
                 search = search,
                 exchange = exchange,
@@ -175,12 +182,11 @@ pub async fn search_symbol(
     Ok(search_data)
 }
 
-#[tracing::instrument(skip(client))]
-pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<Vec<Symbol>> {
+#[tracing::instrument]
+pub async fn list_symbols(market_type: Option<String>) -> Result<Vec<Symbol>> {
     let search_type = Arc::new(market_type.unwrap_or_default());
-    let user = Arc::new(client.clone());
 
-    let search_symbol_reps = search_symbol(&user, "", "", &search_type, 0, "").await?;
+    let search_symbol_reps = search_symbol("", "", &search_type, 0, "").await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
@@ -190,13 +196,12 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
     let mut tasks = Vec::new();
 
     for i in (50..remaining).step_by(50) {
-        let user_clone = Arc::clone(&user);
-        let search_type_clone = Arc::clone(&search_type);
-        let semaphore_clone = Arc::clone(&semaphore);
+        let search_type = Arc::clone(&search_type);
+        let semaphore = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
-            let _permit = semaphore_clone.acquire().await.unwrap();
-            search_symbol(&user_clone, "", "", &search_type_clone, i, "")
+            let _permit = semaphore.acquire().await.unwrap();
+            search_symbol("", "", &search_type, i, "")
                 .await
                 .map(|resp| resp.symbols)
         });
@@ -214,7 +219,7 @@ pub async fn list_symbols(client: &User, market_type: Option<String>) -> Result<
 #[tracing::instrument(skip(client))]
 pub async fn get_chart_token(client: &User, layout_id: &str) -> Result<String> {
     let data: serde_json::Value = get(
-        client,
+        Some(client),
         &format!(
             "https://www.tradingview.com/chart-token/?image_url={}&user_id={}",
             layout_id, client.id
@@ -255,64 +260,114 @@ where
             symbol = symbol
         );
 
-    Ok(get(client, &url).await?.json().await?)
+    Ok(get(Some(client), &url).await?.json().await?)
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_private_indicators(client: &User) -> Result<Vec<IndicatorInfo>> {
+pub async fn get_private_indicators(client: &User) -> Result<Vec<PineInfo>> {
     let indicators = get(
-        client,
+        Some(client),
         "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
     )
     .await?
-    .json::<Vec<IndicatorInfo>>()
+    .json::<Vec<PineInfo>>()
     .await?;
     Ok(indicators)
 }
 
-#[tracing::instrument(skip(client))]
-pub async fn get_builtin_indicators(client: &User) -> Result<Vec<IndicatorInfo>> {
-    let indicator_types = vec!["standard", "candlestick", "fundamental"];
-    let mut indicators: Vec<IndicatorInfo> = vec![];
+#[tracing::instrument]
+pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result<Vec<PineInfo>> {
+    let indicator_types = match indicator_type {
+        BuiltinIndicators::All => vec!["fundamental", "standard", "candlestick"],
+        BuiltinIndicators::Fundamental => vec!["fundamental"],
+        BuiltinIndicators::Standard => vec!["standard"],
+        BuiltinIndicators::Candlestick => vec!["candlestick"],
+    };
+    let mut indicators: Vec<PineInfo> = vec![];
+
+    let mut tasks: Vec<JoinHandle<Result<Vec<PineInfo>>>> = Vec::new();
+
     for indicator_type in indicator_types {
         let url = format!(
             "https://pine-facade.tradingview.com/pine-facade/list/?filter={}",
             indicator_type
         );
+        let task = tokio::spawn(async move {
+            let data = get(None, &url).await?.json::<Vec<PineInfo>>().await?;
+            Ok(data)
+        });
 
-        let mut data = get(client, &url)
-            .await?
-            .json::<Vec<IndicatorInfo>>()
-            .await?;
-
-        indicators.append(&mut data);
+        tasks.push(task);
     }
+
+    for handler in tasks {
+        indicators.extend(handler.await??);
+    }
+
     Ok(indicators)
 }
 
 #[tracing::instrument(skip(client))]
 pub async fn get_indicator_metadata(
-    client: &User,
-    indicator: &IndicatorInfo,
-) -> Result<IndicatorMetadata> {
+    client: Option<&User>,
+    indicator: &PineInfo,
+) -> Result<PineMetadata> {
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
-        encode(&indicator.id),
+        encode(&indicator.script_id_part),
         encode(&indicator.version)
     );
     debug!("URL: {}", url);
-    let data: serde_json::Value = get(client, &url).await?.json().await?;
+    let resp: pine_indicator::TranslateResponse = get(client, &url).await?.json().await?;
 
-    if !data["success"].as_bool().unwrap_or(false)
-        || !data["result"]["metaInfo"]["inputs"].is_array()
-    {
-        return Err(Error::IndicatorDataNotFound(
-            data["reason"].as_str().unwrap_or_default().to_string(),
-        ));
+    if resp.success {
+        return Ok(resp.result);
     }
 
-    let result: IndicatorMetadata = serde_json::from_value(data["result"].clone())?;
+    Err(Error::Generic(
+        "Failed to get indicator metadata".to_string(),
+    ))
+}
 
-    Ok(result)
+#[cfg(test)]
+mod tests {
+    use crate::client::mics::*;
+
+    #[test]
+    fn test_get_screener() {
+        let exchanges = vec![
+            ("NASDAQ", Ok(Screener::America)),
+            ("ASX", Ok(Screener::Australia)),
+            ("TSX", Ok(Screener::Canada)),
+            ("EGX", Ok(Screener::Egypt)),
+            ("FWB", Ok(Screener::Germany)),
+            ("BSE", Ok(Screener::India)),
+            ("TASE", Ok(Screener::Israel)),
+            ("MIL", Ok(Screener::Italy)),
+            ("LUXSE", Ok(Screener::Luxembourg)),
+            ("NEWCONNECT", Ok(Screener::Poland)),
+            ("NGM", Ok(Screener::Sweden)),
+            ("BIST", Ok(Screener::Turkey)),
+            ("LSE", Ok(Screener::UK)),
+            ("HNX", Ok(Screener::Vietnam)),
+            ("invalid", Err(Error::InvalidExchange)),
+        ];
+
+        for (exchange, expected) in exchanges {
+            let result = get_screener(exchange);
+            match (result, expected) {
+                (Ok(actual), Ok(expected)) => {
+                    assert_eq!(actual, expected, "Exchange: {}", exchange)
+                }
+                (Err(actual), Err(expected)) => assert_eq!(
+                    actual.to_string(),
+                    expected.to_string(),
+                    "Exchange: {}",
+                    exchange
+                ),
+                _ => panic!("Unexpected result for exchange: {}", exchange),
+            }
+        }
+    }
 }

@@ -9,6 +9,9 @@ test-user:
 quick-test:
 	@cargo test
 
+bench:
+	@cargo bench --all-features
+
 full-test: quick-test
 	@cargo test --all-features -- --ignored
 
@@ -41,3 +44,6 @@ replay-example:
 
 lines-of-code:
 	@git ls-files | grep '\.rs' | xargs wc -l
+
+creds-scan:
+	@ggshield secret scan repo ./

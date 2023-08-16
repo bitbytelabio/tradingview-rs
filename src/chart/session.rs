@@ -8,7 +8,10 @@ use crate::{
     models::{Interval, MarketAdjustment, SessionType, Timezone},
     payload,
     prelude::*,
-    socket::{AsyncCallback, DataServer, Socket, SocketEvent, SocketMessageDe, SocketSession},
+    socket::{
+        AsyncCallback, DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent,
+    },
+    tools::par_extract_ohlcv_data,
     utils::{gen_id, gen_session_id, symbol_init},
 };
 use async_trait::async_trait;
@@ -35,21 +38,27 @@ pub struct WebSocket {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ChartSeriesInfo {
+struct ChartSeriesInfo {
     id: String,
-    chart_session: String,
-    version: String,
-    symbol_series_id: String,
-    replay_info: Option<ReplayInfo>,
+    _chart_session: String,
+    _version: String,
+    _symbol_series_id: String,
+    _replay_info: Option<ReplayInfo>,
     chart_series: ChartSeries,
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ReplayInfo {
-    timestamp: i64,
-    replay_session_id: String,
-    replay_series_id: String,
-    resolution: Interval,
+struct ReplayInfo {
+    _timestamp: i64,
+    _replay_session_id: String,
+    _replay_series_id: String,
+    _resolution: Interval,
+}
+
+#[derive(Debug, Clone, Default)]
+struct StudyInfo {
+    _id: String,
+    _indicator: String,
 }
 
 #[derive(Default, Clone)]
@@ -123,7 +132,7 @@ impl WebSocket {
         WebSocketsBuilder::default()
     }
 
-    // TradingView WebSocket methods
+    // Begin TradingView WebSocket methods
 
     pub async fn set_locale(&mut self) -> Result<()> {
         self.socket
@@ -284,7 +293,7 @@ impl WebSocket {
         self.socket
             .send(
                 "create_study",
-                &payload!(session, study_id, series_id),
+                &payload!(session, study_id, "st1", series_id),
                 //TODO: add study options
             )
             .await?;
@@ -300,7 +309,7 @@ impl WebSocket {
         self.socket
             .send(
                 "modify_study",
-                &payload!(session, study_id, options),
+                &payload!(session, study_id, "st1", options),
                 //TODO: add study options
             )
             .await?;
@@ -337,7 +346,7 @@ impl WebSocket {
                     series_symbol_id,
                     config.resolution.to_string(),
                     config.bar_count,
-                    range // "r,1626220800:1628640000" || "60M"
+                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
                 ),
             )
             .await?;
@@ -367,7 +376,7 @@ impl WebSocket {
                     series_symbol_id,
                     config.resolution.to_string(),
                     config.bar_count,
-                    range // "r,1626220800:1628640000" || "60M" || "LASTSESSION"
+                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
                 ),
             )
             .await?;
@@ -408,6 +417,8 @@ impl WebSocket {
         Ok(())
     }
 
+    // End TradingView WebSocket methods
+
     pub async fn set_market(&mut self, symbol: &str, config: Options) -> Result<()> {
         self.series_count += 1;
         let series_count = self.series_count;
@@ -446,9 +457,9 @@ impl WebSocket {
             self.replay_info.insert(
                 symbol.to_string(),
                 ReplayInfo {
-                    replay_session_id,
-                    replay_series_id,
-                    timestamp: config.replay_from.unwrap(),
+                    _replay_session_id: replay_session_id,
+                    _replay_series_id: replay_series_id,
+                    _timestamp: config.replay_from.unwrap(),
                     ..Default::default()
                 },
             );
@@ -467,10 +478,10 @@ impl WebSocket {
         .await?;
 
         let series_info = ChartSeriesInfo {
-            chart_session,
+            _chart_session: chart_session,
             id: series_id,
-            version: series_version,
-            symbol_series_id,
+            _version: series_version,
+            _symbol_series_id: symbol_series_id,
             chart_series: ChartSeries {
                 symbol_id: symbol.to_string(),
                 interval: config.resolution,
@@ -492,8 +503,8 @@ impl WebSocket {
 #[async_trait]
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        match SocketEvent::from(message.m.clone()) {
-            SocketEvent::OnChartData | SocketEvent::OnChartDataUpdate => {
+        match TradingViewDataEvent::from(message.m.clone()) {
+            TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
                 let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
                 let message = Arc::new(message);
@@ -505,7 +516,11 @@ impl Socket for WebSocket {
                     let task = tokio::task::spawn(async move {
                         if let Some(data) = message.p[1].get(value.id.as_str()) {
                             let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
-                            let resp_data = extract_ohlcv_data(&csd);
+                            let resp_data = if csd.series.len() > 20_000 {
+                                par_extract_ohlcv_data(&csd)
+                            } else {
+                                extract_ohlcv_data(&csd)
+                            };
                             debug!("series data received: {} - {:?}", key, data);
                             Ok(Some(ChartSeries {
                                 symbol_id: key.to_string(),
@@ -524,12 +539,12 @@ impl Socket for WebSocket {
                     }
                 }
             }
-            SocketEvent::OnSymbolResolved => {
+            TradingViewDataEvent::OnSymbolResolved => {
                 let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
                 debug!("received symbol information: {:?}", symbol_info);
                 (self.callbacks.on_symbol_resolved)(symbol_info).await?;
             }
-            SocketEvent::OnSeriesCompleted => {
+            TradingViewDataEvent::OnSeriesCompleted => {
                 let message = SeriesCompletedMessage {
                     session: get_string_value(&message.p, 0),
                     id: get_string_value(&message.p, 1),
@@ -539,33 +554,35 @@ impl Socket for WebSocket {
                 info!("series is completed: {:#?}", message);
                 (self.callbacks.on_series_completed)(message).await?;
             }
-            SocketEvent::OnSeriesLoading => {
+            TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
             }
-
-            SocketEvent::OnReplayResolutions => {
+            TradingViewDataEvent::OnReplayResolutions => {
                 info!("received replay resolutions: {:?}", message);
             }
-            SocketEvent::OnReplayPoint => {
+            TradingViewDataEvent::OnReplayPoint => {
                 info!("received replay point: {:?}", message);
             }
-            SocketEvent::OnReplayOk => {
+            TradingViewDataEvent::OnReplayOk => {
                 info!("received replay ok: {:?}", message);
             }
-            SocketEvent::OnReplayInstanceId => {
+            TradingViewDataEvent::OnReplayInstanceId => {
                 info!("received replay instance id: {:?}", message);
             }
-            SocketEvent::OnReplayDataEnd => {
+            TradingViewDataEvent::OnReplayDataEnd => {
                 info!("received replay data end: {:?}", message);
             }
-
-            SocketEvent::OnStudyCompleted => {}
-
-            SocketEvent::OnError(error) => {
+            TradingViewDataEvent::OnStudyLoading => {
+                info!("received study loading message: {:?}", message);
+            }
+            TradingViewDataEvent::OnStudyCompleted => {
+                info!("received study completed message: {:?}", message);
+            }
+            TradingViewDataEvent::OnError(error) => {
                 error!("received error: {:?}", error);
                 self.handle_error(Error::TradingViewError(error)).await;
             }
-            SocketEvent::UnknownEvent(e) => {
+            TradingViewDataEvent::UnknownEvent(e) => {
                 warn!("received unknown event: {:?}", e);
             }
             _ => {
@@ -577,5 +594,6 @@ impl Socket for WebSocket {
 
     async fn handle_error(&mut self, error: Error) {
         error!("error handling event: {:#?}", error);
+        // TODO: handle error
     }
 }

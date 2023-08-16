@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod user {
+mod tests {
     use std::env;
     use tradingview_rs::error::*;
     use tradingview_rs::user::*;
