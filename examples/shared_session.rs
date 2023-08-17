@@ -4,8 +4,8 @@ use tokio::sync::Mutex;
 use tracing::{error, info};
 use tradingview_rs::{
     chart::{
-        session::{ChartCallbackFn, Options, WebSocket as ChartSocket},
-        ChartSeries,
+        session::{ChartCallbackFn, WebSocket as ChartSocket},
+        ChartOptions, ChartSeries,
     },
     models::Interval,
     quote::{
@@ -73,7 +73,7 @@ async fn main() {
     chart_socket
         .set_market(
             "BINANCE:ETHUSDT",
-            Options {
+            ChartOptions {
                 resolution: Interval::FourHours,
                 bar_count: 5,
                 range: Some("60M".to_string()),

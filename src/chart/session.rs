@@ -2,23 +2,18 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     chart::{
-        utils::{extract_ohlcv_data, get_string_value},
-        ChartDataResponse, ChartSeries, SeriesCompletedMessage, SymbolInfo,
+        utils::{extract_ohlcv_data, get_string_value, par_extract_ohlcv_data},
+        ChartDataResponse, ChartOptions, ChartSeries, SeriesCompletedMessage, SymbolInfo,
     },
-    models::{
-        pine_indicator::{PineIndicator, ScriptType},
-        Interval, MarketAdjustment, SessionType, Timezone,
-    },
+    models::{pine_indicator::PineIndicator, Interval, Timezone},
     payload,
     prelude::*,
     socket::{
         AsyncCallback, DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent,
     },
-    tools::par_extract_ohlcv_data,
     utils::{gen_id, gen_session_id, symbol_init},
 };
 use async_trait::async_trait;
-use iso_currency::Currency;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, trace, warn};
@@ -59,28 +54,6 @@ struct ReplayInfo {
     _replay_session_id: String,
     _replay_series_id: String,
     _resolution: Interval,
-}
-
-#[derive(Default, Clone)]
-pub struct Options {
-    pub resolution: Interval,
-    pub bar_count: u64,
-    pub range: Option<String>,
-    pub from: Option<u64>,
-    pub to: Option<u64>,
-    pub replay_mode: Option<bool>,
-    pub replay_from: Option<i64>,
-    pub adjustment: Option<MarketAdjustment>,
-    pub currency: Option<Currency>,
-    pub session_type: Option<SessionType>,
-    pub study_config: Option<StudyOptions>,
-}
-
-#[derive(Clone)]
-pub struct StudyOptions {
-    pub script_id: String,
-    pub script_version: String,
-    pub script_type: ScriptType,
 }
 
 pub struct ChartCallbackFn {
@@ -193,7 +166,7 @@ impl WebSocket {
         session: &str,
         series_id: &str,
         symbol: &str,
-        config: &Options,
+        config: &ChartOptions,
     ) -> Result<()> {
         self.socket
             .send(
@@ -347,7 +320,7 @@ impl WebSocket {
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        config: &Options,
+        config: &ChartOptions,
     ) -> Result<()> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
@@ -377,7 +350,7 @@ impl WebSocket {
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        config: &Options,
+        config: &ChartOptions,
     ) -> Result<()> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
@@ -413,7 +386,7 @@ impl WebSocket {
         session: &str,
         symbol_series_id: &str,
         symbol: &str,
-        config: &Options,
+        config: &ChartOptions,
         replay_session: Option<String>,
     ) -> Result<()> {
         self.socket
@@ -437,7 +410,7 @@ impl WebSocket {
 
     // End TradingView WebSocket methods
 
-    pub async fn set_market(&mut self, symbol: &str, config: Options) -> Result<()> {
+    pub async fn set_market(&mut self, symbol: &str, config: ChartOptions) -> Result<()> {
         self.series_count += 1;
         let series_count = self.series_count;
         let symbol_series_id = format!("sds_sym_{}", series_count);
@@ -577,7 +550,7 @@ impl Socket for WebSocket {
                     tasks.push(task);
                 }
 
-                if self.series_count > 0 {
+                if self.series_count != 0 {
                     for id in &self.studies {
                         if let Some(data) = message.p[1].get(id.as_str()) {
                             info!("study data received: {} - {:?}", id, data)

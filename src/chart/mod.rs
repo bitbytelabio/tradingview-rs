@@ -1,7 +1,11 @@
+use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{error::TradingViewError, models::Interval};
+use crate::{
+    error::TradingViewError,
+    models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType},
+};
 
 mod graphic_parser;
 pub mod session;
@@ -118,4 +122,26 @@ pub struct Subsession {
     pub session: String,
     #[serde(rename(deserialize = "session-display"))]
     pub session_display: String,
+}
+
+#[derive(Default, Clone)]
+pub struct ChartOptions {
+    pub resolution: Interval,
+    pub bar_count: u64,
+    pub range: Option<String>,
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+    pub replay_mode: Option<bool>,
+    pub replay_from: Option<i64>,
+    pub adjustment: Option<MarketAdjustment>,
+    pub currency: Option<Currency>,
+    pub session_type: Option<SessionType>,
+    pub study_config: Option<StudyOptions>,
+}
+
+#[derive(Clone)]
+pub struct StudyOptions {
+    pub script_id: String,
+    pub script_version: String,
+    pub script_type: ScriptType,
 }

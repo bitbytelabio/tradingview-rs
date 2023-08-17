@@ -3,8 +3,8 @@ use std::env;
 use tracing::info;
 use tradingview_rs::{
     chart::{
-        session::{ChartCallbackFn, Options, WebSocket},
-        ChartSeries,
+        session::{ChartCallbackFn, WebSocket},
+        ChartOptions, ChartSeries,
     },
     models::Interval,
     socket::DataServer,
@@ -40,7 +40,7 @@ async fn main() {
     socket
         .set_market(
             "BINANCE:BTCUSDT",
-            Options {
+            ChartOptions {
                 resolution: Interval::OneMinute,
                 bar_count: 50_000,
                 ..Default::default()
