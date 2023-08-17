@@ -1,5 +1,8 @@
 # TradingView Data Source
 
+![Tests](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/ci.yml/badge.svg)
+![GitHub latest commit](https://img.shields.io/github/last-commit/bitbytelabio/tradingView-rs)
+
 ## Introduction
 
 This is a data source library for algorithmic trading written in Rust inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API). It is currently in **alpha** stage and not ready for production use.
