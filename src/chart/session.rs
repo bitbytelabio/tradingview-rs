@@ -47,18 +47,18 @@ pub struct WebSocket {
 struct ChartSeriesInfo {
     id: String,
     chart_session: String,
-    version: String,
-    symbol_series_id: String,
-    replay_info: Option<ReplayInfo>,
+    _version: String,
+    _symbol_series_id: String,
+    _replay_info: Option<ReplayInfo>,
     chart_series: ChartSeries,
 }
 
 #[derive(Debug, Clone, Default)]
 struct ReplayInfo {
-    timestamp: i64,
-    replay_session_id: String,
-    replay_series_id: String,
-    resolution: Interval,
+    _timestamp: i64,
+    _replay_session_id: String,
+    _replay_series_id: String,
+    _resolution: Interval,
 }
 
 #[derive(Default, Clone)]
@@ -73,6 +73,14 @@ pub struct Options {
     pub adjustment: Option<MarketAdjustment>,
     pub currency: Option<Currency>,
     pub session_type: Option<SessionType>,
+    pub study_config: Option<StudyOptions>,
+}
+
+#[derive(Clone)]
+pub struct StudyOptions {
+    pub script_id: String,
+    pub script_version: String,
+    pub script_type: ScriptType,
 }
 
 pub struct ChartCallbackFn {
@@ -467,9 +475,9 @@ impl WebSocket {
             self.replay_info.insert(
                 symbol.to_string(),
                 ReplayInfo {
-                    replay_session_id,
-                    replay_series_id,
-                    timestamp: config.replay_from.unwrap(),
+                    _replay_session_id: replay_session_id,
+                    _replay_series_id: replay_series_id,
+                    _timestamp: config.replay_from.unwrap(),
                     ..Default::default()
                 },
             );
@@ -487,11 +495,29 @@ impl WebSocket {
         )
         .await?;
 
+        if let Some(study) = &config.study_config {
+            self.study_count += 1;
+            let study_count = self.study_count;
+            let study_id = format!("st{}", study_count);
+            self.studies.push(study_id.clone());
+
+            let indicator = PineIndicator::build()
+                .fetch(
+                    &study.script_id,
+                    &study.script_version,
+                    study.script_type.clone(),
+                )
+                .await?;
+
+            self.create_study(&chart_session, &study_id, &series_id, indicator)
+                .await?;
+        }
+
         let series_info = ChartSeriesInfo {
             chart_session,
             id: series_id,
-            version: series_version,
-            symbol_series_id,
+            _version: series_version,
+            _symbol_series_id: symbol_series_id,
             chart_series: ChartSeries {
                 symbol_id: symbol.to_string(),
                 interval: config.resolution,
@@ -505,60 +531,10 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn set_study(&mut self, symbol: &str, config: Options) -> Result<()> {
-        self.series_count += 1;
-        self.study_count += 1;
-
-        let series_count = self.series_count;
-        let study_count = self.study_count;
-
-        let symbol_series_id = format!("sds_sym_{}", series_count);
-
-        let series_id = format!("sds_{}", series_count);
-        let series_version = format!("s{}", series_count);
-
-        let chart_session = gen_session_id("cs");
-
-        let study_id = format!("st{}", study_count);
-        self.studies.push(study_id.clone());
-
-        self.create_chart_session(&chart_session).await?;
-        self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config, None)
-            .await?;
-        self.create_series(
-            &chart_session,
-            &series_id,
-            &series_version,
-            &symbol_series_id,
-            &config,
-        )
-        .await?;
-
-        let indicator = PineIndicator::build()
-            .fetch(
-                "STD;Fund_total_revenue_fq",
-                "62.0",
-                ScriptType::IntervalScript,
-            )
-            .await?;
-        self.create_study(&chart_session, &study_id, &series_id, indicator)
-            .await?;
-
-        let series_info = ChartSeriesInfo {
-            chart_session,
-            id: series_id,
-            version: series_version,
-            symbol_series_id,
-            chart_series: ChartSeries {
-                symbol_id: symbol.to_string(),
-                interval: config.resolution,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        self.series_info.insert(symbol.to_string(), series_info);
-
+    pub async fn delete(&mut self) -> Result<()> {
+        for (_, v) in self.series_info.clone() {
+            self.delete_chart_session_id(&v.chart_session).await?;
+        }
         Ok(())
     }
 
@@ -572,7 +548,7 @@ impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         match TradingViewDataEvent::from(message.m.clone()) {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
-                warn!("received chart data: {:?}", message);
+                trace!("received chart data: {:?}", message);
                 let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
                 let message = Arc::new(message);
                 for (key, value) in &self.series_info {
@@ -600,6 +576,15 @@ impl Socket for WebSocket {
                     });
                     tasks.push(task);
                 }
+
+                if self.series_count > 0 {
+                    for id in &self.studies {
+                        if let Some(data) = message.p[1].get(id.as_str()) {
+                            info!("study data received: {} - {:?}", id, data)
+                        }
+                    }
+                }
+
                 for handler in tasks {
                     if let Some(data) = handler.await?? {
                         (self.callbacks.on_chart_data)(data).await?;

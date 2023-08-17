@@ -3,7 +3,7 @@ use std::env;
 use tracing::info;
 use tradingview_rs::{
     chart::{
-        session::{ChartCallbackFn, Options, WebSocket},
+        session::{ChartCallbackFn, Options, StudyOptions, WebSocket},
         ChartSeries,
     },
     models::Interval,
@@ -38,11 +38,16 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_study(
+        .set_market(
             "HOSE:FPT",
             Options {
                 resolution: Interval::Daily,
                 bar_count: 1,
+                study_config: Some(StudyOptions {
+                    script_id: "STD;Fund_total_revenue_fq".to_string(),
+                    script_version: "62.0".to_string(),
+                    script_type: tradingview_rs::models::pine_indicator::ScriptType::IntervalScript,
+                }),
                 ..Default::default()
             },
         )
