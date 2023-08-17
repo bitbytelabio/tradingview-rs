@@ -20,5 +20,3 @@ impl InputValue {
         InputValue { v, f, t }
     }
 }
-
-pub struct StudyOptions {}

@@ -1,24 +1,23 @@
-use crate::chart::ChartDataResponse;
+use crate::chart::ChartResponseData;
 use rayon::prelude::*;
 use serde_json::Value;
 use std::sync::Mutex;
 
-pub fn extract_ohlcv_data(chart_data: &ChartDataResponse) -> Vec<(f64, f64, f64, f64, f64, f64)> {
-    chart_data
-        .series
+use super::StudyResponseData;
+
+pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+    data.series.iter().map(|point| point.value).collect()
+}
+
+pub fn extract_studies_data(data: &StudyResponseData) -> Vec<Vec<f64>> {
+    data.studies
         .iter()
-        .map(|series_data_point| series_data_point.value)
+        .map(|point| point.value.clone())
         .collect()
 }
 
-pub fn par_extract_ohlcv_data(
-    chart_data: &ChartDataResponse,
-) -> Vec<(f64, f64, f64, f64, f64, f64)> {
-    chart_data
-        .series
-        .par_iter()
-        .map(|series_data_point| series_data_point.value)
-        .collect()
+pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+    data.series.par_iter().map(|point| point.value).collect()
 }
 
 pub fn sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
@@ -64,7 +63,7 @@ pub fn get_string_value(values: &[Value], index: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chart::{ChartDataResponse, SeriesDataPoint};
+    use crate::chart::{ChartResponseData, DataPoint};
     use serde_json::json;
 
     #[test]
@@ -148,46 +147,46 @@ mod tests {
 
     #[test]
     fn test_process_chart_data() {
-        let chart_data = ChartDataResponse {
+        let chart_data = ChartResponseData {
             node: None,
             series: vec![
-                SeriesDataPoint {
+                DataPoint {
                     value: (1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
                     index: 1,
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 2,
                     value: (2.0, 3.0, 4.0, 5.0, 6.0, 7.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 3,
                     value: (3.0, 4.0, 5.0, 6.0, 7.0, 8.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 4,
                     value: (4.0, 5.0, 6.0, 7.0, 8.0, 9.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 5,
                     value: (5.0, 6.0, 7.0, 8.0, 9.0, 10.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 6,
                     value: (6.0, 7.0, 8.0, 9.0, 10.0, 11.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 7,
                     value: (7.0, 8.0, 9.0, 10.0, 11.0, 12.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 8,
                     value: (8.0, 9.0, 10.0, 11.0, 12.0, 13.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 9,
                     value: (9.0, 10.0, 11.0, 12.0, 13.0, 14.0),
                 },
-                SeriesDataPoint {
+                DataPoint {
                     index: 10,
                     value: (10.0, 11.0, 12.0, 13.0, 14.0, 15.0),
                 },

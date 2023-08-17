@@ -1,21 +1,13 @@
+use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{error::TradingViewError, models::Interval};
+use crate::models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType};
 
 mod graphic_parser;
 pub mod session;
 pub mod study;
 pub(crate) mod utils;
-
-#[derive(Debug)]
-pub enum ChartEvent {
-    Data,
-    DataUpdate,
-    SeriesLoading,
-    SeriesCompleted,
-    Error(TradingViewError),
-}
 
 pub enum ChartType {
     HeikinAshi,
@@ -41,19 +33,35 @@ impl std::fmt::Display for ChartType {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ChartDataResponse {
+pub struct ChartResponseData {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "s"))]
-    pub series: Vec<SeriesDataPoint>,
+    pub series: Vec<DataPoint<(f64, f64, f64, f64, f64, f64)>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct SeriesDataPoint {
+pub struct StudyResponseData {
+    #[serde(default)]
+    pub node: Option<String>,
+    #[serde(rename(deserialize = "st"))]
+    pub studies: Vec<DataPoint<Vec<f64>>>,
+    #[serde(rename(deserialize = "ns"))]
+    pub raw_graphics: GraphicDataResponse,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GraphicDataResponse {
+    pub d: String,
+    pub indexes: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DataPoint<T> {
     #[serde(rename(deserialize = "i"))]
-    pub index: u64,
+    pub index: i64,
     #[serde(rename(deserialize = "v"))]
-    pub value: (f64, f64, f64, f64, f64, f64),
+    pub value: T,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -118,4 +126,26 @@ pub struct Subsession {
     pub session: String,
     #[serde(rename(deserialize = "session-display"))]
     pub session_display: String,
+}
+
+#[derive(Default, Clone)]
+pub struct ChartOptions {
+    pub resolution: Interval,
+    pub bar_count: u64,
+    pub range: Option<String>,
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+    pub replay_mode: Option<bool>,
+    pub replay_from: Option<i64>,
+    pub adjustment: Option<MarketAdjustment>,
+    pub currency: Option<Currency>,
+    pub session_type: Option<SessionType>,
+    pub study_config: Option<StudyOptions>,
+}
+
+#[derive(Clone)]
+pub struct StudyOptions {
+    pub script_id: String,
+    pub script_version: String,
+    pub script_type: ScriptType,
 }

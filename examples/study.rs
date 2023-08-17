@@ -3,8 +3,8 @@ use std::env;
 use tracing::info;
 use tradingview_rs::{
     chart::{
-        session::{ChartCallbackFn, Options, WebSocket},
-        ChartSeries,
+        session::{ChartCallbackFn, WebSocket},
+        ChartOptions, ChartSeries, StudyOptions,
     },
     models::Interval,
     socket::DataServer,
@@ -38,11 +38,16 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_study(
+        .set_market(
             "HOSE:FPT",
-            Options {
+            ChartOptions {
                 resolution: Interval::Daily,
                 bar_count: 1,
+                study_config: Some(StudyOptions {
+                    script_id: "STD;Fund_total_revenue_fq".to_string(),
+                    script_version: "62.0".to_string(),
+                    script_type: tradingview_rs::models::pine_indicator::ScriptType::IntervalScript,
+                }),
                 ..Default::default()
             },
         )
@@ -52,7 +57,7 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+async fn on_chart_data(_data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
     // info!("on_chart_data: {:?}", data);
     // let end = data.data.first().unwrap().0;
     // info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
