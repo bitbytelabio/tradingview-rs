@@ -119,7 +119,7 @@ fn main() {
         }
 
         let inline_name = input["name"]
-            .replace(" ", "_")
+            .replace(' ', "_")
             .replace(|c: char| !c.is_ascii_alphanumeric(), "");
 
         let mut input_map: HashMap<String, String> = HashMap::new();

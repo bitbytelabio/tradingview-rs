@@ -38,46 +38,24 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market(
-            "BINANCE:BTCUSDT",
+        .set_study(
+            "HOSE:FPT",
             Options {
-                resolution: Interval::OneMinute,
-                bar_count: 50_000,
+                resolution: Interval::Daily,
+                bar_count: 1,
                 ..Default::default()
             },
         )
         .await
         .unwrap();
 
-    // socket
-    //     .set_market(
-    //         "BINANCE:ETHUSDT",
-    //         Options {
-    //             resolution: Interval::FourHours,
-    //             bar_count: 5,
-    //             range: Some("60M".to_string()),
-    //             ..Default::default()
-    //         },
-    //     )
-    //     .await
-    //     .unwrap();
-
-    // socket
-    //     .resolve_symbol("ser_1", "BINANCE:BTCUSDT", None, None, None)
-    //     .await
-    //     .unwrap();
-    // socket
-    //     .set_series(tradingview_rs::models::Interval::FourHours, 20000, None)
-    //     .await
-    //     .unwrap();
-
     socket.subscribe().await;
 }
 
 async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
     // info!("on_chart_data: {:?}", data);
-    let end = data.data.first().unwrap().0;
-    info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
+    // let end = data.data.first().unwrap().0;
+    // info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
     Ok(())
 }
 
