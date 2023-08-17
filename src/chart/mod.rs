@@ -2,24 +2,12 @@ use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-    error::TradingViewError,
-    models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType},
-};
+use crate::models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType};
 
 mod graphic_parser;
 pub mod session;
 pub mod study;
 pub(crate) mod utils;
-
-#[derive(Debug)]
-pub enum ChartEvent {
-    Data,
-    DataUpdate,
-    SeriesLoading,
-    SeriesCompleted,
-    Error(TradingViewError),
-}
 
 pub enum ChartType {
     HeikinAshi,
@@ -45,7 +33,7 @@ impl std::fmt::Display for ChartType {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ChartDataResponse {
+pub struct ChartResponseData {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "s"))]
@@ -53,7 +41,7 @@ pub struct ChartDataResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct StudyDataResponse {
+pub struct StudyResponseData {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "st"))]

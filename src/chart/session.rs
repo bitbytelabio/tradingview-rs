@@ -5,7 +5,7 @@ use crate::{
         utils::{
             extract_ohlcv_data, extract_studies_data, get_string_value, par_extract_ohlcv_data,
         },
-        ChartDataResponse, ChartOptions, ChartSeries, SeriesCompletedMessage, StudyDataResponse,
+        ChartOptions, ChartResponseData, ChartSeries, SeriesCompletedMessage, StudyResponseData,
         SymbolInfo,
     },
     models::{pine_indicator::PineIndicator, Interval, Timezone},
@@ -56,6 +56,7 @@ struct ReplayInfo {
     _timestamp: i64,
     _replay_session_id: String,
     _replay_series_id: String,
+    _replay_step: u64,
     _resolution: Interval,
 }
 
@@ -530,9 +531,9 @@ impl WebSocket {
             let value = Arc::new(value.clone());
             let message = Arc::clone(&message);
             let task = tokio::task::spawn(async move {
-                if let Some(data) = message.p[1].get(value.id.as_str()) {
-                    let resp = serde_json::from_value::<ChartDataResponse>(data.clone())?;
-                    let resp_data = if resp.series.len() > 20_000 {
+                if let Some(resp_data) = message.p[1].get(value.id.as_str()) {
+                    let resp = serde_json::from_value::<ChartResponseData>(resp_data.clone())?;
+                    let data = if resp.series.len() > 20_000 {
                         par_extract_ohlcv_data(&resp)
                     } else {
                         extract_ohlcv_data(&resp)
@@ -541,7 +542,7 @@ impl WebSocket {
                     Ok(Some(ChartSeries {
                         symbol_id: key.to_string(),
                         interval: value.chart_series.interval,
-                        data: resp_data,
+                        data,
                     }))
                 } else {
                     Ok(None)
@@ -552,9 +553,9 @@ impl WebSocket {
 
         if self.series_count != 0 {
             for (k, v) in &self.studies {
-                if let Some(data) = message.p[1].get(v.as_str()) {
-                    debug!("study data received: {} - {:?}", k, data);
-                    let resp = serde_json::from_value::<StudyDataResponse>(data.clone())?;
+                if let Some(resp_data) = message.p[1].get(v.as_str()) {
+                    debug!("study data received: {} - {:?}", k, resp_data);
+                    let resp = serde_json::from_value::<StudyResponseData>(resp_data.clone())?;
                     let data = extract_studies_data(&resp);
                     debug!("study data extracted: {} - {:?}", k, data);
                 }

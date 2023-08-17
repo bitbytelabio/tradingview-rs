@@ -1,33 +1,23 @@
-use crate::chart::ChartDataResponse;
+use crate::chart::ChartResponseData;
 use rayon::prelude::*;
 use serde_json::Value;
 use std::sync::Mutex;
 
-use super::StudyDataResponse;
+use super::StudyResponseData;
 
-pub fn extract_ohlcv_data(chart_data: &ChartDataResponse) -> Vec<(f64, f64, f64, f64, f64, f64)> {
-    chart_data
-        .series
-        .iter()
-        .map(|series_data_point| series_data_point.value)
-        .collect()
+pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+    data.series.iter().map(|point| point.value).collect()
 }
 
-pub fn extract_studies_data(data: &StudyDataResponse) -> Vec<Vec<f64>> {
+pub fn extract_studies_data(data: &StudyResponseData) -> Vec<Vec<f64>> {
     data.studies
         .iter()
         .map(|point| point.value.clone())
         .collect()
 }
 
-pub fn par_extract_ohlcv_data(
-    chart_data: &ChartDataResponse,
-) -> Vec<(f64, f64, f64, f64, f64, f64)> {
-    chart_data
-        .series
-        .par_iter()
-        .map(|series_data_point| series_data_point.value)
-        .collect()
+pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+    data.series.par_iter().map(|point| point.value).collect()
 }
 
 pub fn sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
@@ -73,7 +63,7 @@ pub fn get_string_value(values: &[Value], index: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chart::{ChartDataResponse, DataPoint};
+    use crate::chart::{ChartResponseData, DataPoint};
     use serde_json::json;
 
     #[test]
@@ -157,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_process_chart_data() {
-        let chart_data = ChartDataResponse {
+        let chart_data = ChartResponseData {
             node: None,
             series: vec![
                 DataPoint {
