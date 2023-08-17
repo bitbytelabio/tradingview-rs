@@ -5,7 +5,10 @@ use crate::{
         utils::{extract_ohlcv_data, get_string_value},
         ChartDataResponse, ChartSeries, SeriesCompletedMessage, SymbolInfo,
     },
-    models::{pine_indicator::PineIndicator, Interval, MarketAdjustment, SessionType, Timezone},
+    models::{
+        pine_indicator::{PineIndicator, ScriptType},
+        Interval, MarketAdjustment, SessionType, Timezone,
+    },
     payload,
     prelude::*,
     socket::{
@@ -32,6 +35,8 @@ pub struct WebSocket {
     socket: SocketSession,
     series_info: HashMap<String, ChartSeriesInfo>,
     series_count: u16,
+    study_count: u16,
+    studies: Vec<String>,
     replay_mode: bool,
     replay_info: HashMap<String, ReplayInfo>,
     auth_token: String,
@@ -41,25 +46,19 @@ pub struct WebSocket {
 #[derive(Debug, Clone, Default)]
 struct ChartSeriesInfo {
     id: String,
-    _chart_session: String,
-    _version: String,
-    _symbol_series_id: String,
-    _replay_info: Option<ReplayInfo>,
+    chart_session: String,
+    version: String,
+    symbol_series_id: String,
+    replay_info: Option<ReplayInfo>,
     chart_series: ChartSeries,
 }
 
 #[derive(Debug, Clone, Default)]
 struct ReplayInfo {
-    _timestamp: i64,
-    _replay_session_id: String,
-    _replay_series_id: String,
-    _resolution: Interval,
-}
-
-#[derive(Debug, Clone, Default)]
-struct StudyInfo {
-    _id: String,
-    _indicator: String,
+    timestamp: i64,
+    replay_session_id: String,
+    replay_series_id: String,
+    resolution: Interval,
 }
 
 #[derive(Default, Clone)]
@@ -122,6 +121,8 @@ impl WebSocketsBuilder {
             series_info: HashMap::new(),
             replay_info: HashMap::new(),
             series_count: 0,
+            study_count: 0,
+            studies: Vec::new(),
             auth_token,
             callbacks: callback,
         })
@@ -466,9 +467,9 @@ impl WebSocket {
             self.replay_info.insert(
                 symbol.to_string(),
                 ReplayInfo {
-                    _replay_session_id: replay_session_id,
-                    _replay_series_id: replay_series_id,
-                    _timestamp: config.replay_from.unwrap(),
+                    replay_session_id,
+                    replay_series_id,
+                    timestamp: config.replay_from.unwrap(),
                     ..Default::default()
                 },
             );
@@ -487,10 +488,67 @@ impl WebSocket {
         .await?;
 
         let series_info = ChartSeriesInfo {
-            _chart_session: chart_session,
+            chart_session,
             id: series_id,
-            _version: series_version,
-            _symbol_series_id: symbol_series_id,
+            version: series_version,
+            symbol_series_id,
+            chart_series: ChartSeries {
+                symbol_id: symbol.to_string(),
+                interval: config.resolution,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        self.series_info.insert(symbol.to_string(), series_info);
+
+        Ok(())
+    }
+
+    pub async fn set_study(&mut self, symbol: &str, config: Options) -> Result<()> {
+        self.series_count += 1;
+        self.study_count += 1;
+
+        let series_count = self.series_count;
+        let study_count = self.study_count;
+
+        let symbol_series_id = format!("sds_sym_{}", series_count);
+
+        let series_id = format!("sds_{}", series_count);
+        let series_version = format!("s{}", series_count);
+
+        let chart_session = gen_session_id("cs");
+
+        let study_id = format!("st{}", study_count);
+        self.studies.push(study_id.clone());
+
+        self.create_chart_session(&chart_session).await?;
+        self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config, None)
+            .await?;
+        self.create_series(
+            &chart_session,
+            &series_id,
+            &series_version,
+            &symbol_series_id,
+            &config,
+        )
+        .await?;
+
+        let indicator = PineIndicator::build()
+            .fetch(
+                "STD;Fund_total_revenue_fq",
+                "62.0",
+                ScriptType::IntervalScript,
+            )
+            .await?;
+        self.create_study(&chart_session, &study_id, &series_id, indicator)
+            .await?;
+
+        let series_info = ChartSeriesInfo {
+            chart_session,
+            id: series_id,
+            version: series_version,
+            symbol_series_id,
             chart_series: ChartSeries {
                 symbol_id: symbol.to_string(),
                 interval: config.resolution,
@@ -514,7 +572,7 @@ impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         match TradingViewDataEvent::from(message.m.clone()) {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
-                trace!("received chart data: {:?}", message);
+                warn!("received chart data: {:?}", message);
                 let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
                 let message = Arc::new(message);
                 for (key, value) in &self.series_info {
@@ -567,25 +625,25 @@ impl Socket for WebSocket {
                 trace!("series is loading: {:#?}", message);
             }
             TradingViewDataEvent::OnReplayResolutions => {
-                info!("received replay resolutions: {:?}", message);
+                trace!("received replay resolutions: {:?}", message);
             }
             TradingViewDataEvent::OnReplayPoint => {
-                info!("received replay point: {:?}", message);
+                trace!("received replay point: {:?}", message);
             }
             TradingViewDataEvent::OnReplayOk => {
-                info!("received replay ok: {:?}", message);
+                trace!("received replay ok: {:?}", message);
             }
             TradingViewDataEvent::OnReplayInstanceId => {
-                info!("received replay instance id: {:?}", message);
+                trace!("received replay instance id: {:?}", message);
             }
             TradingViewDataEvent::OnReplayDataEnd => {
-                info!("received replay data end: {:?}", message);
+                trace!("received replay data end: {:?}", message);
             }
             TradingViewDataEvent::OnStudyLoading => {
-                info!("received study loading message: {:?}", message);
+                trace!("received study loading message: {:?}", message);
             }
             TradingViewDataEvent::OnStudyCompleted => {
-                info!("received study completed message: {:?}", message);
+                trace!("received study completed message: {:?}", message);
             }
             TradingViewDataEvent::OnError(error) => {
                 error!("received error: {:?}", error);

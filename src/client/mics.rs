@@ -320,7 +320,7 @@ pub async fn search_indicator(
     let resp: pine_indicator::SearchResponse = get(client, &url).await?.json().await?;
     debug!("Response: {:?}", resp);
 
-    if resp.result.len() == 0 {
+    if resp.result.is_empty() {
         return Err(Error::Generic("No results found".to_string()));
     }
 

@@ -174,6 +174,7 @@ pub struct PineInput {
 pub enum ScriptType {
     #[default]
     Script,
+    IntervalScript,
     StrategyScript,
     VolumeBasicStudies,
     FixedBasicStudies,
@@ -188,6 +189,7 @@ impl std::fmt::Display for ScriptType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ScriptType::Script => write!(f, "Script@tv-scripting-101!"),
+            ScriptType::IntervalScript => write!(f, "Internal@tv-scripting-101!"),
             ScriptType::StrategyScript => write!(f, "StrategyScript@tv-scripting-101!"),
             ScriptType::VolumeBasicStudies => write!(f, "Volume@tv-basicstudies-144"),
             ScriptType::FixedBasicStudies => write!(f, "VbPFixed@tv-basicstudies-139!"),
@@ -266,8 +268,8 @@ impl PineIndicator {
             inputs.insert(
                 input.id.clone(),
                 IndicatorInput::IndicatorInput(InputValue {
-                    v: Value::from(input.defval.clone()),
-                    f: Value::from(input.is_fake.clone()),
+                    v: input.defval.clone(),
+                    f: Value::from(input.is_fake),
                     t: Value::from(input.input_type.clone()),
                 }),
             );
