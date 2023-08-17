@@ -2,8 +2,11 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     chart::{
-        utils::{extract_ohlcv_data, get_string_value, par_extract_ohlcv_data},
-        ChartDataResponse, ChartOptions, ChartSeries, SeriesCompletedMessage, SymbolInfo,
+        utils::{
+            extract_ohlcv_data, extract_studies_data, get_string_value, par_extract_ohlcv_data,
+        },
+        ChartDataResponse, ChartOptions, ChartSeries, SeriesCompletedMessage, StudyDataResponse,
+        SymbolInfo,
     },
     models::{pine_indicator::PineIndicator, Interval, Timezone},
     payload,
@@ -31,7 +34,7 @@ pub struct WebSocket {
     series_info: HashMap<String, ChartSeriesInfo>,
     series_count: u16,
     study_count: u16,
-    studies: Vec<String>,
+    studies: HashMap<String, String>,
     replay_mode: bool,
     replay_info: HashMap<String, ReplayInfo>,
     auth_token: String,
@@ -103,7 +106,7 @@ impl WebSocketsBuilder {
             replay_info: HashMap::new(),
             series_count: 0,
             study_count: 0,
-            studies: Vec::new(),
+            studies: HashMap::new(),
             auth_token,
             callbacks: callback,
         })
@@ -472,7 +475,6 @@ impl WebSocket {
             self.study_count += 1;
             let study_count = self.study_count;
             let study_id = format!("st{}", study_count);
-            self.studies.push(study_id.clone());
 
             let indicator = PineIndicator::build()
                 .fetch(
@@ -481,6 +483,9 @@ impl WebSocket {
                     study.script_type.clone(),
                 )
                 .await?;
+
+            self.studies
+                .insert(indicator.metadata.data.id.clone(), study_id.clone());
 
             self.create_study(&chart_session, &study_id, &series_id, indicator)
                 .await?;
@@ -508,6 +513,7 @@ impl WebSocket {
         for (_, v) in self.series_info.clone() {
             self.delete_chart_session_id(&v.chart_session).await?;
         }
+        self.socket.close().await?;
         Ok(())
     }
 
@@ -525,13 +531,13 @@ impl WebSocket {
             let message = Arc::clone(&message);
             let task = tokio::task::spawn(async move {
                 if let Some(data) = message.p[1].get(value.id.as_str()) {
-                    let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
-                    let resp_data = if csd.series.len() > 20_000 {
-                        par_extract_ohlcv_data(&csd)
+                    let resp = serde_json::from_value::<ChartDataResponse>(data.clone())?;
+                    let resp_data = if resp.series.len() > 20_000 {
+                        par_extract_ohlcv_data(&resp)
                     } else {
-                        extract_ohlcv_data(&csd)
+                        extract_ohlcv_data(&resp)
                     };
-                    debug!("series data received: {} - {:?}", key, data);
+                    debug!("series data extracted: {} - {:?}", key, data);
                     Ok(Some(ChartSeries {
                         symbol_id: key.to_string(),
                         interval: value.chart_series.interval,
@@ -545,9 +551,12 @@ impl WebSocket {
         }
 
         if self.series_count != 0 {
-            for id in &self.studies {
-                if let Some(data) = message.p[1].get(id.as_str()) {
-                    info!("study data received: {} - {:?}", id, data)
+            for (k, v) in &self.studies {
+                if let Some(data) = message.p[1].get(v.as_str()) {
+                    debug!("study data received: {} - {:?}", k, data);
+                    let resp = serde_json::from_value::<StudyDataResponse>(data.clone())?;
+                    let data = extract_studies_data(&resp);
+                    debug!("study data extracted: {} - {:?}", k, data);
                 }
             }
         }
