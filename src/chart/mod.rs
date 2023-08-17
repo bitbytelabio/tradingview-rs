@@ -47,7 +47,7 @@ pub struct StudyResponseData {
     #[serde(rename(deserialize = "st"))]
     pub studies: Vec<DataPoint<Vec<f64>>>,
     #[serde(rename(deserialize = "ns"))]
-    pub graphics: GraphicDataResponse,
+    pub raw_graphics: GraphicDataResponse,
 }
 
 #[derive(Debug, Clone, Deserialize)]
