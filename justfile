@@ -42,6 +42,9 @@ shared_session-example:
 replay-example:
 	cargo run --package tradingview-rs --example replay
 
+study-example:
+	cargo run --package tradingview-rs --example study
+
 lines-of-code:
 	@git ls-files | grep '\.rs' | xargs wc -l
 

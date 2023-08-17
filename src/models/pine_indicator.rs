@@ -154,21 +154,6 @@ pub struct Plot {
     pub target: Option<String>,
 }
 
-/**
- * @typedef {Struct} PineInput
- * @property {string} name Input name
- * @property {string} inline Input inline name
- * @property {string} [id] Input internal ID
- * @property {string} [tooltip] Input tooltip
- * @property {'text' | 'source' | 'integer'
- *  | 'float' | 'resolution' | 'bool' | 'color' | 'usertype'
- * } type Input type
- * @property {string | number | boolean} value Input default value
- * @property {boolean} isHidden If the input is hidden
- * @property {boolean} isFake If the input is fake
- * @property {string[]} [options] Input options if the input is a select
- */
-
 #[derive(Debug, Default, Clone, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PineInput {
@@ -186,7 +171,7 @@ pub struct PineInput {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize)]
-pub enum PineType {
+pub enum ScriptType {
     #[default]
     Script,
     StrategyScript,
@@ -199,59 +184,85 @@ pub enum PineType {
     VisibleVolumeByPrice,
 }
 
-impl std::fmt::Display for PineType {
-    /**
-     * @typedef {'Script@tv-scripting-101!'
-     *  | 'StrategyScript@tv-scripting-101!'} IndicatorType Indicator type
-     * @typedef {'Volume@tv-basicstudies-144'
-     *  | 'VbPFixed@tv-basicstudies-139!'
-     *  | 'VbPFixed@tv-volumebyprice-53!'
-     *  | 'VbPSessions@tv-volumebyprice-53'
-     *  | 'VbPSessionsRough@tv-volumebyprice-53!'
-     *  | 'VbPSessionsDetailed@tv-volumebyprice-53!'
-     *  | 'VbPVisible@tv-volumebyprice-53'} BuiltInIndicatorType Built-in indicator type
-     */
+impl std::fmt::Display for ScriptType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            PineType::Script => write!(f, "Script@tv-scripting-101!"),
-            PineType::StrategyScript => write!(f, "StrategyScript@tv-scripting-101!"),
-            PineType::VolumeBasicStudies => write!(f, "Volume@tv-basicstudies-144"),
-            PineType::FixedBasicStudies => write!(f, "VbPFixed@tv-basicstudies-139!"),
-            PineType::FixedVolumeByPrice => write!(f, "VbPFixed@tv-volumebyprice-53!"),
-            PineType::SessionVolumeByPrice => write!(f, "VbPSessions@tv-volumebyprice-53"),
-            PineType::SessionRoughVolumeByPrice => {
+            ScriptType::Script => write!(f, "Script@tv-scripting-101!"),
+            ScriptType::StrategyScript => write!(f, "StrategyScript@tv-scripting-101!"),
+            ScriptType::VolumeBasicStudies => write!(f, "Volume@tv-basicstudies-144"),
+            ScriptType::FixedBasicStudies => write!(f, "VbPFixed@tv-basicstudies-139!"),
+            ScriptType::FixedVolumeByPrice => write!(f, "VbPFixed@tv-volumebyprice-53!"),
+            ScriptType::SessionVolumeByPrice => write!(f, "VbPSessions@tv-volumebyprice-53"),
+            ScriptType::SessionRoughVolumeByPrice => {
                 write!(f, "VbPSessionsRough@tv-volumebyprice-53!")
             }
-            PineType::SessionDetailedVolumeByPrice => {
+            ScriptType::SessionDetailedVolumeByPrice => {
                 write!(f, "VbPSessionsDetailed@tv-volumebyprice-53!")
             }
-            PineType::VisibleVolumeByPrice => write!(f, "VbPVisible@tv-volumebyprice-53"),
+            ScriptType::VisibleVolumeByPrice => write!(f, "VbPVisible@tv-volumebyprice-53"),
         }
     }
 }
 
 pub struct PineIndicator {
-    pub pine_type: PineType,
-    pub info: PineInfo,
-    pub options: PineMetadata,
+    pub script_id: String,
+    pub script_version: String,
+    pub script_type: ScriptType,
+    pub metadata: PineMetadata,
+}
+
+pub struct PineIndicatorBuilder {
+    user: Option<User>,
+}
+
+impl PineIndicatorBuilder {
+    pub fn user(&mut self, user: User) -> &mut Self {
+        self.user = Some(user);
+        self
+    }
+
+    pub async fn fetch(
+        &mut self,
+        script_id: &str,
+        script_version: &str,
+        script_type: ScriptType,
+    ) -> Result<PineIndicator> {
+        let metadata = match &self.user {
+            Some(user) => get_indicator_metadata(Some(user), script_id, script_version).await?,
+            None => get_indicator_metadata(None, script_id, script_version).await?,
+        };
+        Ok(PineIndicator {
+            script_id: script_id.to_string(),
+            script_version: script_version.to_string(),
+            script_type,
+            metadata,
+        })
+    }
 }
 
 impl PineIndicator {
-    pub fn set_study_input(&self) -> HashMap<String, IndicatorInput> {
+    pub fn build() -> PineIndicatorBuilder {
+        PineIndicatorBuilder { user: None }
+    }
+
+    pub fn to_study_inputs(&self) -> Result<Value> {
         let mut inputs: HashMap<String, IndicatorInput> = HashMap::new();
         inputs.insert(
             "text".to_string(),
-            IndicatorInput::String(self.options.il_template.clone()),
+            IndicatorInput::String(self.metadata.il_template.clone()),
         );
         inputs.insert(
             "pineId".to_string(),
-            IndicatorInput::String(self.info.script_id.clone()),
+            IndicatorInput::String(self.script_id.clone()),
         );
         inputs.insert(
             "pineVersion".to_string(),
-            IndicatorInput::String(self.info.script_version.clone()),
+            IndicatorInput::String(self.script_version.clone()),
         );
-        self.options.data.inputs.iter().for_each(|input| {
+        self.metadata.data.inputs.iter().for_each(|input| {
+            if input.id == "text" || input.id == "pineId" || input.id == "pineVersion" {
+                return;
+            }
             inputs.insert(
                 input.id.clone(),
                 IndicatorInput::IndicatorInput(InputValue {
@@ -261,12 +272,8 @@ impl PineIndicator {
                 }),
             );
         });
-        inputs
-    }
 
-    pub async fn fetch_metadata(&mut self, user: Option<&User>) -> Result<()> {
-        self.options =
-            get_indicator_metadata(user, &self.info.script_id, &self.info.script_version).await?;
-        Ok(())
+        let json_value = serde_json::to_value(inputs)?;
+        Ok(json_value)
     }
 }

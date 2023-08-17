@@ -292,33 +292,16 @@ impl WebSocket {
         series_id: &str,
         indicator: PineIndicator,
     ) -> Result<()> {
-        let mut inputs: HashMap<String, Value> = HashMap::new();
-        inputs.insert(
-            "pineId".to_string(),
-            Value::String(indicator.info.script_id),
-        );
-        inputs.insert(
-            "pineVersion".to_string(),
-            Value::String(indicator.info.script_version),
-        );
-        inputs.insert(
-            "text".to_string(),
-            Value::from(indicator.options.il_template),
-        );
-        // inputs.insert("pineFeatures".to_string());
-
-        self.socket
-            .send(
-                "create_study",
-                &payload!(
-                    session,
-                    study_id,
-                    "st1",
-                    series_id,
-                    indicator.pine_type.to_string()
-                ),
-            )
-            .await?;
+        let inputs = indicator.to_study_inputs()?;
+        let payloads: Vec<Value> = vec![
+            Value::from(session),
+            Value::from(study_id),
+            Value::from("st1"),
+            Value::from(series_id),
+            Value::from(indicator.script_type.to_string()),
+            inputs,
+        ];
+        self.socket.send("create_study", &payloads).await?;
         Ok(())
     }
 
@@ -326,15 +309,19 @@ impl WebSocket {
         &mut self,
         session: &str,
         study_id: &str,
-        options: &str,
+        series_id: &str,
+        indicator: PineIndicator,
     ) -> Result<()> {
-        self.socket
-            .send(
-                "modify_study",
-                &payload!(session, study_id, "st1", options),
-                //TODO: add study options
-            )
-            .await?;
+        let inputs = indicator.to_study_inputs()?;
+        let payloads: Vec<Value> = vec![
+            Value::from(session),
+            Value::from(study_id),
+            Value::from("st1"),
+            Value::from(series_id),
+            Value::from(indicator.script_type.to_string()),
+            inputs,
+        ];
+        self.socket.send("modify_study", &payloads).await?;
         Ok(())
     }
 

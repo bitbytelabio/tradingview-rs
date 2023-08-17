@@ -2,6 +2,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
 pub enum IndicatorInput {
     String(String),
     IndicatorInput(InputValue),
@@ -19,5 +20,3 @@ impl InputValue {
         InputValue { v, f, t }
     }
 }
-
-pub struct IndicatorOptions {}

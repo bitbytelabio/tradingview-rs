@@ -5,25 +5,19 @@ use tradingview_rs::{client::mics::*, models::pine_indicator::*};
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let indicators = get_builtin_indicators(BuiltinIndicators::Fundamental)
+    // let indicators = get_builtin_indicators(BuiltinIndicators::Fundamental)
+    //     .await
+    //     .unwrap();
+
+    // let info = indicators.first().unwrap();
+    // info!("{:#?}", info);
+
+    let pine = PineIndicator::build()
+        .fetch("STD;Fund_total_revenue_fq", "62.0", ScriptType::Script)
         .await
         .unwrap();
 
-    let info = indicators.first().unwrap();
-    info!("{:#?}", info);
-
-    let metadata = get_indicator_metadata(None, &info.script_id, &info.script_version)
-        .await
-        .unwrap();
-    info!("{:#?}", metadata);
-
-    let pine = PineIndicator {
-        pine_type: PineType::Script,
-        info: info.clone(),
-        options: metadata,
-    };
-
-    let test = pine.set_study_input();
+    let test = pine.to_study_inputs().unwrap();
 
     info!("{:#?}", test);
 
