@@ -5,6 +5,7 @@ use crate::{error::TradingViewError, models::Interval};
 
 mod graphic_parser;
 pub mod session;
+pub mod study;
 pub(crate) mod utils;
 
 #[derive(Debug)]

@@ -305,6 +305,7 @@ impl WebSocket {
             "text".to_string(),
             Value::from(indicator.options.il_template),
         );
+        // inputs.insert("pineFeatures".to_string());
 
         self.socket
             .send(

@@ -1,9 +1,15 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use serde_json::Value;
 
-use crate::models::FinancialPeriod;
+use crate::{
+    chart::study::{IndicatorInput, InputValue},
+    client::mics::get_indicator_metadata,
+    models::FinancialPeriod,
+    prelude::*,
+    user::User,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BuiltinIndicators {
@@ -66,6 +72,45 @@ pub struct TranslateResponse {
     pub result: PineMetadata,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchResponse {
+    pub next: String,
+    pub result: Vec<PineSearchResult>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PineSearchResult {
+    pub image_url: String,
+    pub script_name: String,
+    pub script_source: String,
+    pub access: i64,
+    pub script_id_part: String,
+    pub version: String,
+    pub extra: PineSearchExtra,
+    pub agree_count: i64,
+    pub author: PineSearchAuthor,
+    pub weight: i64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PineSearchExtra {
+    pub kind: Option<String>,
+    pub source_inputs_count: Option<i64>,
+    #[serde(rename = "isMTFResolution")]
+    pub is_mtf_resolution: Option<bool>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PineSearchAuthor {
+    pub id: i64,
+    pub username: String,
+    #[serde(rename = "is_broker")]
+    pub is_broker: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct PineMetadata {
     #[serde(rename(deserialize = "IL"))]
@@ -73,7 +118,7 @@ pub struct PineMetadata {
     #[serde(rename(deserialize = "ilTemplate"))]
     pub il_template: String,
     #[serde(rename(deserialize = "metaInfo"))]
-    pub info: PineMetadataInfo,
+    pub data: PineMetadataInfo,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize)]
@@ -137,41 +182,7 @@ pub struct PineInput {
     pub options: Vec<String>,
     pub tooltip: Option<String>,
     #[serde(rename(deserialize = "type"))]
-    pub input_type: PineInputType,
-}
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub enum PineInputType {
-    #[default]
-    Text,
-    Sources,
-    Integer,
-    Float,
-    Resolution,
-    Bool,
-    Color,
-    UserType,
-    Unknown,
-}
-
-impl<'de> Deserialize<'de> for PineInputType {
-    fn deserialize<D>(deserializer: D) -> Result<PineInputType, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: String = Deserialize::deserialize(deserializer)?;
-        match s.as_str() {
-            "text" => Ok(PineInputType::Text),
-            "source" => Ok(PineInputType::Sources),
-            "integer" => Ok(PineInputType::Integer),
-            "float" => Ok(PineInputType::Float),
-            "resolution" => Ok(PineInputType::Resolution),
-            "bool" => Ok(PineInputType::Bool),
-            "color" => Ok(PineInputType::Color),
-            "usertype" => Ok(PineInputType::UserType),
-            _ => Ok(PineInputType::Unknown),
-        }
-    }
+    pub input_type: String,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize)]
@@ -219,12 +230,43 @@ impl std::fmt::Display for PineType {
     }
 }
 
-pub struct PineOptions {}
-
 pub struct PineIndicator {
     pub pine_type: PineType,
     pub info: PineInfo,
     pub options: PineMetadata,
 }
 
-impl PineIndicator {}
+impl PineIndicator {
+    pub fn set_study_input(&self) -> HashMap<String, IndicatorInput> {
+        let mut inputs: HashMap<String, IndicatorInput> = HashMap::new();
+        inputs.insert(
+            "text".to_string(),
+            IndicatorInput::String(self.options.il_template.clone()),
+        );
+        inputs.insert(
+            "pineId".to_string(),
+            IndicatorInput::String(self.info.script_id.clone()),
+        );
+        inputs.insert(
+            "pineVersion".to_string(),
+            IndicatorInput::String(self.info.script_version.clone()),
+        );
+        self.options.data.inputs.iter().for_each(|input| {
+            inputs.insert(
+                input.id.clone(),
+                IndicatorInput::IndicatorInput(InputValue {
+                    v: Value::from(input.defval.clone()),
+                    f: Value::from(input.is_fake.clone()),
+                    t: Value::from(input.input_type.clone()),
+                }),
+            );
+        });
+        inputs
+    }
+
+    pub async fn fetch_metadata(&mut self, user: Option<&User>) -> Result<()> {
+        self.options =
+            get_indicator_metadata(user, &self.info.script_id, &self.info.script_version).await?;
+        Ok(())
+    }
+}

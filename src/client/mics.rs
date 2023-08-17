@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     models::{
-        pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata},
+        pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
         Screener, SimpleTA, Symbol, SymbolSearch,
     },
     prelude::*,
@@ -308,15 +308,36 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
 }
 
 #[tracing::instrument(skip(client))]
+pub async fn search_indicator(
+    client: Option<&User>,
+    search: &str,
+    offset: i32,
+) -> Result<Vec<PineSearchResult>> {
+    let url = format!(
+        "https://www.tradingview.com/pubscripts-suggest-json/?search={}&offset={}",
+        search, offset
+    );
+    let resp: pine_indicator::SearchResponse = get(client, &url).await?.json().await?;
+    debug!("Response: {:?}", resp);
+
+    if resp.result.len() == 0 {
+        return Err(Error::Generic("No results found".to_string()));
+    }
+
+    Ok(resp.result)
+}
+
+#[tracing::instrument(skip(client))]
 pub async fn get_indicator_metadata(
     client: Option<&User>,
-    indicator: &PineInfo,
+    pinescript_id: &str,
+    pinescript_version: &str,
 ) -> Result<PineMetadata> {
     use urlencoding::encode;
     let url = format!(
         "https://pine-facade.tradingview.com/pine-facade/translate/{}/{}",
-        encode(&indicator.script_id),
-        encode(&indicator.script_version)
+        encode(pinescript_id),
+        encode(pinescript_version)
     );
     debug!("URL: {}", url);
     let resp: pine_indicator::TranslateResponse = get(client, &url).await?.json().await?;
