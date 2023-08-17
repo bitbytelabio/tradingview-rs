@@ -514,6 +514,51 @@ impl WebSocket {
     pub async fn subscribe(&mut self) {
         self.event_loop(&mut self.socket.clone()).await;
     }
+
+    async fn on_data(&mut self, message: SocketMessageDe) -> Result<()> {
+        let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
+        let message = Arc::new(message);
+        for (key, value) in &self.series_info {
+            trace!("received k: {}, v: {:?}, m: {:?}", key, value, message);
+            let key = Arc::new(key.clone());
+            let value = Arc::new(value.clone());
+            let message = Arc::clone(&message);
+            let task = tokio::task::spawn(async move {
+                if let Some(data) = message.p[1].get(value.id.as_str()) {
+                    let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
+                    let resp_data = if csd.series.len() > 20_000 {
+                        par_extract_ohlcv_data(&csd)
+                    } else {
+                        extract_ohlcv_data(&csd)
+                    };
+                    debug!("series data received: {} - {:?}", key, data);
+                    Ok(Some(ChartSeries {
+                        symbol_id: key.to_string(),
+                        interval: value.chart_series.interval,
+                        data: resp_data,
+                    }))
+                } else {
+                    Ok(None)
+                }
+            });
+            tasks.push(task);
+        }
+
+        if self.series_count != 0 {
+            for id in &self.studies {
+                if let Some(data) = message.p[1].get(id.as_str()) {
+                    info!("study data received: {} - {:?}", id, data)
+                }
+            }
+        }
+
+        for handler in tasks {
+            if let Some(data) = handler.await?? {
+                (self.callbacks.on_chart_data)(data).await?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -522,47 +567,7 @@ impl Socket for WebSocket {
         match TradingViewDataEvent::from(message.m.clone()) {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
-                let mut tasks: Vec<JoinHandle<Result<Option<ChartSeries>>>> = Vec::new();
-                let message = Arc::new(message);
-                for (key, value) in &self.series_info {
-                    trace!("received k: {}, v: {:?}, m: {:?}", key, value, message);
-                    let key = Arc::new(key.clone());
-                    let value = Arc::new(value.clone());
-                    let message = Arc::clone(&message);
-                    let task = tokio::task::spawn(async move {
-                        if let Some(data) = message.p[1].get(value.id.as_str()) {
-                            let csd = serde_json::from_value::<ChartDataResponse>(data.clone())?;
-                            let resp_data = if csd.series.len() > 20_000 {
-                                par_extract_ohlcv_data(&csd)
-                            } else {
-                                extract_ohlcv_data(&csd)
-                            };
-                            debug!("series data received: {} - {:?}", key, data);
-                            Ok(Some(ChartSeries {
-                                symbol_id: key.to_string(),
-                                interval: value.chart_series.interval,
-                                data: resp_data,
-                            }))
-                        } else {
-                            Ok(None)
-                        }
-                    });
-                    tasks.push(task);
-                }
-
-                if self.series_count != 0 {
-                    for id in &self.studies {
-                        if let Some(data) = message.p[1].get(id.as_str()) {
-                            info!("study data received: {} - {:?}", id, data)
-                        }
-                    }
-                }
-
-                for handler in tasks {
-                    if let Some(data) = handler.await?? {
-                        (self.callbacks.on_chart_data)(data).await?;
-                    }
-                }
+                self.on_data(message).await?;
             }
             TradingViewDataEvent::OnSymbolResolved => {
                 let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
