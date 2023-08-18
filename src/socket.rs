@@ -232,6 +232,15 @@ impl SocketSession {
         self.write.lock().await.close().await?;
         Ok(())
     }
+
+    pub async fn update_token(&mut self, auth_token: &str) -> Result<()> {
+        self.write
+            .lock()
+            .await
+            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
+            .await?;
+        Ok(())
+    }
 }
 
 #[async_trait]
