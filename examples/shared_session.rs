@@ -36,18 +36,18 @@ async fn main() {
         on_series_completed: Box::new(|data| Box::pin(on_series_completed(data))),
     };
 
-    let session = SocketSession::new(DataServer::ProData, user.auth_token)
+    let socket_session = SocketSession::new(DataServer::ProData, user.auth_token)
         .await
         .unwrap();
 
     let mut chart_socket = ChartSocket::build()
-        .socket(session.clone())
+        .socket(socket_session.clone())
         .connect(handlers)
         .await
         .unwrap();
 
     let mut quote_socket = QuoteSocket::build()
-        .socket(session)
+        .socket(socket_session.clone())
         .connect(QuoteCallbackFn {
             data: Box::new(|data| Box::pin(on_data(data))),
             loaded: Box::new(|data| Box::pin(on_loaded(data))),
@@ -92,7 +92,19 @@ async fn main() {
     loop {
         // wait for receiving data
         // dummy loop
-        std::thread::sleep(std::time::Duration::from_secs(360000));
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        let new_token = User::build()
+            .session(&session, &signature)
+            .get()
+            .await
+            .unwrap()
+            .auth_token;
+
+        socket_session
+            .clone()
+            .update_token(&new_token)
+            .await
+            .unwrap();
     }
 }
 
