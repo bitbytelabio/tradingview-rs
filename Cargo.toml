@@ -43,7 +43,6 @@ iso_currency = { version = "0.4", features = ["with-serde"] }
 zip = "^0.6"
 base64 = "^0.21"
 rayon = "^1"
-oauth2 = "^4"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
