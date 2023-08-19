@@ -29,7 +29,6 @@ pub struct User {
     pub auth_token: String,
     pub session_hash: String,
     pub private_channel: String,
-
     #[serde(skip_deserializing)]
     password: String,
     #[serde(skip_deserializing)]
