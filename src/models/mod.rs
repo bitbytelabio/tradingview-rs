@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod pine_indicator;
 
+pub type OHLCV = (f64, f64, f64, f64, f64, f64);
+
 #[derive(Debug, Clone, Default)]
 pub struct SimpleTA {
     pub name: String,
@@ -31,16 +33,6 @@ pub struct Symbol {
     pub data_provider: String,
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct OHLCV {
-    pub time: f64,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: f64,
 }
 
 #[derive(Debug, PartialEq)]
