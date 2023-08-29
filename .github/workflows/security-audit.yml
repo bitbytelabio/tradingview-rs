@@ -13,7 +13,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Credetials scan
-        uses: trufflesecurity/trufflehog@v3.53.0
+        uses: trufflesecurity/trufflehog@v3.54.0
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
