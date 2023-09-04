@@ -8,6 +8,9 @@ repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
 
+[features]
+user = []
+
 [dependencies]
 tokio = { version = "^1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

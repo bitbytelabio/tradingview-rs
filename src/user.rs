@@ -1,8 +1,10 @@
 use crate::error::{Error, LoginError};
 use crate::prelude::*;
+use crate::utils::build_request;
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
@@ -27,7 +29,6 @@ pub struct User {
     pub auth_token: String,
     pub session_hash: String,
     pub private_channel: String,
-
     #[serde(skip_deserializing)]
     password: String,
     #[serde(skip_deserializing)]
@@ -116,7 +117,7 @@ impl User {
             return Err(Error::LoginError(LoginError::EmptyCredentials));
         };
 
-        let client: reqwest::Client = crate::utils::build_request(None)?;
+        let client: reqwest::Client = build_request(None)?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
@@ -229,8 +230,6 @@ impl User {
             return Err(Error::LoginError(LoginError::SessionNotFound));
         }
 
-        use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
-
         let mut headers = HeaderMap::new();
         headers.insert(
             ACCEPT,
@@ -295,7 +294,7 @@ impl User {
                 }
             };
 
-            Ok(User {
+            return Ok(User {
                 auth_token,
                 id,
                 username,
@@ -306,9 +305,54 @@ impl User {
                 signature: self.signature.clone(),
                 password: self.password.clone(),
                 totp_secret: self.totp_secret.clone(),
-            })
-        } else {
-            Err(Error::LoginError(LoginError::InvalidSession))
+            });
         }
+        Err(Error::LoginError(LoginError::InvalidSession))
     }
+}
+
+pub async fn get_token(session: &str, signature: &str) -> Result<String> {
+    if session.is_empty() || signature.is_empty() {
+        return Err(Error::LoginError(LoginError::SessionNotFound));
+    }
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        ACCEPT,
+        HeaderValue::from_static("text/html,application/xhtml+xml,application/xml"),
+    );
+    headers.insert(
+        COOKIE,
+        HeaderValue::from_str(&format!(
+            "sessionid={}; sessionid_sign={}",
+            session, signature
+        ))?,
+    );
+
+    let resp = reqwest::Client::builder()
+        .use_rustls_tls()
+        .default_headers(headers)
+        .https_only(true)
+        .user_agent(crate::UA)
+        .gzip(true)
+        .build()?
+        .get("https://www.tradingview.com/".to_owned())
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    if AUTH_TOKEN_REGEX.is_match(&resp) {
+        let auth_token = match AUTH_TOKEN_REGEX.captures(&resp) {
+            Some(captures) => captures[1].to_string(),
+            None => {
+                error!("Error parsing auth token");
+                return Err(Error::LoginError(LoginError::ParseAuthTokenError));
+            }
+        };
+
+        return Ok(auth_token);
+    }
+
+    Err(Error::LoginError(LoginError::InvalidSession))
 }

@@ -106,7 +106,7 @@ pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<V
         .collect::<Vec<String>>();
 
     let screener = get_screener(exchange)?;
-    let cols: Vec<String> = vec!["1", "5", "15", "60", "240", "1D", "1W", "1M"]
+    let cols: Vec<String> = ["1", "5", "15", "60", "240", "1D", "1W", "1M"]
         .iter()
         .flat_map(|t| {
             INDICATORS
@@ -236,7 +236,7 @@ pub async fn get_chart_token(client: &User, layout_id: &str) -> Result<String> {
                 None => return Err(Error::NoChartTokenFound),
             })
         }
-        None => Err("No token found").unwrap(),
+        None => panic!("{:?}", "No token found"),
     }
 }
 

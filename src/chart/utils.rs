@@ -1,11 +1,12 @@
-use crate::chart::ChartResponseData;
+use crate::{
+    chart::{ChartResponseData, StudyResponseData},
+    models::OHLCV,
+};
 use rayon::prelude::*;
 use serde_json::Value;
 use std::sync::Mutex;
 
-use super::StudyResponseData;
-
-pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series.iter().map(|point| point.value).collect()
 }
 
@@ -16,18 +17,15 @@ pub fn extract_studies_data(data: &StudyResponseData) -> Vec<Vec<f64>> {
         .collect()
 }
 
-pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<(f64, f64, f64, f64, f64, f64)> {
+pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series.par_iter().map(|point| point.value).collect()
 }
 
-pub fn sort_ohlcv_tuples(tuples: &mut [(f64, f64, f64, f64, f64, f64)]) {
+pub fn sort_ohlcv_tuples(tuples: &mut [OHLCV]) {
     tuples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 }
 
-pub fn update_ohlcv_data_point(
-    data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
-    new_data: (f64, f64, f64, f64, f64, f64),
-) {
+pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
     if let Some(index) = data
         .iter()
         .position(|&x| (x.0 - new_data.0).abs() < f64::EPSILON)
@@ -39,10 +37,7 @@ pub fn update_ohlcv_data_point(
     }
 }
 
-pub fn update_ohlcv_data(
-    old_data: &mut Vec<(f64, f64, f64, f64, f64, f64)>,
-    new_data: &Vec<(f64, f64, f64, f64, f64, f64)>,
-) {
+pub fn update_ohlcv_data(old_data: &mut Vec<OHLCV>, new_data: &Vec<OHLCV>) {
     let mutex = Mutex::new(old_data);
     new_data.par_iter().for_each(|op| {
         let mut data = mutex.lock().unwrap();

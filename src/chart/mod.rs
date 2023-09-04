@@ -2,7 +2,7 @@ use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType};
+use crate::models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType, OHLCV};
 
 mod graphic_parser;
 pub mod session;
@@ -37,7 +37,7 @@ pub struct ChartResponseData {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "s"))]
-    pub series: Vec<DataPoint<(f64, f64, f64, f64, f64, f64)>>,
+    pub series: Vec<DataPoint<OHLCV>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

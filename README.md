@@ -24,7 +24,6 @@ This is a data source library for algorithmic trading written in Rust inspired b
 - [ ] Interact with public chats
 - [ ] Get Screener top values
 - [ ] Get Calendar
-- [ ] Hashicorp Vault support
 
 ## Getting Started
 

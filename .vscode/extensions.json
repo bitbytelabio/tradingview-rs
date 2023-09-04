@@ -1,17 +1,11 @@
 {
   "recommendations": [
-    "pbkit.vscode-pbkit",
-    "rapidapi.vscode-services",
     "rust-lang.rust-analyzer",
     "gruntfuggly.todo-tree",
-    "aaron-bond.better-comments",
-    "esbenp.prettier-vscode",
-    "skellock.just",
     "tamasfe.even-better-toml",
     "usernamehw.errorlens",
     "serayuzgur.crates",
     "formulahendry.code-runner",
-    "xaver.clang-format",
     "dotenv.dotenv-vscode"
   ]
 }
