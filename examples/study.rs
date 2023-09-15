@@ -8,7 +8,6 @@ use tradingview_rs::{
     },
     models::Interval,
     socket::DataServer,
-    user::User,
 };
 
 #[tokio::main]
