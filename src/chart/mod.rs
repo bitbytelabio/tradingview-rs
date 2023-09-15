@@ -37,7 +37,7 @@ pub struct ChartResponseData {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "s"))]
-    pub series: Vec<DataPoint<OHLCV>>,
+    pub series: Vec<DataPoint<(f64, f64, f64, f64, f64, f64)>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -77,7 +77,7 @@ pub struct ChartDataChanges {
 pub struct ChartSeries {
     pub symbol_id: String,
     pub interval: Interval,
-    pub data: Vec<(f64, f64, f64, f64, f64, f64)>,
+    pub data: Vec<OHLCV>,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]

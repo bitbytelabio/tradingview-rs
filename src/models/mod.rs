@@ -3,7 +3,28 @@ use std::collections::HashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod pine_indicator;
 
-pub type OHLCV = (f64, f64, f64, f64, f64, f64);
+#[derive(Debug, Clone, Serialize, Copy, PartialEq)]
+pub struct OHLCV {
+    pub timestamp: f64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+}
+
+impl OHLCV {
+    pub fn new(entry: (f64, f64, f64, f64, f64, f64)) -> Self {
+        OHLCV {
+            timestamp: entry.0,
+            open: entry.1,
+            high: entry.2,
+            low: entry.3,
+            close: entry.4,
+            volume: entry.5,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct SimpleTA {

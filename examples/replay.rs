@@ -77,7 +77,7 @@ async fn main() {
 }
 
 async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
-    let end = data.data.first().unwrap().0;
+    let end = data.data.first().unwrap().timestamp;
     info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
     Ok(())
 }
