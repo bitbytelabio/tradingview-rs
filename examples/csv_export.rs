@@ -32,9 +32,9 @@ async fn main() {
 
     socket
         .set_market(
-            "BINANCE:BTCUSDT",
+            "NASDAQ:AMZN",
             ChartOptions {
-                resolution: Interval::OneMinute,
+                resolution: Interval::Daily,
                 bar_count: 50_000,
                 ..Default::default()
             },
@@ -66,7 +66,7 @@ async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::E
     ])
     .unwrap();
 
-    let csv_out = "btcusdt.csv";
+    let csv_out = "tmp/nasdaq_amzn.csv";
     if std::fs::metadata(csv_out).is_err() {
         let f = std::fs::File::create(csv_out).unwrap();
         CsvWriter::new(f).finish(&mut df).unwrap();
