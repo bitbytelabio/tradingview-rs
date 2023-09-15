@@ -45,6 +45,9 @@ replay-example:
 study-example:
 	cargo run --package tradingview-rs --example study
 
+csv_export-example:
+	cargo run --package tradingview-rs --example csv_export
+
 lines-of-code:
 	@git ls-files | grep '\.rs' | xargs wc -l
 

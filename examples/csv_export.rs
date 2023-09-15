@@ -1,4 +1,6 @@
-use std::env;
+use std::{env, process::exit};
+
+use polars::prelude::*;
 
 use tracing::info;
 use tradingview_rs::{
@@ -43,8 +45,33 @@ async fn main() {
 }
 
 async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
-    let end = data.data.first().unwrap().timestamp;
-    info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
+    // Assuming you have the OHLCV data in a Vec<OHLCV> named `data`
+
+    // Extract the individual fields from OHLCV objects
+    let timestamps: Vec<f64> = data.data.iter().map(|item| item.timestamp).collect();
+    let opens: Vec<f64> = data.data.iter().map(|item| item.open).collect();
+    let highs: Vec<f64> = data.data.iter().map(|item| item.high).collect();
+    let lows: Vec<f64> = data.data.iter().map(|item| item.low).collect();
+    let closes: Vec<f64> = data.data.iter().map(|item| item.close).collect();
+    let volumes: Vec<f64> = data.data.iter().map(|item| item.volume).collect();
+
+    // Create a Polars DataFrame
+    let mut df = DataFrame::new(vec![
+        Series::new("timestamp", timestamps),
+        Series::new("open", opens),
+        Series::new("high", highs),
+        Series::new("low", lows),
+        Series::new("close", closes),
+        Series::new("volume", volumes),
+    ])
+    .unwrap();
+
+    let csv_out = "btcusdt.csv";
+    if std::fs::metadata(csv_out).is_err() {
+        let f = std::fs::File::create(csv_out).unwrap();
+        CsvWriter::new(f).finish(&mut df).unwrap();
+    }
+
     Ok(())
 }
 
@@ -59,5 +86,5 @@ async fn on_series_completed(
     data: tradingview_rs::chart::SeriesCompletedMessage,
 ) -> Result<(), tradingview_rs::error::Error> {
     info!("on_series_completed: {:?}", data);
-    Ok(())
+    exit(0);
 }

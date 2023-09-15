@@ -18,3 +18,4 @@ Cargo.lock
 
 # test data files
 _data
+tmp
