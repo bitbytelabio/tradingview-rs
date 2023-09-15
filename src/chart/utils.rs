@@ -6,6 +6,15 @@ use rayon::prelude::*;
 use serde_json::Value;
 use std::sync::Mutex;
 
+/// Extracts OHLCV data from a `ChartResponseData` object and returns a vector of `OHLCV` structs.
+///
+/// # Arguments
+///
+/// * `data` - A reference to a `ChartResponseData` object containing the series data.
+///
+/// # Returns
+///
+/// A vector of `OHLCV` structs containing the extracted data.
 pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series
         .iter()
@@ -20,6 +29,15 @@ pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
         .collect()
 }
 
+/// Extracts the data from a `StudyResponseData` object and returns it as a vector of vectors.
+///
+/// # Arguments
+///
+/// * `data` - A reference to a `StudyResponseData` object.
+///
+/// # Returns
+///
+/// A vector of vectors containing the data from the `StudyResponseData` object.
 pub fn extract_studies_data(data: &StudyResponseData) -> Vec<Vec<f64>> {
     data.studies
         .iter()
@@ -27,6 +45,15 @@ pub fn extract_studies_data(data: &StudyResponseData) -> Vec<Vec<f64>> {
         .collect()
 }
 
+/// Extracts OHLCV data from a `ChartResponseData` struct in parallel.
+///
+/// # Arguments
+///
+/// * `data` - A reference to a `ChartResponseData` struct.
+///
+/// # Returns
+///
+/// A vector of `OHLCV` structs.
 pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series
         .par_iter()
@@ -41,6 +68,12 @@ pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
         .collect()
 }
 
+/// Sorts an array of OHLCV tuples by their timestamp in ascending order.
+///
+/// # Arguments
+///
+/// * `tuples` - A mutable reference to an array of OHLCV tuples to be sorted.
+///
 pub fn sort_ohlcv_tuples(tuples: &mut [OHLCV]) {
     tuples.sort_by(|a, b| {
         a.timestamp
@@ -49,6 +82,15 @@ pub fn sort_ohlcv_tuples(tuples: &mut [OHLCV]) {
     });
 }
 
+/// Update an OHLCV data point in a vector of OHLCV data.
+///
+/// If a data point with the same timestamp as `new_data` exists in `data`, it will be updated with `new_data`.
+/// Otherwise, `new_data` will be added to `data` and the vector will be sorted by timestamp.
+///
+/// # Arguments
+///
+/// * `data` - A mutable reference to a vector of OHLCV data.
+/// * `new_data` - The new OHLCV data point to update or add to `data`.
 pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
     if let Some(index) = data
         .iter()
@@ -65,6 +107,20 @@ pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
     }
 }
 
+/// Updates the OHLCV data by merging the new data into the old data.
+///
+/// # Arguments
+///
+/// * `old_data` - A mutable reference to the old OHLCV data.
+/// * `new_data` - A reference to the new OHLCV data to be merged.
+///
+/// # Example
+///
+/// ```
+/// use tradingview_rs::tools::update_ohlcv_data;
+/// use tradingview_rs::models::OHLCV;
+///
+/// ```
 pub fn update_ohlcv_data(old_data: &mut Vec<OHLCV>, new_data: &Vec<OHLCV>) {
     let mutex = Mutex::new(old_data);
     new_data.par_iter().for_each(|op| {
@@ -73,6 +129,8 @@ pub fn update_ohlcv_data(old_data: &mut Vec<OHLCV>, new_data: &Vec<OHLCV>) {
     });
 }
 
+/// Returns the string value at the given index in the provided slice of `Value`s.
+/// If the value at the given index is not a string, an empty string is returned.
 pub fn get_string_value(values: &[Value], index: usize) -> String {
     match values.get(index) {
         Some(value) => match value.as_str() {
