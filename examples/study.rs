@@ -15,14 +15,16 @@ use tradingview_rs::{
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let session = env::var("TV_SESSION").unwrap();
-    let signature = env::var("TV_SIGNATURE").unwrap();
+    let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
 
-    let user = User::build()
-        .session(&session, &signature)
-        .get()
-        .await
-        .unwrap();
+    // let session = env::var("TV_SESSION").unwrap();
+    // let signature = env::var("TV_SIGNATURE").unwrap();
+
+    // let user = User::build()
+    //     .session(&session, &signature)
+    //     .get()
+    //     .await
+    //     .unwrap();
 
     let handlers = ChartCallbackFn {
         on_chart_data: Box::new(|data| Box::pin(on_chart_data(data))),
@@ -32,7 +34,7 @@ async fn main() {
 
     let mut socket = WebSocket::build()
         .server(DataServer::ProData)
-        .auth_token(user.auth_token)
+        .auth_token(auth_token)
         .connect(handlers)
         .await
         .unwrap();
