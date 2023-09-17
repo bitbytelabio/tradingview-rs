@@ -5,7 +5,7 @@ use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
-use serde::Deserialize;
+use serde::{de, Deserialize};
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
@@ -286,8 +286,8 @@ impl User {
         headers.insert(
             COOKIE,
             HeaderValue::from_str(&format!(
-                "sessionid={}; sessionid_sign={}",
-                self.session, self.signature
+                "sessionid={}; sessionid_sign={}; device_t={}",
+                self.session, self.signature, self.device_id
             ))?,
         );
 
