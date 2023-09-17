@@ -16,7 +16,7 @@ pub struct OHLCV {
 impl OHLCV {
     pub fn new(entry: (f64, f64, f64, f64, f64, f64)) -> Self {
         OHLCV {
-            timestamp: entry.0 as i64,
+            timestamp: (entry.0 * 1000.0) as i64,
             open: entry.1,
             high: entry.2,
             low: entry.3,

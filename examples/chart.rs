@@ -99,8 +99,8 @@ async fn main() {
 
 async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
     // info!("on_chart_data: {:?}", data);
-    let end = data.data.first().unwrap().timestamp;
-    info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
+    // let end = data.data.first().unwrap().timestamp;
+    info!("on_chart_data: {:?} - {:?}", data.data.len(), data);
     Ok(())
 }
 
