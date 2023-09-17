@@ -5,7 +5,7 @@ use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
-use serde::{de, Deserialize};
+use serde::Deserialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
