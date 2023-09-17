@@ -1,43 +1,17 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     models::{
         pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
-        Screener, SimpleTA, Symbol, SymbolSearch,
+        Symbol, SymbolSearch,
     },
     prelude::*,
     user::User,
     utils::build_request,
 };
 use reqwest::Response;
-use serde::Serialize;
 use tokio::{sync::Semaphore, task::JoinHandle};
-use tracing::{debug, warn};
-
-const INDICATORS: [&str; 3] = ["Recommend.Other", "Recommend.All", "Recommend.MA"];
-
-#[tracing::instrument]
-fn get_screener(exchange: &str) -> Result<Screener> {
-    let e = exchange.to_uppercase();
-    let screener = match e.as_str() {
-        "NASDAQ" | "NYSE" | "NYSE ARCA" | "OTC" => Screener::America,
-        "ASX" => Screener::Australia,
-        "TSX" | "TSXV" | "CSE" | "NEO" => Screener::Canada,
-        "EGX" => Screener::Egypt,
-        "FWB" | "SWB" | "XETR" => Screener::Germany,
-        "BSE" | "NSE" => Screener::India,
-        "TASE" => Screener::Israel,
-        "MIL" | "MILSEDEX" => Screener::Italy,
-        "LUXSE" => Screener::Luxembourg,
-        "NEWCONNECT" => Screener::Poland,
-        "NGM" => Screener::Sweden,
-        "BIST" => Screener::Turkey,
-        "LSE" | "LSIN" => Screener::UK,
-        "HNX" | "HOSE" | "UPCOM" => Screener::Vietnam,
-        _ => return Err(Error::InvalidExchange),
-    };
-    Ok(screener)
-}
+use tracing::debug;
 
 async fn get(client: Option<&User>, url: &str) -> Result<Response> {
     if let Some(client) = client {
@@ -50,114 +24,6 @@ async fn get(client: Option<&User>, url: &str) -> Result<Response> {
         return Ok(response);
     }
     Ok(build_request(None)?.get(url).send().await?)
-}
-
-async fn post<T: Serialize>(client: &User, url: &str, body: T) -> Result<Response> {
-    let cookie = format!(
-        "sessionid={}; sessionid_sign={};",
-        client.session, client.signature
-    );
-    let client: reqwest::Client = build_request(Some(&cookie))?;
-    let response = client.post(url).json(&body).send().await?;
-    Ok(response)
-}
-
-#[tracing::instrument(skip(client))]
-async fn fetch_scan_data(
-    client: &User,
-    tickers: Vec<String>,
-    screener: Screener,
-    columns: Vec<String>,
-) -> Result<serde_json::Value> {
-    let resp_body: serde_json::Value = post(
-        client,
-        &format!(
-            "https://scanner.tradingview.com/{screener}/scan",
-            screener = screener
-        ),
-        serde_json::json!({
-            "symbols": {
-                "tickers": tickers
-            },
-            "columns": columns
-        }),
-    )
-    .await?
-    .json()
-    .await?;
-
-    let data = resp_body.get("data");
-    match data {
-        Some(data) => Ok(data.clone()),
-        None => Err(Error::NoScanDataFound),
-    }
-}
-
-#[tracing::instrument(skip(client))]
-pub async fn get_ta(client: &User, exchange: &str, symbols: &[&str]) -> Result<Vec<SimpleTA>> {
-    if exchange.is_empty() {
-        return Err(Error::ExchangeNotSpecified);
-    } else if symbols.is_empty() {
-        return Err(Error::SymbolsNotSpecified);
-    }
-    let symbols = symbols
-        .iter()
-        .map(|s| format!("{}:{}", exchange, s))
-        .collect::<Vec<String>>();
-
-    let screener = get_screener(exchange)?;
-    let cols: Vec<String> = ["1", "5", "15", "60", "240", "1D", "1W", "1M"]
-        .iter()
-        .flat_map(|t| {
-            INDICATORS
-                .iter()
-                .map(|i| {
-                    if t != &"1D" {
-                        format!("{}|{}", i, t)
-                    } else {
-                        i.to_string()
-                    }
-                })
-                .collect::<Vec<String>>()
-        })
-        .collect();
-
-    match fetch_scan_data(client, symbols, screener, cols.clone()).await {
-        Ok(data) => {
-            let mut advices: Vec<SimpleTA> = vec![];
-
-            data.as_array().unwrap_or(&vec![]).iter().for_each(|s| {
-                let mut advice = SimpleTA {
-                    name: s["s"].as_str().unwrap_or("").to_string(),
-                    ..Default::default()
-                };
-                s["d"]
-                    .as_array()
-                    .unwrap_or(&vec![])
-                    .iter()
-                    .enumerate()
-                    .for_each(|(i, val)| {
-                        let (name, period) =
-                            cols[i].split_once('|').unwrap_or((cols[i].as_str(), ""));
-                        let p_name = if period.is_empty() { "1D" } else { period };
-                        let name = name.split('.').last().unwrap_or(name);
-                        let val = (val.as_f64().unwrap_or(0.0) * 1000.0 / 500.0).round() / 1000.0;
-                        advice
-                            .data
-                            .entry(p_name.to_string())
-                            .or_insert_with(HashMap::new)
-                            .insert(name.to_string(), val);
-                    });
-                advices.push(advice);
-            });
-            println!("{:#?}", advices);
-            Ok(advices)
-        }
-        Err(e) => match e {
-            Error::NoScanDataFound => Err(Error::SymbolsNotInSameExchange),
-            _ => Err(e),
-        },
-    }
 }
 
 #[tracing::instrument]
@@ -349,46 +215,4 @@ pub async fn get_indicator_metadata(
     Err(Error::Generic(
         "Failed to get indicator metadata".to_string(),
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::client::mics::*;
-
-    #[test]
-    fn test_get_screener() {
-        let exchanges = vec![
-            ("NASDAQ", Ok(Screener::America)),
-            ("ASX", Ok(Screener::Australia)),
-            ("TSX", Ok(Screener::Canada)),
-            ("EGX", Ok(Screener::Egypt)),
-            ("FWB", Ok(Screener::Germany)),
-            ("BSE", Ok(Screener::India)),
-            ("TASE", Ok(Screener::Israel)),
-            ("MIL", Ok(Screener::Italy)),
-            ("LUXSE", Ok(Screener::Luxembourg)),
-            ("NEWCONNECT", Ok(Screener::Poland)),
-            ("NGM", Ok(Screener::Sweden)),
-            ("BIST", Ok(Screener::Turkey)),
-            ("LSE", Ok(Screener::UK)),
-            ("HNX", Ok(Screener::Vietnam)),
-            ("invalid", Err(Error::InvalidExchange)),
-        ];
-
-        for (exchange, expected) in exchanges {
-            let result = get_screener(exchange);
-            match (result, expected) {
-                (Ok(actual), Ok(expected)) => {
-                    assert_eq!(actual, expected, "Exchange: {}", exchange)
-                }
-                (Err(actual), Err(expected)) => assert_eq!(
-                    actual.to_string(),
-                    expected.to_string(),
-                    "Exchange: {}",
-                    exchange
-                ),
-                _ => panic!("Unexpected result for exchange: {}", exchange),
-            }
-        }
-    }
 }
