@@ -9,7 +9,8 @@ readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
 
 [features]
-user = []
+default = ["user"]
+user = ["dep:google-authenticator"]
 
 [dependencies]
 tokio = { version = "^1", features = ["full"] }
@@ -29,7 +30,6 @@ url = "^2"
 urlencoding = "^2"
 rand = "^0.8"
 regex = "^1"
-google-authenticator = "^0.4"
 tokio-tungstenite = { version = "^0.20", features = [
     "rustls-tls-native-roots",
 ] }
@@ -47,11 +47,13 @@ zip = "^0.6"
 base64 = "^0.21"
 rayon = "^1"
 
+google-authenticator = { version = "^0.4", optional = true }
+
 [dev-dependencies]
+polars = { version = "^0.33" }
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
-polars = { version = "^0.32", features = ["polars-io"] }
 
 [[bench]]
 harness = false

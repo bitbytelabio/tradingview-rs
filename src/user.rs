@@ -17,11 +17,6 @@ lazy_static::lazy_static! {
     static ref AUTH_TOKEN_REGEX: Regex =  Regex::new(r#""auth_token":"(.*?)""#).unwrap();
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct LoginUserResponse {
-    user: User,
-}
-
 #[derive(Default, Debug, Clone, Deserialize, PartialEq)]
 pub struct User {
     pub id: u32,
@@ -38,7 +33,14 @@ pub struct User {
     #[serde(skip_deserializing)]
     pub signature: String,
     #[serde(skip_deserializing)]
+    pub device_id: String,
+    #[serde(skip_deserializing)]
     pub is_pro: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct LoginUserResponse {
+    user: User,
 }
 
 #[derive(Debug, Default)]
@@ -53,6 +55,7 @@ pub struct UserBuilder {
     session_hash: Option<String>,
     session: Option<String>,
     signature: Option<String>,
+    device_id: Option<String>,
 }
 
 impl UserBuilder {
@@ -93,6 +96,7 @@ impl UserBuilder {
             session_hash: self.session_hash.take().unwrap_or_default(),
             session: self.session.take().unwrap_or_default(),
             signature: self.signature.take().unwrap_or_default(),
+            device_id: self.device_id.take().unwrap_or_default(),
         };
 
         if !user.session.is_empty() && !user.signature.is_empty() {
@@ -130,17 +134,29 @@ impl User {
             .send()
             .await?;
 
-        let (session, signature) =
+        let (session, signature, device_id) =
             response
                 .cookies()
-                .fold((None, None), |session_cookies, cookie| {
+                .fold((None, None, None), |session_cookies, cookie| {
                     match cookie.name() {
-                        "sessionid" => (Some(cookie.value().to_string()), session_cookies.1),
-                        "sessionid_sign" => (session_cookies.0, Some(cookie.value().to_string())),
+                        "sessionid" => (
+                            Some(cookie.value().to_string()),
+                            session_cookies.1,
+                            session_cookies.2,
+                        ),
+                        "sessionid_sign" => (
+                            session_cookies.0,
+                            Some(cookie.value().to_string()),
+                            session_cookies.2,
+                        ),
+                        "device_t" => (
+                            session_cookies.0,
+                            session_cookies.1,
+                            Some(cookie.value().to_string()),
+                        ),
                         _ => session_cookies,
                     }
                 });
-
         if session.is_none() || signature.is_none() {
             error!("unable to login, username or password is invalid");
             return Err(Error::LoginError(LoginError::InvalidCredentials));
@@ -162,19 +178,50 @@ impl User {
                 error!("2FA is enabled for this account, but no TOTP secret was provided");
                 return Err(Error::LoginError(LoginError::OTPSecretNotFound));
             }
-            let response: Value = Self::handle_mfa(
+            let response = Self::handle_mfa(
                 &self.totp_secret,
                 session.clone().unwrap_or_default().as_str(),
                 signature.clone().unwrap_or_default().as_str(),
             )
-            .await?
-            .json()
             .await?;
-            debug!("2FA login response: {:#?}", response);
+
+            let (session, signature, device_id) =
+                response
+                    .cookies()
+                    .fold((None, None, None), |session_cookies, cookie| {
+                        match cookie.name() {
+                            "sessionid" => (
+                                Some(cookie.value().to_string()),
+                                session_cookies.1,
+                                session_cookies.2,
+                            ),
+                            "sessionid_sign" => (
+                                session_cookies.0,
+                                Some(cookie.value().to_string()),
+                                session_cookies.2,
+                            ),
+                            "device_t" => (
+                                session_cookies.0,
+                                session_cookies.1,
+                                Some(cookie.value().to_string()),
+                            ),
+                            _ => session_cookies,
+                        }
+                    });
+
+            let body = response.json().await?;
+            debug!("2FA login response: {:#?}", body);
             info!("User is logged in successfully");
-            let login_resp: LoginUserResponse = serde_json::from_value(response)?;
+            let login_resp: LoginUserResponse = serde_json::from_value(body)?;
 
             user = login_resp.user;
+
+            return Ok(User {
+                session: session.unwrap_or_default(),
+                signature: signature.unwrap_or_default(),
+                device_id: device_id.unwrap_or_default(),
+                ..user
+            });
         } else {
             error!("unable to login, username or password is invalid");
             return Err(Error::LoginError(LoginError::InvalidCredentials));
@@ -183,6 +230,7 @@ impl User {
         Ok(User {
             session: session.unwrap_or_default(),
             signature: signature.unwrap_or_default(),
+            device_id: device_id.unwrap_or_default(),
             ..user
         })
     }
@@ -303,6 +351,7 @@ impl User {
                 is_pro: self.is_pro,
                 session: self.session.clone(),
                 signature: self.signature.clone(),
+                device_id: self.device_id.clone(),
                 password: self.password.clone(),
                 totp_secret: self.totp_secret.clone(),
             });

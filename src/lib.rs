@@ -5,6 +5,7 @@ pub mod models;
 pub mod quote;
 pub mod socket;
 
+#[cfg(feature = "user")]
 pub mod user;
 
 mod prelude;

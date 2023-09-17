@@ -6,9 +6,8 @@ use serde_json::Value;
 use crate::{
     chart::study::{IndicatorInput, InputValue},
     client::mics::get_indicator_metadata,
-    models::FinancialPeriod,
+    models::{FinancialPeriod, UserCookies},
     prelude::*,
-    user::User,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -214,11 +213,11 @@ pub struct PineIndicator {
 }
 
 pub struct PineIndicatorBuilder {
-    user: Option<User>,
+    user: Option<UserCookies>,
 }
 
 impl PineIndicatorBuilder {
-    pub fn user(&mut self, user: User) -> &mut Self {
+    pub fn user(&mut self, user: UserCookies) -> &mut Self {
         self.user = Some(user);
         self
     }

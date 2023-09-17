@@ -3,17 +3,16 @@ use std::sync::Arc;
 use crate::{
     models::{
         pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
-        Symbol, SymbolSearch,
+        Symbol, SymbolSearch, UserCookies,
     },
     prelude::*,
-    user::User,
     utils::build_request,
 };
 use reqwest::Response;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::debug;
 
-async fn get(client: Option<&User>, url: &str) -> Result<Response> {
+async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
     if let Some(client) = client {
         let cookie = format!(
             "sessionid={}; sessionid_sign={};",
@@ -83,7 +82,7 @@ pub async fn list_symbols(market_type: Option<String>) -> Result<Vec<Symbol>> {
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_chart_token(client: &User, layout_id: &str) -> Result<String> {
+pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<String> {
     let data: serde_json::Value = get(
         Some(client),
         &format!(
@@ -108,7 +107,7 @@ pub async fn get_chart_token(client: &User, layout_id: &str) -> Result<String> {
 
 #[tracing::instrument(skip(client))]
 pub async fn get_drawing<T>(
-    client: &User,
+    client: &UserCookies,
     layout_id: &str,
     symbol: &str,
     chart_id: T,
@@ -130,7 +129,7 @@ where
 }
 
 #[tracing::instrument(skip(client))]
-pub async fn get_private_indicators(client: &User) -> Result<Vec<PineInfo>> {
+pub async fn get_private_indicators(client: &UserCookies) -> Result<Vec<PineInfo>> {
     let indicators = get(
         Some(client),
         "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
@@ -175,7 +174,7 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
 
 #[tracing::instrument(skip(client))]
 pub async fn search_indicator(
-    client: Option<&User>,
+    client: Option<&UserCookies>,
     search: &str,
     offset: i32,
 ) -> Result<Vec<PineSearchResult>> {
@@ -195,7 +194,7 @@ pub async fn search_indicator(
 
 #[tracing::instrument(skip(client))]
 pub async fn get_indicator_metadata(
-    client: Option<&User>,
+    client: Option<&UserCookies>,
     pinescript_id: &str,
     pinescript_version: &str,
 ) -> Result<PineMetadata> {

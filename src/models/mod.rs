@@ -26,6 +26,18 @@ impl OHLCV {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserCookies {
+    pub id: String,
+    pub username: String,
+    pub session: String,
+    pub session_hash: String,
+    pub signature: String,
+    pub device_id: String,
+    pub join_date: String,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SimpleTA {
     pub name: String,
