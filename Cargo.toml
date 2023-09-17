@@ -1,6 +1,6 @@
 [package]
 name = "tradingview-rs"
-authors = ["Bit Byte Lab Developers <dev.team@bitbytelab.io>"]
+authors = ["nguyenthdat <nguyenthdat@outook.com>"]
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
