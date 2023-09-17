@@ -51,7 +51,7 @@ async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::E
     let timestamps: Vec<i64> = data
         .data
         .iter()
-        .map(|item| item.timestamp as i64 * 1000)
+        .map(|item| (item.timestamp * 1000.0) as i64)
         .collect(); // Convert to milliseconds
     let opens: Vec<f64> = data.data.iter().map(|item| item.open).collect();
     let highs: Vec<f64> = data.data.iter().map(|item| item.high).collect();
