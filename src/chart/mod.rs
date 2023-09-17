@@ -1,3 +1,4 @@
+#[allow(clippy::type_complexity)]
 use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
