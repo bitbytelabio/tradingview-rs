@@ -19,7 +19,7 @@ pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series
         .iter()
         .map(|point| OHLCV {
-            timestamp: point.value.0,
+            timestamp: (point.value.0 * 1000.0) as i64,
             open: point.value.1,
             high: point.value.2,
             low: point.value.3,
@@ -58,7 +58,7 @@ pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series
         .par_iter()
         .map(|point| OHLCV {
-            timestamp: point.value.0,
+            timestamp: (point.value.0 * 1000.0) as i64,
             open: point.value.1,
             high: point.value.2,
             low: point.value.3,
@@ -94,7 +94,7 @@ pub fn sort_ohlcv_tuples(tuples: &mut [OHLCV]) {
 pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
     if let Some(index) = data
         .iter()
-        .position(|&x| (x.timestamp - new_data.timestamp).abs() < f64::EPSILON)
+        .position(|&x| ((x.timestamp - new_data.timestamp) as f64).abs() < f64::EPSILON)
     {
         data[index] = new_data;
     } else {
@@ -274,16 +274,16 @@ mod tests {
             ],
         };
         let expected_output = vec![
-            OHLCV::new((1.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
-            OHLCV::new((2.0, 3.0, 4.0, 5.0, 6.0, 7.0)),
-            OHLCV::new((3.0, 4.0, 5.0, 6.0, 7.0, 8.0)),
-            OHLCV::new((4.0, 5.0, 6.0, 7.0, 8.0, 9.0)),
-            OHLCV::new((5.0, 6.0, 7.0, 8.0, 9.0, 10.0)),
-            OHLCV::new((6.0, 7.0, 8.0, 9.0, 10.0, 11.0)),
-            OHLCV::new((7.0, 8.0, 9.0, 10.0, 11.0, 12.0)),
-            OHLCV::new((8.0, 9.0, 10.0, 11.0, 12.0, 13.0)),
-            OHLCV::new((9.0, 10.0, 11.0, 12.0, 13.0, 14.0)),
-            OHLCV::new((10.0, 11.0, 12.0, 13.0, 14.0, 15.0)),
+            OHLCV::new((1.0 * 1000.0, 2.0, 3.0, 4.0, 5.0, 6.0)),
+            OHLCV::new((2.0 * 1000.0, 3.0, 4.0, 5.0, 6.0, 7.0)),
+            OHLCV::new((3.0 * 1000.0, 4.0, 5.0, 6.0, 7.0, 8.0)),
+            OHLCV::new((4.0 * 1000.0, 5.0, 6.0, 7.0, 8.0, 9.0)),
+            OHLCV::new((5.0 * 1000.0, 6.0, 7.0, 8.0, 9.0, 10.0)),
+            OHLCV::new((6.0 * 1000.0, 7.0, 8.0, 9.0, 10.0, 11.0)),
+            OHLCV::new((7.0 * 1000.0, 8.0, 9.0, 10.0, 11.0, 12.0)),
+            OHLCV::new((8.0 * 1000.0, 9.0, 10.0, 11.0, 12.0, 13.0)),
+            OHLCV::new((9.0 * 1000.0, 10.0, 11.0, 12.0, 13.0, 14.0)),
+            OHLCV::new((10.0 * 1000.0, 11.0, 12.0, 13.0, 14.0, 15.0)),
         ];
         let output = extract_ohlcv_data(&chart_data);
         let output2 = par_extract_ohlcv_data(&chart_data);

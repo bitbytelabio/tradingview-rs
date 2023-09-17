@@ -5,7 +5,7 @@ pub mod pine_indicator;
 
 #[derive(Debug, Clone, Serialize, Copy, PartialEq)]
 pub struct OHLCV {
-    pub timestamp: f64,
+    pub timestamp: i64,
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -16,7 +16,7 @@ pub struct OHLCV {
 impl OHLCV {
     pub fn new(entry: (f64, f64, f64, f64, f64, f64)) -> Self {
         OHLCV {
-            timestamp: entry.0,
+            timestamp: entry.0 as i64,
             open: entry.1,
             high: entry.2,
             low: entry.3,
