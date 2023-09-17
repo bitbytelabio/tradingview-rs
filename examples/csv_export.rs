@@ -48,7 +48,11 @@ async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::E
     // Assuming you have the OHLCV data in a Vec<OHLCV> named `data`
 
     // Extract the individual fields from OHLCV objects
-    let timestamps: Vec<f64> = data.data.iter().map(|item| item.timestamp).collect();
+    let timestamps: Vec<i64> = data
+        .data
+        .iter()
+        .map(|item| item.timestamp as i64 * 1000)
+        .collect(); // Convert to milliseconds
     let opens: Vec<f64> = data.data.iter().map(|item| item.open).collect();
     let highs: Vec<f64> = data.data.iter().map(|item| item.high).collect();
     let lows: Vec<f64> = data.data.iter().map(|item| item.low).collect();
