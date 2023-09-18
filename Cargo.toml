@@ -51,7 +51,7 @@ rayon = "^1"
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
-polars = { version = "^0.32", features = ["polars-io"] }
+polars = { version = "^0.33", features = ["polars-io"] }
 
 [[bench]]
 harness = false
