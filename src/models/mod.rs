@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod pine_indicator;
 
@@ -38,12 +36,6 @@ pub struct UserCookies {
     pub join_date: String,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct SimpleTA {
-    pub name: String,
-    pub data: HashMap<String, HashMap<String, f64>>,
-}
-
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct SymbolSearch {
     #[serde(rename(deserialize = "symbols_remaining"))]
@@ -66,47 +58,6 @@ pub struct Symbol {
     pub data_provider: String,
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Screener {
-    America,
-    Australia,
-    Canada,
-    Egypt,
-    Germany,
-    India,
-    Israel,
-    Italy,
-    Luxembourg,
-    Poland,
-    Sweden,
-    Turkey,
-    UK,
-    Vietnam,
-    Other(String),
-}
-
-impl std::fmt::Display for Screener {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Screener::America => write!(f, "america"),
-            Screener::Australia => write!(f, "australia"),
-            Screener::Canada => write!(f, "canada"),
-            Screener::Egypt => write!(f, "egypt"),
-            Screener::Germany => write!(f, "germany"),
-            Screener::India => write!(f, "india"),
-            Screener::Israel => write!(f, "israel"),
-            Screener::Italy => write!(f, "italy"),
-            Screener::Luxembourg => write!(f, "luxembourg"),
-            Screener::Poland => write!(f, "poland"),
-            Screener::Sweden => write!(f, "sweden"),
-            Screener::Turkey => write!(f, "turkey"),
-            Screener::UK => write!(f, "uk"),
-            Screener::Vietnam => write!(f, "vietnam"),
-            Screener::Other(s) => write!(f, "{}", s.to_lowercase()),
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone, Serialize)]

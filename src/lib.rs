@@ -18,7 +18,6 @@ pub mod tools {
         extract_ohlcv_data, par_extract_ohlcv_data, sort_ohlcv_tuples, update_ohlcv_data,
         update_ohlcv_data_point,
     };
-    pub use crate::utils::{clean_em_tags, format_packet, parse_compressed, parse_packet};
 }
 
 pub mod api {}
