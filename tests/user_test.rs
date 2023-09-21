@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use dotenv::dotenv;
     use std::env;
     use tradingview_rs::error::*;
     use tradingview_rs::user::*;
@@ -18,6 +19,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_login_with_credentials() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
@@ -56,6 +58,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_login_with_credentials_and_mfa() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
@@ -83,6 +86,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_user_with_valid_session() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
@@ -125,6 +129,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_user_with_credentials_and_invalid_mfa() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 

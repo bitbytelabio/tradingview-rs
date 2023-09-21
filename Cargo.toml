@@ -57,6 +57,7 @@ polars = { version = "^0.33" }
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
+dotenv = "0.15.0"
 
 [[bench]]
 harness = false

@@ -1,3 +1,4 @@
+use dotenv::dotenv;
 use std::env;
 
 use tracing::info;
@@ -12,39 +13,8 @@ use tradingview_rs::{
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt::init();
-
-    // let session = env::var("TV_SESSION").unwrap();
-    // let signature = env::var("TV_SIGNATURE").unwrap();
-
-    // let user = User::build()
-    //     .session(&session, &signature)
-    //     .get()
-    //     .await
-    //     .unwrap();
-
-    // let access_id = env::var("CF_ACCESS_CLIENT_ID").unwrap();
-    // let access_secret = env::var("CF_ACCESS_CLIENT_SECRET").unwrap();
-
-    // let mut headers = HeaderMap::new();
-    // headers.insert("CF-Access-Client-Id", HeaderValue::from_static(&access_id));
-    // headers.insert(
-    //     "CF-Access-Client-Secret",
-    //     HeaderValue::from_static(&access_secret),
-    // );
-
-    // let client = Client::builder()
-    //     .default_headers(headers)
-    //     .build()
-    //     .unwrap()
-    //     .get("https://tvmisc.bitbytelab.io/api/token/free")
-    //     .send()
-    //     .await
-    //     .unwrap()
-    //     .json()
-    //     .await
-    //     .unwrap();
-
     let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
 
     let handlers = ChartCallbackFn {
