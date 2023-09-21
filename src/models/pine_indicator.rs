@@ -7,7 +7,7 @@ use crate::{
     chart::study::{IndicatorInput, InputValue},
     client::mics::get_indicator_metadata,
     models::{FinancialPeriod, UserCookies},
-    prelude::*,
+    Result,
 };
 
 #[derive(Debug, Clone, PartialEq)]

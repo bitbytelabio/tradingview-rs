@@ -1,12 +1,12 @@
 use crate::{
     error::TradingViewError,
     payload,
-    prelude::*,
     quote::{QuoteData, QuoteValue, ALL_QUOTE_FIELDS},
     socket::{
         AsyncCallback, DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent,
     },
     utils::gen_session_id,
+    Error, Result,
 };
 use async_trait::async_trait;
 use serde_json::Value;

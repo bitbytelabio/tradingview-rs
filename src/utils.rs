@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 use crate::{
     models::{MarketAdjustment, SessionType},
-    prelude::*,
     socket::{SocketMessage, SocketMessageDe},
+    Result,
 };
 use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
 use iso_currency::Currency;

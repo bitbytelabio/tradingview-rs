@@ -8,8 +8,6 @@ pub mod socket;
 #[cfg(feature = "user")]
 pub mod user;
 
-mod prelude;
-mod session;
 mod utils;
 static UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36";
 
@@ -21,3 +19,7 @@ pub mod tools {
 }
 
 pub mod api {}
+
+pub use crate::error::Error;
+
+pub type Result<T> = std::result::Result<T, Error>;

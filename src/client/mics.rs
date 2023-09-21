@@ -5,8 +5,8 @@ use crate::{
         pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
         Symbol, SymbolSearch, UserCookies,
     },
-    prelude::*,
     utils::build_request,
+    Error, Result,
 };
 use reqwest::Response;
 use tokio::{sync::Semaphore, task::JoinHandle};

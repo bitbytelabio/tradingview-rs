@@ -10,11 +10,11 @@ use crate::{
     },
     models::{pine_indicator::PineIndicator, Interval, Timezone},
     payload,
-    prelude::*,
     socket::{
         AsyncCallback, DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent,
     },
     utils::{gen_id, gen_session_id, symbol_init},
+    Error, Result,
 };
 use async_trait::async_trait;
 use serde_json::Value;

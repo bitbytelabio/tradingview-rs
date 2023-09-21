@@ -1,6 +1,4 @@
-use crate::error::{Error, LoginError};
-use crate::prelude::*;
-use crate::utils::build_request;
+use crate::{error::LoginError, utils::build_request, Error, Result};
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;

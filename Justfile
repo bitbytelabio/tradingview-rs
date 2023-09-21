@@ -7,7 +7,7 @@ test-user:
 	@cargo test -p tradingview-rs --test user_test
 
 quick-test:
-	@cargo test
+	@cargo test --all-features
 
 bench:
 	@cargo bench --all-features
