@@ -167,13 +167,6 @@ impl std::fmt::Display for DataServer {
     }
 }
 
-pub(crate) enum _ConnectionStatus {
-    Connected,
-    Disconnected,
-    Error,
-    Connecting,
-}
-
 #[derive(Clone)]
 pub struct SocketSession {
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,

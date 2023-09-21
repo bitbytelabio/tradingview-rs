@@ -9,7 +9,6 @@ readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
 
 [features]
-default = ["user"]
 user = ["dep:google-authenticator"]
 
 [dependencies]
