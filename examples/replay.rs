@@ -1,5 +1,5 @@
+use dotenv::dotenv;
 use std::env;
-
 use tracing::info;
 use tradingview_rs::{
     chart::{
@@ -12,6 +12,7 @@ use tradingview_rs::{
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt::init();
 
     let auth_token = env::var("TV_AUTH_TOKEN").unwrap();

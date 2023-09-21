@@ -1,5 +1,5 @@
+use dotenv::dotenv;
 use std::{collections::HashMap, env, sync::Arc};
-
 use tokio::sync::Mutex;
 use tracing::{error, info};
 use tradingview_rs::{
@@ -19,6 +19,7 @@ use tradingview_rs::{
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt::init();
 
     let session = env::var("TV_SESSION").unwrap();

@@ -1,6 +1,6 @@
+use dotenv::dotenv;
 use std::collections::HashMap;
 use std::env;
-
 use tracing::{error, info};
 use tradingview_rs::quote::session::{QuoteCallbackFn, WebSocket};
 use tradingview_rs::quote::QuoteValue;
@@ -9,6 +9,7 @@ type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt::init();
 
     let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
