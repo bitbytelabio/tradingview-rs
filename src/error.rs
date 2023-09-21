@@ -64,7 +64,7 @@ pub enum TradingViewError {
     QuoteDataStatusError,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum LoginError {
     #[error("username or password is empty")]
     EmptyCredentials,
