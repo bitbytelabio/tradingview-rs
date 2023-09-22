@@ -1,0 +1,14 @@
+GET /pine-facade/list?filter=fundamental HTTP/1.1
+Host: pine-facade.tradingview.com
+
+###
+GET /pine-facade/list?filter=standard HTTP/1.1
+Host: pine-facade.tradingview.com
+
+###
+GET /pine-facade/list?filter=candlestick HTTP/1.1
+Host: pine-facade.tradingview.com
+
+###
+GET /pine-facade/translate/STD%3BPrice_Oscillator/28.0 HTTP/1.1
+Host: pine-facade.tradingview.com
