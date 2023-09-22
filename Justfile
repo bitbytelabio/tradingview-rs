@@ -53,3 +53,6 @@ lines-of-code:
 
 creds-scan:
 	@ggshield secret scan repo ./
+
+udeps:
+	@cargo +nightly udeps --all-targets --all-features -- -D warnings

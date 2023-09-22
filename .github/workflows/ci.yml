@@ -36,9 +36,3 @@ jobs:
           TV_TOTP_USERNAME: ${{ secrets.TV_TOTP_USERNAME }}
           TV_TOTP_PASSWORD: ${{ secrets.TV_TOTP_PASSWORD }}
           TV_TOTP_SECRET: ${{ secrets.TV_TOTP_SECRET }}
-
-      - name: Run cargo-udeps
-        uses: aig787/cargo-udeps-action@v1
-        with:
-          version: "latest"
-          args: "--all-targets"
