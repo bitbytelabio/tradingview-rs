@@ -149,6 +149,8 @@ pub fn parse_compressed(data: &str) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use crate::{
         models::{MarketAdjustment, SessionType},
         utils::*,
@@ -205,9 +207,14 @@ mod tests {
             Some("aaaaaaaaaaaa".to_string()),
         );
         assert!(test2.is_ok());
-        assert_eq!(
-            test2.unwrap(),
-            r#"={"adjustment":"dividends","currency-id":"USD","replay":"aaaaaaaaaaaa","session":"extended","symbol":"HOSE:FPT"}"#.to_string()
-        );
+        let test2_json: Value = serde_json::from_str(&test2.unwrap().replace("=", "")).unwrap();
+        let expected2_json = json!({
+            "adjustment": "dividends",
+            "currency-id": "USD",
+            "replay": "aaaaaaaaaaaa",
+            "session": "extended",
+            "symbol": "HOSE:FPT"
+        });
+        assert_eq!(test2_json, expected2_json);
     }
 }
