@@ -1,7 +1,7 @@
 use dotenv::dotenv;
 use std::env;
 use tracing::info;
-use tradingview_rs::{
+use tradingview::{
     chart::{
         session::{ChartCallbackFn, WebSocket},
         ChartOptions, ChartSeries,
@@ -62,29 +62,29 @@ async fn main() {
     //     .await
     //     .unwrap();
     // socket
-    //     .set_series(tradingview_rs::models::Interval::FourHours, 20000, None)
+    //     .set_series(tradingview::models::Interval::FourHours, 20000, None)
     //     .await
     //     .unwrap();
 
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Error> {
     let end = data.data.first().unwrap().timestamp;
     info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
     Ok(())
 }
 
 async fn on_symbol_resolved(
-    data: tradingview_rs::chart::SymbolInfo,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SymbolInfo,
+) -> Result<(), tradingview::error::Error> {
     info!("on_symbol_resolved: {:?}", data);
     Ok(())
 }
 
 async fn on_series_completed(
-    data: tradingview_rs::chart::SeriesCompletedMessage,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SeriesCompletedMessage,
+) -> Result<(), tradingview::error::Error> {
     info!("on_series_completed: {:?}", data);
     Ok(())
 }

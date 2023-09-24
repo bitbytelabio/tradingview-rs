@@ -8,6 +8,10 @@ repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
 
+[lib]
+name = "tradingview"
+path = "src/lib.rs"
+
 [features]
 user = ["dep:google-authenticator"]
 

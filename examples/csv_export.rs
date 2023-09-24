@@ -4,7 +4,7 @@ use std::{env, process::exit};
 use polars::prelude::*;
 
 use tracing::info;
-use tradingview_rs::{
+use tradingview::{
     chart::{
         session::{ChartCallbackFn, WebSocket},
         ChartOptions, ChartSeries,
@@ -46,7 +46,7 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Error> {
     // Assuming you have the OHLCV data in a Vec<OHLCV> named `data`
 
     // Extract the individual fields from OHLCV objects
@@ -78,15 +78,15 @@ async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::E
 }
 
 async fn on_symbol_resolved(
-    data: tradingview_rs::chart::SymbolInfo,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SymbolInfo,
+) -> Result<(), tradingview::error::Error> {
     info!("on_symbol_resolved: {:?}", data);
     Ok(())
 }
 
 async fn on_series_completed(
-    data: tradingview_rs::chart::SeriesCompletedMessage,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SeriesCompletedMessage,
+) -> Result<(), tradingview::error::Error> {
     info!("on_series_completed: {:?}", data);
     exit(0);
 }

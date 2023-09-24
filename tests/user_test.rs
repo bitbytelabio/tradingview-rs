@@ -2,8 +2,8 @@
 mod tests {
     use dotenv::dotenv;
     use std::env;
-    use tradingview_rs::error::*;
-    use tradingview_rs::user::*;
+    use tradingview::error::*;
+    use tradingview::user::*;
 
     #[tokio::test]
     #[ignore]
@@ -51,7 +51,7 @@ mod tests {
         let error = result.unwrap_err();
         assert!(matches!(
             error,
-            tradingview_rs::error::Error::LoginError(LoginError::InvalidCredentials)
+            tradingview::error::Error::LoginError(LoginError::InvalidCredentials)
         ));
     }
 
@@ -122,7 +122,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            tradingview_rs::error::Error::LoginError(LoginError::InvalidSession)
+            tradingview::error::Error::LoginError(LoginError::InvalidSession)
         ));
     }
 
@@ -146,7 +146,7 @@ mod tests {
         let error = result.unwrap_err();
         assert!(matches!(
             error,
-            tradingview_rs::error::Error::LoginError(LoginError::InvalidOTPSecret)
+            tradingview::error::Error::LoginError(LoginError::InvalidOTPSecret)
         ));
     }
 }

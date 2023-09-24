@@ -1,7 +1,7 @@
 use dotenv::dotenv;
 use std::env;
 use tracing::info;
-use tradingview_rs::user::User;
+use tradingview::user::User;
 
 #[tokio::main]
 async fn main() {

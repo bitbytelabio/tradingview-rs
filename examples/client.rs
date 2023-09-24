@@ -1,5 +1,5 @@
 use tracing::info;
-use tradingview_rs::models::pine_indicator::*;
+use tradingview::models::pine_indicator::*;
 
 #[tokio::main]
 async fn main() {

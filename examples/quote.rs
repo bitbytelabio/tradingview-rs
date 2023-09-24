@@ -2,10 +2,10 @@ use dotenv::dotenv;
 use std::collections::HashMap;
 use std::env;
 use tracing::{error, info};
-use tradingview_rs::quote::session::{QuoteCallbackFn, WebSocket};
-use tradingview_rs::quote::QuoteValue;
-use tradingview_rs::socket::DataServer;
-type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
+use tradingview::quote::session::{QuoteCallbackFn, WebSocket};
+use tradingview::quote::QuoteValue;
+use tradingview::socket::DataServer;
+type Result<T> = std::result::Result<T, tradingview::error::Error>;
 
 #[tokio::main]
 async fn main() {
@@ -58,7 +58,7 @@ async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<()> {
     Ok(())
 }
 
-async fn on_error(err: tradingview_rs::error::Error) -> Result<()> {
+async fn on_error(err: tradingview::error::Error) -> Result<()> {
     error!("Error: {:#?}", err);
     Ok(())
 }

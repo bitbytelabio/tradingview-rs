@@ -2,7 +2,7 @@ use dotenv::dotenv;
 use std::{collections::HashMap, env, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::{error, info};
-use tradingview_rs::{
+use tradingview::{
     chart::{
         session::{ChartCallbackFn, WebSocket as ChartSocket},
         ChartOptions, ChartSeries,
@@ -109,12 +109,12 @@ async fn main() {
     }
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Error> {
     info!("on_chart_data: {:?}", data);
     Ok(())
 }
 
-async fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview_rs::error::Error> {
+async fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview::error::Error> {
     data.iter().for_each(|(_, v)| {
         let json_string = serde_json::to_string(&v).unwrap();
         info!("{}", json_string);
@@ -122,26 +122,26 @@ async fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview_rs
     Ok(())
 }
 
-async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<(), tradingview_rs::error::Error> {
+async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<(), tradingview::error::Error> {
     info!("Data: {:#?}", msg);
     Ok(())
 }
 
-async fn on_error(err: tradingview_rs::error::Error) -> Result<(), tradingview_rs::error::Error> {
+async fn on_error(err: tradingview::error::Error) -> Result<(), tradingview::error::Error> {
     error!("Error: {:#?}", err);
     Ok(())
 }
 
 async fn on_symbol_resolved(
-    data: tradingview_rs::chart::SymbolInfo,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SymbolInfo,
+) -> Result<(), tradingview::error::Error> {
     info!("on_symbol_resolved: {:?}", data);
     Ok(())
 }
 
 async fn on_series_completed(
-    data: tradingview_rs::chart::SeriesCompletedMessage,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SeriesCompletedMessage,
+) -> Result<(), tradingview::error::Error> {
     info!("on_series_completed: {:?}", data);
     Ok(())
 }

@@ -1,7 +1,7 @@
 use dotenv::dotenv;
 use std::env;
 use tracing::info;
-use tradingview_rs::{
+use tradingview::{
     chart::{
         session::{ChartCallbackFn, WebSocket},
         ChartOptions, ChartSeries, StudyOptions,
@@ -39,7 +39,7 @@ async fn main() {
                 study_config: Some(StudyOptions {
                     script_id: "STD;Fund_total_revenue_fq".to_string(),
                     script_version: "62.0".to_string(),
-                    script_type: tradingview_rs::models::pine_indicator::ScriptType::IntervalScript,
+                    script_type: tradingview::models::pine_indicator::ScriptType::IntervalScript,
                 }),
                 ..Default::default()
             },
@@ -50,7 +50,7 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(_data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+async fn on_chart_data(_data: ChartSeries) -> Result<(), tradingview::error::Error> {
     // info!("on_chart_data: {:?}", data);
     // let end = data.data.first().unwrap().0;
     // info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
@@ -58,15 +58,15 @@ async fn on_chart_data(_data: ChartSeries) -> Result<(), tradingview_rs::error::
 }
 
 async fn on_symbol_resolved(
-    data: tradingview_rs::chart::SymbolInfo,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SymbolInfo,
+) -> Result<(), tradingview::error::Error> {
     info!("on_symbol_resolved: {:?}", data);
     Ok(())
 }
 
 async fn on_series_completed(
-    data: tradingview_rs::chart::SeriesCompletedMessage,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SeriesCompletedMessage,
+) -> Result<(), tradingview::error::Error> {
     info!("on_series_completed: {:?}", data);
     Ok(())
 }

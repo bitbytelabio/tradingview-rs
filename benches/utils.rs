@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tradingview_rs::tools::*;
+use tradingview::tools::*;
 mod data;
 
 fn extract_ohlcv_data_benchmark(c: &mut Criterion) {
