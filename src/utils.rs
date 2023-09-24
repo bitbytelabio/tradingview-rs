@@ -106,12 +106,6 @@ where
     Ok(Message::Text(formatted_message))
 }
 
-pub fn clean_em_tags(text: &str) -> Result<String> {
-    let regex = Regex::new(r"<[^>]*>")?;
-    let cleaned_text = regex.replace_all(text, "");
-    Ok(cleaned_text.to_string())
-}
-
 pub fn symbol_init(
     symbol: &str,
     adjustment: Option<MarketAdjustment>,
@@ -175,22 +169,6 @@ mod tests {
         let session_id = gen_session_id(session_type);
         assert_eq!(session_id.len(), 15); // 2 (session_type) + 1 (_) + 12 (random characters)
         assert!(session_id.starts_with(session_type));
-    }
-
-    #[test]
-    fn test_clean_em_tags() {
-        let list_text = vec![
-            ("<em>AAPL</em>", "AAPL"),
-            (
-                "Direxion Daily <em>AAPL</em> Bear 1X Shares",
-                "Direxion Daily AAPL Bear 1X Shares",
-            ),
-            ("<em>AAPL</em> ALPHA INDEX", "AAPL ALPHA INDEX"),
-        ];
-        for text in list_text {
-            let cleaned_text = clean_em_tags(text.0);
-            assert_eq!(cleaned_text.unwrap(), text.1);
-        }
     }
 
     #[test]

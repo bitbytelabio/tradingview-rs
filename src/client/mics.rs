@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     models::{
         pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
-        Symbol, SymbolSearch, UserCookies,
+        Symbol, SymbolSearch, SymbolSearchType, UserCookies,
     },
     utils::build_request,
     Error, Result,
@@ -29,15 +29,15 @@ async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
 pub async fn search_symbol(
     search: &str,
     exchange: &str,
-    search_type: &str,
+    search_type: &SymbolSearchType,
     start: u64,
     country: &str,
 ) -> Result<SymbolSearch> {
     let search_data: SymbolSearch = get(None, &format!(
-                "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&hl=1&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
+                "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
                 search = search,
                 exchange = exchange,
-                search_type = search_type,
+                search_type = search_type.to_string(),
                 start = start,
                 country = country
             ))
@@ -48,10 +48,10 @@ pub async fn search_symbol(
 }
 
 #[tracing::instrument]
-pub async fn list_symbols(market_type: Option<String>) -> Result<Vec<Symbol>> {
+pub async fn list_symbols(market_type: Option<SymbolSearchType>) -> Result<Vec<Symbol>> {
     let search_type = Arc::new(market_type.unwrap_or_default());
 
-    let search_symbol_reps = search_symbol("", "", &search_type, 0, "").await?;
+    let search_symbol_reps = search_symbol("", "", &(*search_type), 0, "").await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
@@ -66,7 +66,7 @@ pub async fn list_symbols(market_type: Option<String>) -> Result<Vec<Symbol>> {
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            search_symbol("", "", &search_type, i, "")
+            search_symbol("", "", &(*search_type), i, "")
                 .await
                 .map(|resp| resp.symbols)
         });

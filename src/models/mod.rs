@@ -1,3 +1,5 @@
+use std::default;
+
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod pine_indicator;
 
@@ -518,6 +520,36 @@ impl std::fmt::Display for SymbolType {
             SymbolType::Commodity => write!(f, "commodity"),
             SymbolType::Fundamental => write!(f, "fundamental"),
             SymbolType::Spot => write!(f, "spot"),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize)]
+pub enum SymbolSearchType {
+    #[default]
+    All,
+    Stocks,
+    Funds,
+    Futures,
+    Forex,
+    Crypto,
+    Indices,
+    Bonds,
+    Economy,
+}
+
+impl std::fmt::Display for SymbolSearchType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            SymbolSearchType::All => write!(f, "undefined"),
+            SymbolSearchType::Stocks => write!(f, "stocks"),
+            SymbolSearchType::Funds => write!(f, "funds"),
+            SymbolSearchType::Futures => write!(f, "futures"),
+            SymbolSearchType::Forex => write!(f, "forex"),
+            SymbolSearchType::Crypto => write!(f, "crypto"),
+            SymbolSearchType::Indices => write!(f, "index"),
+            SymbolSearchType::Bonds => write!(f, "bond"),
+            SymbolSearchType::Economy => write!(f, "economic"),
         }
     }
 }
