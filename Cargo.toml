@@ -34,7 +34,7 @@ urlencoding = "^2"
 rand = "^0.8"
 regex = "^1"
 tokio-tungstenite = { version = "^0.20", features = [
-    "rustls-tls-native-roots",
+    "rustls-tls-webpki-roots",
 ] }
 tracing = "0.1"
 thiserror = "^1.0"
