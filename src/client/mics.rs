@@ -2,21 +2,27 @@ use std::sync::Arc;
 
 use crate::{
     models::{
-        pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
-        Symbol, SymbolSearch, SymbolSearchType, UserCookies,
+        pine_indicator::{ self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult },
+        Symbol,
+        SymbolSearch,
+        SymbolSearchType,
+        UserCookies,
     },
     utils::build_request,
-    Error, Result,
+    Error,
+    Result,
 };
 use reqwest::Response;
-use tokio::{sync::Semaphore, task::JoinHandle};
+use tokio::{ sync::Semaphore, task::JoinHandle };
 use tracing::debug;
 
 async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
     if let Some(client) = client {
         let cookie = format!(
-            "sessionid={}; sessionid_sign={};",
-            client.session, client.signature
+            "sessionid={}; sessionid_sign={}; device_t={};",
+            client.session,
+            client.signature,
+            client.device_token
         );
         let client = build_request(Some(&cookie))?;
         let response = client.get(url).send().await?;
@@ -31,19 +37,19 @@ pub async fn search_symbol(
     exchange: &str,
     search_type: &SymbolSearchType,
     start: u64,
-    country: &str,
+    country: &str
 ) -> Result<SymbolSearch> {
-    let search_data: SymbolSearch = get(None, &format!(
-                "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
-                search = search,
-                exchange = exchange,
-                search_type = search_type.to_string(),
-                start = start,
-                country = country
-            ))
-            .await?
-            .json()
-            .await?;
+    let search_data: SymbolSearch = get(
+        None,
+        &format!(
+            "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
+            search = search,
+            exchange = exchange,
+            search_type = search_type.to_string(),
+            start = start,
+            country = country
+        )
+    ).await?.json().await?;
     Ok(search_data)
 }
 
@@ -51,7 +57,7 @@ pub async fn search_symbol(
 pub async fn list_symbols(market_type: Option<SymbolSearchType>) -> Result<Vec<Symbol>> {
     let search_type = Arc::new(market_type.unwrap_or_default());
 
-    let search_symbol_reps = search_symbol("", "", &(*search_type), 0, "").await?;
+    let search_symbol_reps = search_symbol("", "", &*search_type, 0, "").await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
@@ -66,9 +72,7 @@ pub async fn list_symbols(market_type: Option<SymbolSearchType>) -> Result<Vec<S
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            search_symbol("", "", &(*search_type), i, "")
-                .await
-                .map(|resp| resp.symbols)
+            search_symbol("", "", &*search_type, i, "").await.map(|resp| resp.symbols)
         });
 
         tasks.push(task);
@@ -87,19 +91,19 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
         Some(client),
         &format!(
             "https://www.tradingview.com/chart-token/?image_url={}&user_id={}",
-            layout_id, client.id
-        ),
-    )
-    .await?
-    .json()
-    .await?;
+            layout_id,
+            client.id
+        )
+    ).await?.json().await?;
 
     match data.get("token") {
         Some(token) => {
             return Ok(match token.as_str() {
                 Some(token) => token.to_string(),
-                None => return Err(Error::NoChartTokenFound),
-            })
+                None => {
+                    return Err(Error::NoChartTokenFound);
+                }
+            });
         }
         None => panic!("{:?}", "No token found"),
     }
@@ -110,20 +114,19 @@ pub async fn get_drawing<T>(
     client: &UserCookies,
     layout_id: &str,
     symbol: &str,
-    chart_id: T,
+    chart_id: T
 ) -> Result<serde_json::Value>
-where
-    T: std::fmt::Display + std::fmt::Debug,
+    where T: std::fmt::Display + std::fmt::Debug
 {
     let token = get_chart_token(client, layout_id).await?;
     debug!("Chart token: {}", token);
     let url = format!(
-            "https://charts-storage.tradingview.com/charts-storage/get/layout/{layout_id}/sources?chart_id={chart_id}&jwt={token}&symbol={symbol}",
-            layout_id = layout_id,
-            chart_id = chart_id,
-            token = token,
-            symbol = symbol
-        );
+        "https://charts-storage.tradingview.com/charts-storage/get/layout/{layout_id}/sources?chart_id={chart_id}&jwt={token}&symbol={symbol}",
+        layout_id = layout_id,
+        chart_id = chart_id,
+        token = token,
+        symbol = symbol
+    );
 
     Ok(get(Some(client), &url).await?.json().await?)
 }
@@ -132,11 +135,8 @@ where
 pub async fn get_private_indicators(client: &UserCookies) -> Result<Vec<PineInfo>> {
     let indicators = get(
         Some(client),
-        "https://pine-facade.tradingview.com/pine-facade/list?filter=saved",
-    )
-    .await?
-    .json::<Vec<PineInfo>>()
-    .await?;
+        "https://pine-facade.tradingview.com/pine-facade/list?filter=saved"
+    ).await?.json::<Vec<PineInfo>>().await?;
     Ok(indicators)
 }
 
@@ -153,10 +153,8 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
     let mut tasks: Vec<JoinHandle<Result<Vec<PineInfo>>>> = Vec::new();
 
     for indicator_type in indicator_types {
-        let url = format!(
-            "https://pine-facade.tradingview.com/pine-facade/list/?filter={}",
-            indicator_type
-        );
+        let url =
+            format!("https://pine-facade.tradingview.com/pine-facade/list/?filter={}", indicator_type);
         let task = tokio::spawn(async move {
             let data = get(None, &url).await?.json::<Vec<PineInfo>>().await?;
             Ok(data)
@@ -176,11 +174,12 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
 pub async fn search_indicator(
     client: Option<&UserCookies>,
     search: &str,
-    offset: i32,
+    offset: i32
 ) -> Result<Vec<PineSearchResult>> {
     let url = format!(
         "https://www.tradingview.com/pubscripts-suggest-json/?search={}&offset={}",
-        search, offset
+        search,
+        offset
     );
     let resp: pine_indicator::SearchResponse = get(client, &url).await?.json().await?;
     debug!("Response: {:?}", resp);
@@ -196,7 +195,7 @@ pub async fn search_indicator(
 pub async fn get_indicator_metadata(
     client: Option<&UserCookies>,
     pinescript_id: &str,
-    pinescript_version: &str,
+    pinescript_version: &str
 ) -> Result<PineMetadata> {
     use urlencoding::encode;
     let url = format!(
@@ -211,7 +210,5 @@ pub async fn get_indicator_metadata(
         return Ok(resp.result);
     }
 
-    Err(Error::Generic(
-        "Failed to get indicator metadata".to_string(),
-    ))
+    Err(Error::Generic("Failed to get indicator metadata".to_string()))
 }

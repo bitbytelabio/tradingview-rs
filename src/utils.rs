@@ -1,22 +1,19 @@
 #![allow(dead_code)]
 use crate::{
-    models::{MarketAdjustment, SessionType},
-    socket::{SocketMessage, SocketMessageDe},
+    models::{ MarketAdjustment, SessionType },
+    socket::{ SocketMessage, SocketMessageDe },
     Result,
 };
-use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
+use base64::engine::{ general_purpose::STANDARD as BASE64, Engine as _ };
 use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
+use reqwest::header::{ HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER };
 use serde::Serialize;
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    io::{prelude::*, Cursor},
-};
+use std::{ collections::HashMap, io::{ prelude::*, Cursor } };
 use tokio_tungstenite::tungstenite::protocol::Message;
-use tracing::{debug, error};
+use tracing::{ debug, error };
 use zip::ZipArchive;
 
 lazy_static::lazy_static! {
@@ -26,28 +23,25 @@ lazy_static::lazy_static! {
 
 #[macro_export]
 macro_rules! payload {
-    ($($payload:expr),*) => {{
+    ($($payload:expr),*) => {
+        {
         let payload_vec = vec![$(serde_json::Value::from($payload)),*];
         payload_vec
-    }};
+        }
+    };
 }
 
 pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-    headers.insert(
-        ORIGIN,
-        HeaderValue::from_static("https://www.tradingview.com"),
-    );
-    headers.insert(
-        REFERER,
-        HeaderValue::from_static("https://www.tradingview.com/"),
-    );
+    headers.insert(ORIGIN, HeaderValue::from_static("https://www.tradingview.com"));
+    headers.insert(REFERER, HeaderValue::from_static("https://www.tradingview.com/"));
     if let Some(cookie) = cookie {
         headers.insert(COOKIE, HeaderValue::from_str(cookie)?);
     }
 
-    let client = reqwest::Client::builder()
+    let client = reqwest::Client
+        ::builder()
         .use_rustls_tls()
         .default_headers(headers)
         .https_only(true)
@@ -77,18 +71,19 @@ pub fn parse_packet(message: &str) -> Result<Vec<SocketMessage<SocketMessageDe>>
     }
 
     let cleaned_message = CLEANER_REGEX.replace_all(message, "");
-    let packets: Vec<SocketMessage<SocketMessageDe>> = SPLITTER_REGEX
-        .split(&cleaned_message)
+    let packets: Vec<SocketMessage<SocketMessageDe>> = SPLITTER_REGEX.split(&cleaned_message)
         .filter(|packet| !packet.is_empty())
-        .map(|packet| match serde_json::from_str(packet) {
-            Ok(value) => value,
-            Err(error) => {
-                if error.is_syntax() {
-                    error!("error parsing packet: invalid JSON: {}", error);
-                } else {
-                    error!("error parsing packet: {}", error);
+        .map(|packet| {
+            match serde_json::from_str(packet) {
+                Ok(value) => value,
+                Err(error) => {
+                    if error.is_syntax() {
+                        error!("error parsing packet: invalid JSON: {}", error);
+                    } else {
+                        error!("error parsing packet: {}", error);
+                    }
+                    SocketMessage::Unknown(packet.to_string())
                 }
-                SocketMessage::Unknown(packet.to_string())
             }
         })
         .collect();
@@ -96,10 +91,7 @@ pub fn parse_packet(message: &str) -> Result<Vec<SocketMessage<SocketMessageDe>>
     Ok(packets)
 }
 
-pub fn format_packet<T>(packet: T) -> Result<Message>
-where
-    T: Serialize,
-{
+pub fn format_packet<T>(packet: T) -> Result<Message> where T: Serialize {
     let json_string = serde_json::to_string(&packet)?;
     let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
     debug!("Formatted packet: {}", formatted_message);
@@ -111,7 +103,7 @@ pub fn symbol_init(
     adjustment: Option<MarketAdjustment>,
     currency: Option<Currency>,
     session_type: Option<SessionType>,
-    replay: Option<String>,
+    replay: Option<String>
 ) -> Result<String> {
     let mut symbol_init: HashMap<String, String> = HashMap::new();
     if let Some(s) = replay {
@@ -145,17 +137,14 @@ pub fn parse_compressed(data: &str) -> Result<Value> {
 mod tests {
     use serde_json::json;
 
-    use crate::{
-        models::{MarketAdjustment, SessionType},
-        utils::*,
-    };
+    use crate::{ models::{ MarketAdjustment, SessionType }, utils::* };
     #[test]
     fn test_parse_packet() {
         let current_dir = std::env::current_dir().unwrap().display().to_string();
         println!("Current dir: {}", current_dir);
-        let messages =
-            std::fs::read_to_string(format!("{}/tests/data/socket_messages.txt", current_dir))
-                .unwrap();
+        let messages = std::fs
+            ::read_to_string(format!("{}/tests/data/socket_messages.txt", current_dir))
+            .unwrap();
         let result = parse_packet(messages.as_str());
 
         assert!(result.is_ok());
@@ -182,11 +171,12 @@ mod tests {
             Some(MarketAdjustment::Dividends),
             Some(iso_currency::Currency::USD),
             Some(SessionType::Extended),
-            Some("aaaaaaaaaaaa".to_string()),
+            Some("aaaaaaaaaaaa".to_string())
         );
         assert!(test2.is_ok());
         let test2_json: Value = serde_json::from_str(&test2.unwrap().replace("=", "")).unwrap();
-        let expected2_json = json!({
+        let expected2_json =
+            json!({
             "adjustment": "dividends",
             "currency-id": "USD",
             "replay": "aaaaaaaaaaaa",

@@ -2,10 +2,7 @@ use dotenv::dotenv;
 use std::env;
 use tracing::info;
 use tradingview::{
-    chart::{
-        session::{ChartCallbackFn, WebSocket},
-        ChartOptions, ChartSeries,
-    },
+    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeries },
     models::Interval,
     socket::DataServer,
 };
@@ -26,22 +23,17 @@ async fn main() {
     let mut socket = WebSocket::build()
         .server(DataServer::ProData)
         .auth_token(auth_token)
-        .connect(handlers)
-        .await
+        .connect(handlers).await
         .unwrap();
 
     socket
-        .set_market(
-            "BINANCE:BTCUSDT",
-            ChartOptions {
-                resolution: Interval::OneMinute,
-                bar_count: 50_000,
-                replay_mode: Some(true),
-                replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
-                ..Default::default()
-            },
-        )
-        .await
+        .set_market("BINANCE:BTCUSDT", ChartOptions {
+            resolution: Interval::OneMinute,
+            bar_count: 50_000,
+            replay_mode: Some(true),
+            replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
+            ..Default::default()
+        }).await
         .unwrap();
 
     // socket
@@ -76,14 +68,14 @@ async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Erro
 }
 
 async fn on_symbol_resolved(
-    data: tradingview::chart::SymbolInfo,
+    data: tradingview::chart::SymbolInfo
 ) -> Result<(), tradingview::error::Error> {
     info!("on_symbol_resolved: {:?}", data);
     Ok(())
 }
 
 async fn on_series_completed(
-    data: tradingview::chart::SeriesCompletedMessage,
+    data: tradingview::chart::SeriesCompletedMessage
 ) -> Result<(), tradingview::error::Error> {
     info!("on_series_completed: {:?}", data);
     Ok(())

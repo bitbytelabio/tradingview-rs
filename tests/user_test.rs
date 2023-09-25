@@ -49,10 +49,9 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(
-            error,
-            tradingview::error::Error::LoginError(LoginError::InvalidCredentials)
-        ));
+        assert!(
+            matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidCredentials))
+        );
     }
 
     #[tokio::test]
@@ -66,11 +65,7 @@ mod tests {
         let password = env::var("TV_TOTP_PASSWORD").unwrap();
         let totp = env::var("TV_TOTP_SECRET").unwrap();
 
-        let result = User::build()
-            .credentials(&username, &password)
-            .totp_secret(&totp)
-            .get()
-            .await;
+        let result = User::build().credentials(&username, &password).totp_secret(&totp).get().await;
 
         assert!(result.is_ok());
         let user = result.unwrap();
@@ -114,16 +109,12 @@ mod tests {
 
         let result = User::build()
             .session("invalid_session", "invalid_session_signature")
-            .get()
-            .await;
+            .get().await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
 
-        assert!(matches!(
-            error,
-            tradingview::error::Error::LoginError(LoginError::InvalidSession)
-        ));
+        assert!(matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidSession)));
     }
 
     #[tokio::test]
@@ -139,14 +130,12 @@ mod tests {
         let result = User::build()
             .credentials(&username, &password)
             .totp_secret("ZTIXV4KTRISK4KK7")
-            .get()
-            .await;
+            .get().await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(
-            error,
-            tradingview::error::Error::LoginError(LoginError::InvalidOTPSecret)
-        ));
+        assert!(
+            matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidOTPSecret))
+        );
     }
 }

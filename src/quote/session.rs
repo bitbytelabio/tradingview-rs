@@ -1,17 +1,23 @@
 use crate::{
     error::TradingViewError,
     payload,
-    quote::{QuoteData, QuoteValue, ALL_QUOTE_FIELDS},
+    quote::{ QuoteData, QuoteValue, ALL_QUOTE_FIELDS },
     socket::{
-        AsyncCallback, DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent,
+        AsyncCallback,
+        DataServer,
+        Socket,
+        SocketMessageDe,
+        SocketSession,
+        TradingViewDataEvent,
     },
     utils::gen_session_id,
-    Error, Result,
+    Error,
+    Result,
 };
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{debug, error, trace};
+use tracing::{ debug, error, trace };
 
 #[derive(Default)]
 pub struct WebSocketsBuilder {
@@ -45,23 +51,14 @@ fn merge_quotes(quote_old: &QuoteValue, quote_new: &QuoteValue) -> QuoteValue {
         price: quote_new.price.or(quote_old.price),
         timestamp: quote_new.timestamp.or(quote_old.timestamp),
         volume: quote_new.volume.or(quote_old.volume),
-        description: quote_new
-            .description
-            .clone()
-            .or(quote_old.description.clone()),
+        description: quote_new.description.clone().or(quote_old.description.clone()),
         country: quote_new.country.clone().or(quote_old.country.clone()),
         currency: quote_new.currency.clone().or(quote_old.currency.clone()),
-        data_provider: quote_new
-            .data_provider
-            .clone()
-            .or(quote_old.data_provider.clone()),
+        data_provider: quote_new.data_provider.clone().or(quote_old.data_provider.clone()),
         symbol: quote_new.symbol.clone().or(quote_old.symbol.clone()),
         symbol_id: quote_new.symbol_id.clone().or(quote_old.symbol_id.clone()),
         exchange: quote_new.exchange.clone().or(quote_old.exchange.clone()),
-        market_type: quote_new
-            .market_type
-            .clone()
-            .or(quote_old.market_type.clone()),
+        market_type: quote_new.market_type.clone().or(quote_old.market_type.clone()),
     }
 }
 
@@ -93,10 +90,7 @@ impl WebSocketsBuilder {
     }
 
     pub async fn connect(&self, callback: QuoteCallbackFn) -> Result<WebSocket> {
-        let auth_token = self
-            .auth_token
-            .clone()
-            .unwrap_or("unauthorized_user_token".to_string());
+        let auth_token = self.auth_token.clone().unwrap_or("unauthorized_user_token".to_string());
 
         let server = self.server.clone().unwrap_or_default();
 
@@ -115,8 +109,7 @@ impl WebSocketsBuilder {
             }
         };
 
-        let socket = self
-            .socket
+        let socket = self.socket
             .clone()
             .unwrap_or(SocketSession::new(server, auth_token.clone()).await?);
 
@@ -137,41 +130,24 @@ impl WebSocket {
     }
 
     pub async fn create_session(&mut self) -> Result<()> {
-        self.socket
-            .send(
-                "quote_create_session",
-                &payload!(self.quote_session_id.clone()),
-            )
-            .await?;
+        self.socket.send("quote_create_session", &payload!(self.quote_session_id.clone())).await?;
         Ok(())
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.socket
-            .send(
-                "quote_delete_session",
-                &payload!(self.quote_session_id.clone()),
-            )
-            .await?;
+        self.socket.send("quote_delete_session", &payload!(self.quote_session_id.clone())).await?;
         Ok(())
     }
 
     pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
         self.quote_session_id = gen_session_id("qs");
-        self.socket
-            .send(
-                "quote_create_session",
-                &payload!(self.quote_session_id.clone()),
-            )
-            .await?;
+        self.socket.send("quote_create_session", &payload!(self.quote_session_id.clone())).await?;
         Ok(())
     }
 
     pub async fn set_fields(&mut self) -> Result<()> {
-        self.socket
-            .send("quote_set_fields", &self.quote_fields.clone())
-            .await?;
+        self.socket.send("quote_set_fields", &self.quote_fields.clone()).await?;
         Ok(())
     }
 
@@ -184,9 +160,7 @@ impl WebSocket {
 
     pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = auth_token.to_owned();
-        self.socket
-            .send("set_auth_token", &payload!(auth_token))
-            .await?;
+        self.socket.send("set_auth_token", &payload!(auth_token)).await?;
         Ok(())
     }
 
@@ -225,10 +199,9 @@ impl Socket for WebSocket {
                     (self.callbacks.data)(self.prev_quotes.clone()).await?;
                     return Ok(());
                 } else {
-                    (self.callbacks.error)(Error::TradingViewError(
-                        TradingViewError::QuoteDataStatusError,
-                    ))
-                    .await?;
+                    (self.callbacks.error)(
+                        Error::TradingViewError(TradingViewError::QuoteDataStatusError)
+                    ).await?;
                     return Ok(());
                 }
             }
@@ -241,7 +214,7 @@ impl Socket for WebSocket {
             _ => {
                 debug!("unhandled event on this session: {:?}", message);
             }
-        };
+        }
         Ok(())
     }
 

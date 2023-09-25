@@ -32,7 +32,7 @@ pub struct UserCookies {
     pub session: String,
     pub session_hash: String,
     pub signature: String,
-    pub device_id: String,
+    pub device_token: String,
     pub join_date: String,
 }
 

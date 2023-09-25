@@ -9,11 +9,15 @@ pub mod socket;
 pub mod user;
 
 mod utils;
-static UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36";
+static UA: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36";
 
 pub mod tools {
     pub use crate::chart::utils::{
-        extract_ohlcv_data, par_extract_ohlcv_data, sort_ohlcv_tuples, update_ohlcv_data,
+        extract_ohlcv_data,
+        par_extract_ohlcv_data,
+        sort_ohlcv_tuples,
+        update_ohlcv_data,
         update_ohlcv_data_point,
     };
 }

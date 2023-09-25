@@ -1,8 +1,8 @@
 use dotenv::dotenv;
 use std::collections::HashMap;
 use std::env;
-use tracing::{error, info};
-use tradingview::quote::session::{QuoteCallbackFn, WebSocket};
+use tracing::{ error, info };
+use tradingview::quote::session::{ QuoteCallbackFn, WebSocket };
 use tradingview::quote::QuoteValue;
 use tradingview::socket::DataServer;
 type Result<T> = std::result::Result<T, tradingview::error::Error>;
@@ -23,23 +23,23 @@ async fn main() {
     let mut socket = WebSocket::build()
         .server(DataServer::ProData)
         .auth_token(auth_token)
-        .connect(handlers)
-        .await
+        .connect(handlers).await
         .unwrap();
 
     socket.create_session().await.unwrap();
     socket.set_fields().await.unwrap();
 
     socket
-        .add_symbols(vec![
-            "SP:SPX",
-            "BINANCE:BTCUSDT",
-            "BINANCE:ETHUSDT",
-            "BITSTAMP:ETHUSD",
-            "NASDAQ:TSLA",
-            // "BINANCE:B",
-        ])
-        .await
+        .add_symbols(
+            vec![
+                "SP:SPX",
+                "BINANCE:BTCUSDT",
+                "BINANCE:ETHUSDT",
+                "BITSTAMP:ETHUSD",
+                "NASDAQ:TSLA"
+                // "BINANCE:B",
+            ]
+        ).await
         .unwrap();
 
     socket.subscribe().await;

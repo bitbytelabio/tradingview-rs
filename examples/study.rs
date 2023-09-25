@@ -2,10 +2,7 @@ use dotenv::dotenv;
 use std::env;
 use tracing::info;
 use tradingview::{
-    chart::{
-        session::{ChartCallbackFn, WebSocket},
-        ChartOptions, ChartSeries, StudyOptions,
-    },
+    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeries, StudyOptions },
     models::Interval,
     socket::DataServer,
 };
@@ -26,25 +23,20 @@ async fn main() {
     let mut socket = WebSocket::build()
         .server(DataServer::ProData)
         .auth_token(auth_token)
-        .connect(handlers)
-        .await
+        .connect(handlers).await
         .unwrap();
 
     socket
-        .set_market(
-            "HOSE:FPT",
-            ChartOptions {
-                resolution: Interval::Daily,
-                bar_count: 1,
-                study_config: Some(StudyOptions {
-                    script_id: "STD;Fund_total_revenue_fq".to_string(),
-                    script_version: "62.0".to_string(),
-                    script_type: tradingview::models::pine_indicator::ScriptType::IntervalScript,
-                }),
-                ..Default::default()
-            },
-        )
-        .await
+        .set_market("HOSE:FPT", ChartOptions {
+            resolution: Interval::Daily,
+            bar_count: 1,
+            study_config: Some(StudyOptions {
+                script_id: "STD;Fund_total_revenue_fq".to_string(),
+                script_version: "62.0".to_string(),
+                script_type: tradingview::models::pine_indicator::ScriptType::IntervalScript,
+            }),
+            ..Default::default()
+        }).await
         .unwrap();
 
     socket.subscribe().await;
@@ -58,14 +50,14 @@ async fn on_chart_data(_data: ChartSeries) -> Result<(), tradingview::error::Err
 }
 
 async fn on_symbol_resolved(
-    data: tradingview::chart::SymbolInfo,
+    data: tradingview::chart::SymbolInfo
 ) -> Result<(), tradingview::error::Error> {
     info!("on_symbol_resolved: {:?}", data);
     Ok(())
 }
 
 async fn on_series_completed(
-    data: tradingview::chart::SeriesCompletedMessage,
+    data: tradingview::chart::SeriesCompletedMessage
 ) -> Result<(), tradingview::error::Error> {
     info!("on_series_completed: {:?}", data);
     Ok(())

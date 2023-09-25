@@ -31,7 +31,7 @@ pub struct User {
     #[serde(skip_deserializing)]
     pub signature: String,
     #[serde(skip_deserializing)]
-    pub device_id: String,
+    pub device_token: String,
     #[serde(skip_deserializing)]
     pub is_pro: bool,
 }
@@ -53,7 +53,7 @@ pub struct UserBuilder {
     session_hash: Option<String>,
     session: Option<String>,
     signature: Option<String>,
-    device_id: Option<String>,
+    device_token: Option<String>,
 }
 
 impl UserBuilder {
@@ -94,7 +94,7 @@ impl UserBuilder {
             session_hash: self.session_hash.take().unwrap_or_default(),
             session: self.session.take().unwrap_or_default(),
             signature: self.signature.take().unwrap_or_default(),
-            device_id: self.device_id.take().unwrap_or_default(),
+            device_token: self.device_token.take().unwrap_or_default(),
         };
 
         if !user.session.is_empty() && !user.signature.is_empty() {
@@ -132,7 +132,7 @@ impl User {
             .send()
             .await?;
 
-        let (session, signature, device_id) =
+        let (session, signature, device_token) =
             response
                 .cookies()
                 .fold((None, None, None), |session_cookies, cookie| {
@@ -183,7 +183,7 @@ impl User {
             )
             .await?;
 
-            let (session, signature, device_id) =
+            let (session, signature, device_token) =
                 response
                     .cookies()
                     .fold((None, None, None), |session_cookies, cookie| {
@@ -217,7 +217,7 @@ impl User {
             return Ok(User {
                 session: session.unwrap_or_default(),
                 signature: signature.unwrap_or_default(),
-                device_id: device_id.unwrap_or_default(),
+                device_token: device_token.unwrap_or_default(),
                 ..user
             });
         } else {
@@ -228,7 +228,7 @@ impl User {
         Ok(User {
             session: session.unwrap_or_default(),
             signature: signature.unwrap_or_default(),
-            device_id: device_id.unwrap_or_default(),
+            device_token: device_token.unwrap_or_default(),
             ..user
         })
     }
@@ -285,7 +285,7 @@ impl User {
             COOKIE,
             HeaderValue::from_str(&format!(
                 "sessionid={}; sessionid_sign={}; device_t={}",
-                self.session, self.signature, self.device_id
+                self.session, self.signature, self.device_token
             ))?,
         );
 
@@ -349,7 +349,7 @@ impl User {
                 is_pro: self.is_pro,
                 session: self.session.clone(),
                 signature: self.signature.clone(),
-                device_id: self.device_id.clone(),
+                device_token: self.device_token.clone(),
                 password: self.password.clone(),
                 totp_secret: self.totp_secret.clone(),
             });
