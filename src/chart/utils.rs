@@ -103,8 +103,8 @@ pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
 /// # Example
 ///
 /// ```
-/// use tradingview_rs::tools::update_ohlcv_data;
-/// use tradingview_rs::models::OHLCV;
+/// use tradingview::tools::update_ohlcv_data;
+/// use tradingview::models::OHLCV;
 ///
 /// ```
 pub fn update_ohlcv_data(old_data: &mut Vec<OHLCV>, new_data: &Vec<OHLCV>) {
