@@ -4,8 +4,8 @@ use crate::{
     models::{
         pine_indicator::{ self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult },
         Symbol,
-        SymbolSearch,
-        SymbolSearchType,
+        SymbolSearchResponse,
+        SymbolMarketType,
         UserCookies,
     },
     utils::build_request,
@@ -15,7 +15,18 @@ use crate::{
 use reqwest::Response;
 use tokio::{ sync::Semaphore, task::JoinHandle };
 use tracing::debug;
+use serde_json::Value;
 
+/// Sends an HTTP GET request to the specified URL using the provided client and returns the response.
+///
+/// # Arguments
+///
+/// * `client` - An optional reference to a `UserCookies` struct representing the client to use for the request.
+/// * `url` - A string slice representing the URL to send the request to.
+///
+/// # Returns
+///
+/// A `Result` containing a `Response` struct representing the response from the server, or an error if the request failed.
 async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
     if let Some(client) = client {
         let cookie = format!(
@@ -31,33 +42,76 @@ async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
     Ok(build_request(None)?.get(url).send().await?)
 }
 
+/// Searches for a symbol using the specified search parameters.
+///
+/// # Arguments
+///
+/// * `search` - A string slice representing the search query.
+/// * `exchange` - A string slice representing the exchange to search in.
+/// * `market_type` - A `SymbolMarketType` enum representing the type of market to search in.
+/// * `start` - An unsigned 64-bit integer representing the starting index of the search results.
+/// * `country` - A string slice representing the country to search in.
+/// * `domain` - A string slice representing the domain to search in. Defaults to "production" if empty.
+///
+/// # Returns
+///
+/// A `Result` containing a `SymbolSearchResponse` struct representing the search results, or an error if the search failed.
 #[tracing::instrument]
 pub async fn search_symbol(
     search: &str,
     exchange: &str,
-    search_type: &SymbolSearchType,
+    market_type: &SymbolMarketType,
     start: u64,
-    country: &str
-) -> Result<SymbolSearch> {
-    let search_data: SymbolSearch = get(
+    country: &str,
+    domain: &str
+) -> Result<SymbolSearchResponse> {
+    let search_data: SymbolSearchResponse = get(
         None,
         &format!(
-            "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain=production&sort_by_country={country}",
+            "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain={domain}&sort_by_country={country}",
             search = search,
             exchange = exchange,
-            search_type = search_type.to_string(),
+            search_type = market_type.to_string(),
             start = start,
-            country = country
+            country = country,
+            domain = if domain.is_empty() { "production" } else { domain }
         )
     ).await?.json().await?;
     Ok(search_data)
 }
 
+/// Lists symbols based on the specified search parameters.
+///
+/// # Arguments
+///
+/// * `exchange` - An optional string representing the exchange to search in.
+/// * `market_type` - An optional `SymbolMarketType` enum representing the type of market to search in.
+/// * `country` - An optional string representing the country to search in.
+/// * `domain` - An optional string representing the domain to search in.
+///
+/// # Returns
+///
+/// A `Result` containing a vector of `Symbol` structs representing the search results, or an error if the search failed.
 #[tracing::instrument]
-pub async fn list_symbols(market_type: Option<SymbolSearchType>) -> Result<Vec<Symbol>> {
-    let search_type = Arc::new(market_type.unwrap_or_default());
+pub async fn list_symbols(
+    exchange: Option<String>,
+    market_type: Option<SymbolMarketType>,
+    country: Option<String>,
+    domain: Option<String>
+) -> Result<Vec<Symbol>> {
+    let market_type: Arc<SymbolMarketType> = Arc::new(market_type.unwrap_or_default());
+    let exchange: Arc<String> = Arc::new(exchange.unwrap_or("".to_string()));
+    let country = Arc::new(country.unwrap_or("".to_string()));
+    let domain = Arc::new(domain.unwrap_or("".to_string()));
 
-    let search_symbol_reps = search_symbol("", "", &*search_type, 0, "").await?;
+    let search_symbol_reps = search_symbol(
+        "",
+        &*exchange,
+        &*market_type,
+        0,
+        &*country,
+        &*domain
+    ).await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
@@ -67,12 +121,17 @@ pub async fn list_symbols(market_type: Option<SymbolSearchType>) -> Result<Vec<S
     let mut tasks = Vec::new();
 
     for i in (50..remaining).step_by(50) {
-        let search_type = Arc::clone(&search_type);
+        let market_type = Arc::clone(&market_type);
+        let exchange = Arc::clone(&exchange);
+        let country = Arc::clone(&country);
+        let domain = Arc::clone(&domain);
         let semaphore = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            search_symbol("", "", &*search_type, i, "").await.map(|resp| resp.symbols)
+            search_symbol("", &*exchange, &*market_type, i, &*country, &*domain).await.map(
+                |resp| resp.symbols
+            )
         });
 
         tasks.push(task);
@@ -85,9 +144,19 @@ pub async fn list_symbols(market_type: Option<SymbolSearchType>) -> Result<Vec<S
     Ok(symbols)
 }
 
+/// Retrieves a chart token for the specified layout ID using the provided client.
+///
+/// # Arguments
+///
+/// * `client` - A reference to a `UserCookies` struct representing the client to use for the request.
+/// * `layout_id` - A string slice representing the layout ID to retrieve the chart token for.
+///
+/// # Returns
+///
+/// A `Result` containing a string representing the chart token, or an error if the token could not be retrieved.
 #[tracing::instrument(skip(client))]
 pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<String> {
-    let data: serde_json::Value = get(
+    let data: Value = get(
         Some(client),
         &format!(
             "https://www.tradingview.com/chart-token/?image_url={}&user_id={}",
@@ -105,7 +174,9 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
                 }
             });
         }
-        None => panic!("{:?}", "No token found"),
+        None => {
+            return Err(Error::NoChartTokenFound);
+        }
     }
 }
 
@@ -115,7 +186,7 @@ pub async fn get_drawing<T>(
     layout_id: &str,
     symbol: &str,
     chart_id: T
-) -> Result<serde_json::Value>
+) -> Result<Value>
     where T: std::fmt::Display + std::fmt::Debug
 {
     let token = get_chart_token(client, layout_id).await?;
@@ -128,7 +199,9 @@ pub async fn get_drawing<T>(
         symbol = symbol
     );
 
-    Ok(get(Some(client), &url).await?.json().await?)
+    let response_data: Value = get(Some(client), &url).await?.json().await?;
+
+    Ok(response_data)
 }
 
 #[tracing::instrument(skip(client))]
@@ -140,6 +213,15 @@ pub async fn get_private_indicators(client: &UserCookies) -> Result<Vec<PineInfo
     Ok(indicators)
 }
 
+// Retrieves a list of built-in indicators of the specified type.
+///
+/// # Arguments
+///
+/// * `indicator_type` - A `BuiltinIndicators` enum representing the type of built-in indicators to retrieve.
+///
+/// # Returns
+///
+/// A `Result` containing a vector of `PineInfo` structs representing the built-in indicators, or an error if the indicators could not be retrieved.
 #[tracing::instrument]
 pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result<Vec<PineInfo>> {
     let indicator_types = match indicator_type {

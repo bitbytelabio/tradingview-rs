@@ -37,7 +37,7 @@ pub struct UserCookies {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct SymbolSearch {
+pub struct SymbolSearchResponse {
     #[serde(rename(deserialize = "symbols_remaining"))]
     pub remaining: u64,
     pub symbols: Vec<Symbol>,
@@ -522,8 +522,8 @@ impl std::fmt::Display for SymbolType {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize)]
-pub enum SymbolSearchType {
+#[derive(Default, Debug, Clone, Copy, Serialize)]
+pub enum SymbolMarketType {
     #[default]
     All,
     Stocks,
@@ -536,18 +536,18 @@ pub enum SymbolSearchType {
     Economy,
 }
 
-impl std::fmt::Display for SymbolSearchType {
+impl std::fmt::Display for SymbolMarketType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            SymbolSearchType::All => write!(f, "undefined"),
-            SymbolSearchType::Stocks => write!(f, "stocks"),
-            SymbolSearchType::Funds => write!(f, "funds"),
-            SymbolSearchType::Futures => write!(f, "futures"),
-            SymbolSearchType::Forex => write!(f, "forex"),
-            SymbolSearchType::Crypto => write!(f, "crypto"),
-            SymbolSearchType::Indices => write!(f, "index"),
-            SymbolSearchType::Bonds => write!(f, "bond"),
-            SymbolSearchType::Economy => write!(f, "economic"),
+            SymbolMarketType::All => write!(f, "undefined"),
+            SymbolMarketType::Stocks => write!(f, "stocks"),
+            SymbolMarketType::Funds => write!(f, "funds"),
+            SymbolMarketType::Futures => write!(f, "futures"),
+            SymbolMarketType::Forex => write!(f, "forex"),
+            SymbolMarketType::Crypto => write!(f, "crypto"),
+            SymbolMarketType::Indices => write!(f, "index"),
+            SymbolMarketType::Bonds => write!(f, "bond"),
+            SymbolMarketType::Economy => write!(f, "economic"),
         }
     }
 }

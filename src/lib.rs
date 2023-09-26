@@ -22,7 +22,9 @@ pub mod tools {
     };
 }
 
-pub mod api {}
+pub mod api {
+    pub use crate::client::mics::search_symbol;
+}
 
 pub use crate::error::Error;
 
