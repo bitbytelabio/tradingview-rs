@@ -16,7 +16,7 @@ Accept: application/json
 
 ```http
 GET /pine-facade/list?filter=candlestick HTTP/1.1
-Host: pine-facade.tradingview.com
+Host: pine-facade.tradingview.com{{host}}
 Accept: application/json
 ```
 
