@@ -1,5 +1,5 @@
 pub mod session;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Deserializer, Serialize };
 
 lazy_static::lazy_static! {
     pub static ref ALL_QUOTE_FIELDS: Vec<&'static str> = vec![
@@ -50,7 +50,7 @@ lazy_static::lazy_static! {
         "dividends_yield",
         "timezone",
         "country",
-        "provider_id",
+        "provider_id"
     ];
 }
 
@@ -88,7 +88,7 @@ pub struct QuoteValue {
     pub prev_close: Option<f64>,
     #[serde(default, rename(deserialize = "lp"))]
     pub price: Option<f64>,
-    #[serde(default, rename(deserialize = "lp_time"))]
+    #[serde(default, rename(deserialize = "lp_time"), deserialize_with = "deserialize_timestamp")]
     pub timestamp: Option<i64>,
     #[serde(default)]
     pub volume: Option<f64>,
@@ -108,4 +108,11 @@ pub struct QuoteValue {
     pub exchange: Option<String>,
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: Option<String>,
+}
+
+fn deserialize_timestamp<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+    where D: Deserializer<'de>
+{
+    let timestamp_seconds: Option<i64> = Option::deserialize(deserializer)?;
+    Ok(timestamp_seconds.map(|s| s * 1000))
 }

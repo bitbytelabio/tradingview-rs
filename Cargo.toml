@@ -1,6 +1,6 @@
 [package]
 name = "tradingview-rs"
-authors = ["Bit Byte Lab Developers <dev.team@bitbytelab.io>"]
+authors = ["Nguyen Thanh Dat <dat.nguyen@bitbytelab.io>"]
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
@@ -8,13 +8,17 @@ repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
 
+[lib]
+name = "tradingview"
+path = "src/lib.rs"
+
 [features]
-user = []
+user = ["dep:google-authenticator"]
 
 [dependencies]
-tokio = { version = "^1", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1.0" }
+serde_json = { version = "1" }
 reqwest = { version = "0.11", features = [
     "rustls-tls",
     "json",
@@ -29,13 +33,10 @@ url = "^2"
 urlencoding = "^2"
 rand = "^0.8"
 regex = "^1"
-google-authenticator = "^0.4"
 tokio-tungstenite = { version = "^0.20", features = [
-    "rustls-tls-native-roots",
+    "rustls-tls-webpki-roots",
 ] }
 tracing = "0.1"
-tracing-subscriber = "0.3"
-tracing-appender = "0.2"
 thiserror = "^1.0"
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
@@ -46,12 +47,20 @@ iso_currency = { version = "0.4", features = ["with-serde"] }
 zip = "^0.6"
 base64 = "^0.21"
 rayon = "^1"
+google-authenticator = { version = "^0.4", optional = true }
 
 [dev-dependencies]
+polars = { version = "^0.33" }
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
-polars = { version = "^0.32", features = ["polars-io"] }
+dotenv = "0.15.0"
+tracing-subscriber = "0.3"
+# Not used yet
+# serde_with = { version = "^3.3" }
+# chrono = "0.4.31"
+# tracing-appender = "0.2"
+
 
 [[bench]]
 harness = false

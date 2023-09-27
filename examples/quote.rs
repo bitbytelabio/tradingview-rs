@@ -1,25 +1,18 @@
+use dotenv::dotenv;
 use std::collections::HashMap;
 use std::env;
-
-use tracing::{error, info};
-use tradingview_rs::quote::session::{QuoteCallbackFn, WebSocket};
-use tradingview_rs::quote::QuoteValue;
-use tradingview_rs::socket::DataServer;
-use tradingview_rs::user::User;
-type Result<T> = std::result::Result<T, tradingview_rs::error::Error>;
+use tracing::{ error, info };
+use tradingview::quote::session::{ QuoteCallbackFn, WebSocket };
+use tradingview::quote::QuoteValue;
+use tradingview::socket::DataServer;
+type Result<T> = std::result::Result<T, tradingview::error::Error>;
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let session = env::var("TV_SESSION").unwrap();
-    let signature = env::var("TV_SIGNATURE").unwrap();
-
-    let user = User::build()
-        .session(&session, &signature)
-        .get()
-        .await
-        .unwrap();
+    let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
 
     let handlers = QuoteCallbackFn {
         data: Box::new(|data| Box::pin(on_data(data))),
@@ -29,24 +22,24 @@ async fn main() {
 
     let mut socket = WebSocket::build()
         .server(DataServer::ProData)
-        .auth_token(user.auth_token)
-        .connect(handlers)
-        .await
+        .auth_token(auth_token)
+        .connect(handlers).await
         .unwrap();
 
     socket.create_session().await.unwrap();
     socket.set_fields().await.unwrap();
 
     socket
-        .add_symbols(vec![
-            "SP:SPX",
-            "BINANCE:BTCUSDT",
-            "BINANCE:ETHUSDT",
-            "BITSTAMP:ETHUSD",
-            "NASDAQ:TSLA",
-            // "BINANCE:B",
-        ])
-        .await
+        .add_symbols(
+            vec![
+                "SP:SPX",
+                "BINANCE:BTCUSDT",
+                "BINANCE:ETHUSDT",
+                "BITSTAMP:ETHUSD",
+                "NASDAQ:TSLA"
+                // "BINANCE:B",
+            ]
+        ).await
         .unwrap();
 
     socket.subscribe().await;
@@ -65,7 +58,7 @@ async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<()> {
     Ok(())
 }
 
-async fn on_error(err: tradingview_rs::error::Error) -> Result<()> {
+async fn on_error(err: tradingview::error::Error) -> Result<()> {
     error!("Error: {:#?}", err);
     Ok(())
 }

@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use dotenv::dotenv;
     use std::env;
-    use tradingview_rs::error::*;
-    use tradingview_rs::user::*;
+    use tradingview::error::*;
+    use tradingview::user::*;
 
     #[tokio::test]
     #[ignore]
@@ -18,6 +19,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_login_with_credentials() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
@@ -47,15 +49,15 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(
-            error,
-            tradingview_rs::error::Error::LoginError(LoginError::InvalidCredentials)
-        ));
+        assert!(
+            matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidCredentials))
+        );
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_login_with_credentials_and_mfa() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
@@ -63,11 +65,7 @@ mod tests {
         let password = env::var("TV_TOTP_PASSWORD").unwrap();
         let totp = env::var("TV_TOTP_SECRET").unwrap();
 
-        let result = User::build()
-            .credentials(&username, &password)
-            .totp_secret(&totp)
-            .get()
-            .await;
+        let result = User::build().credentials(&username, &password).totp_secret(&totp).get().await;
 
         assert!(result.is_ok());
         let user = result.unwrap();
@@ -83,6 +81,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_user_with_valid_session() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
@@ -110,21 +109,18 @@ mod tests {
 
         let result = User::build()
             .session("invalid_session", "invalid_session_signature")
-            .get()
-            .await;
+            .get().await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
 
-        assert!(matches!(
-            error,
-            tradingview_rs::error::Error::LoginError(LoginError::InvalidSession)
-        ));
+        assert!(matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidSession)));
     }
 
     #[tokio::test]
     #[ignore]
     async fn test_user_with_credentials_and_invalid_mfa() {
+        dotenv().ok();
         let mut empty_user = User::default();
         empty_user.auth_token = "unauthorized_user_token".to_string();
 
@@ -134,14 +130,12 @@ mod tests {
         let result = User::build()
             .credentials(&username, &password)
             .totp_secret("ZTIXV4KTRISK4KK7")
-            .get()
-            .await;
+            .get().await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(
-            error,
-            tradingview_rs::error::Error::LoginError(LoginError::InvalidOTPSecret)
-        ));
+        assert!(
+            matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidOTPSecret))
+        );
     }
 }

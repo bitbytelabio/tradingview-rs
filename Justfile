@@ -7,7 +7,7 @@ test-user:
 	@cargo test -p tradingview-rs --test user_test
 
 quick-test:
-	@cargo test
+	@cargo test --all-features
 
 bench:
 	@cargo bench --all-features
@@ -53,3 +53,6 @@ lines-of-code:
 
 creds-scan:
 	@ggshield secret scan repo ./
+
+udeps:
+	@cargo +nightly udeps --all-targets --all-features -- -D warnings

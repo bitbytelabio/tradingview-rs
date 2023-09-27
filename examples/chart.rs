@@ -1,50 +1,17 @@
+use dotenv::dotenv;
 use std::env;
 
 use tracing::info;
-use tradingview_rs::{
-    chart::{
-        session::{ChartCallbackFn, WebSocket},
-        ChartOptions, ChartSeries,
-    },
+use tradingview::{
+    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeries },
     models::Interval,
     socket::DataServer,
 };
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     tracing_subscriber::fmt::init();
-
-    // let session = env::var("TV_SESSION").unwrap();
-    // let signature = env::var("TV_SIGNATURE").unwrap();
-
-    // let user = User::build()
-    //     .session(&session, &signature)
-    //     .get()
-    //     .await
-    //     .unwrap();
-
-    // let access_id = env::var("CF_ACCESS_CLIENT_ID").unwrap();
-    // let access_secret = env::var("CF_ACCESS_CLIENT_SECRET").unwrap();
-
-    // let mut headers = HeaderMap::new();
-    // headers.insert("CF-Access-Client-Id", HeaderValue::from_static(&access_id));
-    // headers.insert(
-    //     "CF-Access-Client-Secret",
-    //     HeaderValue::from_static(&access_secret),
-    // );
-
-    // let client = Client::builder()
-    //     .default_headers(headers)
-    //     .build()
-    //     .unwrap()
-    //     .get("https://tvmisc.bitbytelab.io/api/token/free")
-    //     .send()
-    //     .await
-    //     .unwrap()
-    //     .json()
-    //     .await
-    //     .unwrap();
-
     let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
 
     let handlers = ChartCallbackFn {
@@ -56,20 +23,15 @@ async fn main() {
     let mut socket = WebSocket::build()
         .server(DataServer::ProData)
         .auth_token(auth_token)
-        .connect(handlers)
-        .await
+        .connect(handlers).await
         .unwrap();
 
     socket
-        .set_market(
-            "BINANCE:BTCUSDT",
-            ChartOptions {
-                resolution: Interval::OneMinute,
-                bar_count: 50_000,
-                ..Default::default()
-            },
-        )
-        .await
+        .set_market("BINANCE:BTCUSDT", ChartOptions {
+            resolution: Interval::OneMinute,
+            bar_count: 50_000,
+            ..Default::default()
+        }).await
         .unwrap();
 
     // socket
@@ -90,30 +52,30 @@ async fn main() {
     //     .await
     //     .unwrap();
     // socket
-    //     .set_series(tradingview_rs::models::Interval::FourHours, 20000, None)
+    //     .set_series(tradingview::models::Interval::FourHours, 20000, None)
     //     .await
     //     .unwrap();
 
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview_rs::error::Error> {
+async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Error> {
     // info!("on_chart_data: {:?}", data);
-    let end = data.data.first().unwrap().timestamp;
-    info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
+    // let end = data.data.first().unwrap().timestamp;
+    info!("on_chart_data: {:?} - {:?}", data.data.len(), data);
     Ok(())
 }
 
 async fn on_symbol_resolved(
-    data: tradingview_rs::chart::SymbolInfo,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SymbolInfo
+) -> Result<(), tradingview::error::Error> {
     info!("on_symbol_resolved: {:?}", data);
     Ok(())
 }
 
 async fn on_series_completed(
-    data: tradingview_rs::chart::SeriesCompletedMessage,
-) -> Result<(), tradingview_rs::error::Error> {
+    data: tradingview::chart::SeriesCompletedMessage
+) -> Result<(), tradingview::error::Error> {
     info!("on_series_completed: {:?}", data);
     Ok(())
 }

@@ -51,10 +51,7 @@ fn main() {
             ("id", "in_1"),
             ("isFake", "true"),
             ("name", "Currency"),
-            (
-                "options",
-                "[\"Default\",\"USD\",\"EUR\",\"CAD\",\"JPY\",\"GBP\",\"HKD\",\"CNY\"]",
-            ),
+            ("options", "[\"Default\",\"USD\",\"EUR\",\"CAD\",\"JPY\",\"GBP\",\"HKD\",\"CNY\"]"),
             ("type", "text"),
         ]),
         HashMap::from([
@@ -110,7 +107,7 @@ fn main() {
             ("isHidden", "true"),
             ("name", ""),
             ("type", "usertype"),
-        ]),
+        ])
     ];
 
     for input in input_list {
@@ -126,32 +123,20 @@ fn main() {
         input_map.insert("name".to_string(), input["name"].to_string());
         input_map.insert(
             "inline".to_string(),
-            input
-                .get("inline")
-                .unwrap_or(&inline_name.as_str())
-                .to_string(),
+            input.get("inline").unwrap_or(&inline_name.as_str()).to_string()
         );
         input_map.insert(
             "internalID".to_string(),
-            input
-                .get("internalID")
-                .unwrap_or(&inline_name.as_str())
-                .to_string(),
+            input.get("internalID").unwrap_or(&inline_name.as_str()).to_string()
         );
-        input_map.insert(
-            "tooltip".to_string(),
-            input.get("tooltip").unwrap_or(&"").to_string(),
-        );
+        input_map.insert("tooltip".to_string(), input.get("tooltip").unwrap_or(&"").to_string());
         input_map.insert("type".to_string(), input["type"].to_string());
         input_map.insert("value".to_string(), input["defval"].to_string());
         input_map.insert(
             "isHidden".to_string(),
-            input.get("isHidden").unwrap_or(&"false").to_string(),
+            input.get("isHidden").unwrap_or(&"false").to_string()
         );
-        input_map.insert(
-            "isFake".to_string(),
-            input.get("isFake").unwrap_or(&"false").to_string(),
-        );
+        input_map.insert("isFake".to_string(), input.get("isFake").unwrap_or(&"false").to_string());
 
         if let Some(options) = input.get("options") {
             input_map.insert("options".to_string(), options.to_string());

@@ -1,5 +1,5 @@
 use rand::Rng;
-use tradingview_rs::chart::{ChartResponseData, DataPoint};
+use tradingview::chart::{ ChartResponseData, DataPoint };
 
 pub fn generate_chart_random_data(length: u64) -> ChartResponseData {
     let mut series = Vec::new();

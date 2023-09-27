@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{ Deserialize, Deserializer, Serialize };
 pub mod pine_indicator;
 
 #[derive(Debug, Clone, Serialize, Copy, PartialEq)]
 pub struct OHLCV {
-    pub timestamp: f64,
+    pub timestamp: i64,
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -16,7 +16,7 @@ pub struct OHLCV {
 impl OHLCV {
     pub fn new(entry: (f64, f64, f64, f64, f64, f64)) -> Self {
         OHLCV {
-            timestamp: entry.0,
+            timestamp: (entry.0 * 1000.0) as i64,
             open: entry.1,
             high: entry.2,
             low: entry.3,
@@ -26,14 +26,57 @@ impl OHLCV {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct SimpleTA {
-    pub name: String,
-    pub data: HashMap<String, HashMap<String, f64>>,
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChartDrawing {
+    pub success: bool,
+    pub payload: ChartDrawingSource,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChartDrawingSource {
+    pub sources: HashMap<String, ChartDrawingSourceData>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartDrawingSourceData {
+    id: String,
+    symbol: String,
+    currency_id: String,
+    server_update_time: i64,
+    state: ChartDrawingSourceState,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartDrawingSourceState {
+    points: Vec<ChartDrawingSourceStatePoint>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChartDrawingSourceStatePoint {
+    time_t: i64,
+    offset: i64,
+    price: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserCookies {
+    pub id: u32,
+    pub username: String,
+    pub private_channel: String,
+    pub auth_token: String,
+    #[serde(default)]
+    pub session: String,
+    #[serde(default)]
+    pub session_signature: String,
+    pub session_hash: String,
+    #[serde(default)]
+    pub device_token: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct SymbolSearch {
+pub struct SymbolSearchResponse {
     #[serde(rename(deserialize = "symbols_remaining"))]
     pub remaining: u64,
     pub symbols: Vec<Symbol>,
@@ -54,47 +97,6 @@ pub struct Symbol {
     pub data_provider: String,
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Screener {
-    America,
-    Australia,
-    Canada,
-    Egypt,
-    Germany,
-    India,
-    Israel,
-    Italy,
-    Luxembourg,
-    Poland,
-    Sweden,
-    Turkey,
-    UK,
-    Vietnam,
-    Other(String),
-}
-
-impl std::fmt::Display for Screener {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Screener::America => write!(f, "america"),
-            Screener::Australia => write!(f, "australia"),
-            Screener::Canada => write!(f, "canada"),
-            Screener::Egypt => write!(f, "egypt"),
-            Screener::Germany => write!(f, "germany"),
-            Screener::India => write!(f, "india"),
-            Screener::Israel => write!(f, "israel"),
-            Screener::Italy => write!(f, "italy"),
-            Screener::Luxembourg => write!(f, "luxembourg"),
-            Screener::Poland => write!(f, "poland"),
-            Screener::Sweden => write!(f, "sweden"),
-            Screener::Turkey => write!(f, "turkey"),
-            Screener::UK => write!(f, "uk"),
-            Screener::Vietnam => write!(f, "vietnam"),
-            Screener::Other(s) => write!(f, "{}", s.to_lowercase()),
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -472,17 +474,16 @@ impl std::fmt::Display for LanguageCode {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum FinancialPeriod {
-    FiscalYear,           // FY
-    FiscalQuarter,        // FQ
-    FiscalHalfYear,       // FH
+    FiscalYear, // FY
+    FiscalQuarter, // FQ
+    FiscalHalfYear, // FH
     TrailingTwelveMonths, // TTM
     UnknownPeriod(String),
 }
 
 impl<'de> Deserialize<'de> for FinancialPeriod {
     fn deserialize<D>(deserializer: D) -> Result<FinancialPeriod, D::Error>
-    where
-        D: Deserializer<'de>,
+        where D: Deserializer<'de>
     {
         let s: String = Deserialize::deserialize(deserializer)?;
         match s.as_str() {
@@ -555,6 +556,36 @@ impl std::fmt::Display for SymbolType {
             SymbolType::Commodity => write!(f, "commodity"),
             SymbolType::Fundamental => write!(f, "fundamental"),
             SymbolType::Spot => write!(f, "spot"),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy, Serialize)]
+pub enum SymbolMarketType {
+    #[default]
+    All,
+    Stocks,
+    Funds,
+    Futures,
+    Forex,
+    Crypto,
+    Indices,
+    Bonds,
+    Economy,
+}
+
+impl std::fmt::Display for SymbolMarketType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            SymbolMarketType::All => write!(f, "undefined"),
+            SymbolMarketType::Stocks => write!(f, "stocks"),
+            SymbolMarketType::Funds => write!(f, "funds"),
+            SymbolMarketType::Futures => write!(f, "futures"),
+            SymbolMarketType::Forex => write!(f, "forex"),
+            SymbolMarketType::Crypto => write!(f, "crypto"),
+            SymbolMarketType::Indices => write!(f, "index"),
+            SymbolMarketType::Bonds => write!(f, "bond"),
+            SymbolMarketType::Economy => write!(f, "economic"),
         }
     }
 }

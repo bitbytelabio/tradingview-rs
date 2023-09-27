@@ -18,14 +18,7 @@ use std::sync::Mutex;
 pub fn extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series
         .iter()
-        .map(|point| OHLCV {
-            timestamp: point.value.0,
-            open: point.value.1,
-            high: point.value.2,
-            low: point.value.3,
-            close: point.value.4,
-            volume: point.value.5,
-        })
+        .map(|point| OHLCV::new(point.value))
         .collect()
 }
 
@@ -57,14 +50,7 @@ pub fn extract_studies_data(data: &StudyResponseData) -> Vec<Vec<f64>> {
 pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
     data.series
         .par_iter()
-        .map(|point| OHLCV {
-            timestamp: point.value.0,
-            open: point.value.1,
-            high: point.value.2,
-            low: point.value.3,
-            close: point.value.4,
-            volume: point.value.5,
-        })
+        .map(|point| OHLCV::new(point.value))
         .collect()
 }
 
@@ -94,7 +80,7 @@ pub fn sort_ohlcv_tuples(tuples: &mut [OHLCV]) {
 pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
     if let Some(index) = data
         .iter()
-        .position(|&x| (x.timestamp - new_data.timestamp).abs() < f64::EPSILON)
+        .position(|&x| ((x.timestamp - new_data.timestamp) as f64).abs() < f64::EPSILON)
     {
         data[index] = new_data;
     } else {
@@ -117,8 +103,8 @@ pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
 /// # Example
 ///
 /// ```
-/// use tradingview_rs::tools::update_ohlcv_data;
-/// use tradingview_rs::models::OHLCV;
+/// use tradingview::tools::update_ohlcv_data;
+/// use tradingview::models::OHLCV;
 ///
 /// ```
 pub fn update_ohlcv_data(old_data: &mut Vec<OHLCV>, new_data: &Vec<OHLCV>) {

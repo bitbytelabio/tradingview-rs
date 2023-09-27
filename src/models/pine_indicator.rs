@@ -4,11 +4,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    chart::study::{IndicatorInput, InputValue},
+    chart::study::{ IndicatorInput, InputValue },
     client::mics::get_indicator_metadata,
-    models::FinancialPeriod,
-    prelude::*,
-    user::User,
+    models::{ FinancialPeriod, UserCookies },
+    Result,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -214,11 +213,11 @@ pub struct PineIndicator {
 }
 
 pub struct PineIndicatorBuilder {
-    user: Option<User>,
+    user: Option<UserCookies>,
 }
 
 impl PineIndicatorBuilder {
-    pub fn user(&mut self, user: User) -> &mut Self {
+    pub fn user(&mut self, user: UserCookies) -> &mut Self {
         self.user = Some(user);
         self
     }
@@ -227,7 +226,7 @@ impl PineIndicatorBuilder {
         &mut self,
         script_id: &str,
         script_version: &str,
-        script_type: ScriptType,
+        script_type: ScriptType
     ) -> Result<PineIndicator> {
         let metadata = match &self.user {
             Some(user) => get_indicator_metadata(Some(user), script_id, script_version).await?,
@@ -251,15 +250,12 @@ impl PineIndicator {
         let mut inputs: HashMap<String, IndicatorInput> = HashMap::new();
         inputs.insert(
             "text".to_string(),
-            IndicatorInput::String(self.metadata.il_template.clone()),
+            IndicatorInput::String(self.metadata.il_template.clone())
         );
-        inputs.insert(
-            "pineId".to_string(),
-            IndicatorInput::String(self.script_id.clone()),
-        );
+        inputs.insert("pineId".to_string(), IndicatorInput::String(self.script_id.clone()));
         inputs.insert(
             "pineVersion".to_string(),
-            IndicatorInput::String(self.script_version.clone()),
+            IndicatorInput::String(self.script_version.clone())
         );
         self.metadata.data.inputs.iter().for_each(|input| {
             if input.id == "text" || input.id == "pineId" || input.id == "pineVersion" {
@@ -271,7 +267,7 @@ impl PineIndicator {
                     v: input.defval.clone(),
                     f: Value::from(input.is_fake),
                     t: Value::from(input.input_type.clone()),
-                }),
+                })
             );
         });
 

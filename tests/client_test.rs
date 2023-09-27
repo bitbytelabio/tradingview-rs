@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use tradingview_rs::client::mics::*;
-    use tradingview_rs::models::*;
+    use tradingview::client::mics::*;
+    use tradingview::models::*;
 
     #[tokio::test]
     async fn test_get_builtin_indicators() {
