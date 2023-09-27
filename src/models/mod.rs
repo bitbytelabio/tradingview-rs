@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{ Deserialize, Deserializer, Serialize };
 pub mod pine_indicator;
 
@@ -22,6 +24,40 @@ impl OHLCV {
             volume: entry.5,
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChartDrawing {
+    pub success: bool,
+    pub payload: ChartDrawingSource,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChartDrawingSource {
+    pub sources: HashMap<String, ChartDrawingSourceData>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartDrawingSourceData {
+    id: String,
+    symbol: String,
+    currency_id: String,
+    server_update_time: i64,
+    state: ChartDrawingSourceState,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartDrawingSourceState {
+    points: Vec<ChartDrawingSourceStatePoint>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChartDrawingSourceStatePoint {
+    time_t: i64,
+    offset: i64,
+    price: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

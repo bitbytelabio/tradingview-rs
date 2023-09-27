@@ -7,6 +7,7 @@ use crate::{
         SymbolSearchResponse,
         SymbolMarketType,
         UserCookies,
+        ChartDrawing,
     },
     utils::build_request,
     Error,
@@ -180,26 +181,37 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
     }
 }
 
+/// Retrieves a chart drawing from TradingView's charts-storage API.
+///
+/// # Arguments
+///
+/// * `client` - A reference to a `UserCookies` instance.
+/// * `layout_id` - The ID of the chart layout.
+/// * `symbol` - The symbol of the financial instrument to retrieve the chart drawing for.
+/// * `chart_id` - (Optional) The ID of the chart to retrieve. If not provided, the shared chart will be retrieved.
+///
+/// # Returns
+///
+/// A `Result` containing a `ChartDrawing` instance if successful, or an error if the request fails.
 #[tracing::instrument(skip(client))]
-pub async fn get_drawing<T>(
+pub async fn get_drawing(
     client: &UserCookies,
     layout_id: &str,
     symbol: &str,
-    chart_id: T
-) -> Result<Value>
-    where T: std::fmt::Display + std::fmt::Debug
-{
+    chart_id: Option<&str>
+) -> Result<ChartDrawing> {
     let token = get_chart_token(client, layout_id).await?;
+
     debug!("Chart token: {}", token);
     let url = format!(
         "https://charts-storage.tradingview.com/charts-storage/get/layout/{layout_id}/sources?chart_id={chart_id}&jwt={token}&symbol={symbol}",
         layout_id = layout_id,
-        chart_id = chart_id,
+        chart_id = chart_id.unwrap_or("_shared"),
         token = token,
         symbol = symbol
     );
 
-    let response_data: Value = get(Some(client), &url).await?.json().await?;
+    let response_data: ChartDrawing = get(Some(client), &url).await?.json().await?;
 
     Ok(response_data)
 }

@@ -23,7 +23,16 @@ pub mod tools {
 }
 
 pub mod api {
-    pub use crate::client::mics::search_symbol;
+    pub use crate::client::mics::{
+        search_symbol,
+        get_chart_token,
+        get_drawing,
+        get_builtin_indicators,
+        get_private_indicators,
+        get_indicator_metadata,
+        list_symbols,
+        search_indicator,
+    };
 }
 
 pub use crate::error::Error;
