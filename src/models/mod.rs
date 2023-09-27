@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{ Deserialize, Deserializer, Serialize };
 pub mod pine_indicator;
 
 #[derive(Debug, Clone, Serialize, Copy, PartialEq)]
@@ -25,15 +25,18 @@ impl OHLCV {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UserCookies {
-    pub id: String,
+    pub id: u32,
     pub username: String,
+    pub private_channel: String,
+    pub auth_token: String,
+    #[serde(skip_deserializing)]
     pub session: String,
+    #[serde(skip_deserializing)]
+    pub session_signature: String,
     pub session_hash: String,
-    pub signature: String,
+    #[serde(skip_deserializing)]
     pub device_token: String,
-    pub join_date: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -435,17 +438,16 @@ impl std::fmt::Display for LanguageCode {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum FinancialPeriod {
-    FiscalYear,           // FY
-    FiscalQuarter,        // FQ
-    FiscalHalfYear,       // FH
+    FiscalYear, // FY
+    FiscalQuarter, // FQ
+    FiscalHalfYear, // FH
     TrailingTwelveMonths, // TTM
     UnknownPeriod(String),
 }
 
 impl<'de> Deserialize<'de> for FinancialPeriod {
     fn deserialize<D>(deserializer: D) -> Result<FinancialPeriod, D::Error>
-    where
-        D: Deserializer<'de>,
+        where D: Deserializer<'de>
     {
         let s: String = Deserialize::deserialize(deserializer)?;
         match s.as_str() {

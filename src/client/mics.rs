@@ -32,7 +32,7 @@ async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
         let cookie = format!(
             "sessionid={}; sessionid_sign={}; device_t={};",
             client.session,
-            client.signature,
+            client.session_signature,
             client.device_token
         );
         let client = build_request(Some(&cookie))?;
