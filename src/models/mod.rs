@@ -30,12 +30,12 @@ pub struct UserCookies {
     pub username: String,
     pub private_channel: String,
     pub auth_token: String,
-    #[serde(skip_deserializing)]
+    #[serde(default)]
     pub session: String,
-    #[serde(skip_deserializing)]
+    #[serde(default)]
     pub session_signature: String,
     pub session_hash: String,
-    #[serde(skip_deserializing)]
+    #[serde(default)]
     pub device_token: String,
 }
 

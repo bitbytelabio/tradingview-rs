@@ -1,18 +1,18 @@
-use crate::{error::LoginError, utils::build_request, Error, Result};
+use crate::{ error::LoginError, utils::build_request, Error, Result };
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE};
+use reqwest::header::{ HeaderMap, HeaderValue, ACCEPT, COOKIE };
 use serde::Deserialize;
 use serde_json::Value;
-use tracing::{debug, error, info, warn};
+use tracing::{ debug, error, info, warn };
 
 lazy_static::lazy_static! {
     static ref ID_REGEX: Regex = Regex::new(r#""id":([0-9]{1,10}),"#).unwrap();
-    static ref USERNAME_REGEX: Regex =  Regex::new(r#""username":"(.*?)""#).unwrap();
+    static ref USERNAME_REGEX: Regex = Regex::new(r#""username":"(.*?)""#).unwrap();
     static ref SESSION_HASH_REGEX: Regex = Regex::new(r#""session_hash":"(.*?)""#).unwrap();
-    static ref PRIVATE_CHANNEL_REGEX: Regex =  Regex::new(r#""private_channel":"(.*?)""#).unwrap();
-    static ref AUTH_TOKEN_REGEX: Regex =  Regex::new(r#""auth_token":"(.*?)""#).unwrap();
+    static ref PRIVATE_CHANNEL_REGEX: Regex = Regex::new(r#""private_channel":"(.*?)""#).unwrap();
+    static ref AUTH_TOKEN_REGEX: Regex = Regex::new(r#""auth_token":"(.*?)""#).unwrap();
 }
 
 #[derive(Default, Debug, Clone, Deserialize, PartialEq)]
@@ -87,8 +87,7 @@ impl UserBuilder {
             totp_secret: self.totp_secret.take().unwrap_or_default(),
             private_channel: self.private_channel.take().unwrap_or_default(),
             is_pro: self.is_pro.unwrap_or_default(),
-            auth_token: self
-                .auth_token
+            auth_token: self.auth_token
                 .take()
                 .unwrap_or_else(|| "unauthorized_user_token".to_owned()),
             session_hash: self.session_hash.take().unwrap_or_default(),
@@ -117,44 +116,34 @@ impl User {
     pub async fn login(&mut self) -> Result<Self> {
         if self.username.is_empty() || self.password.is_empty() {
             return Err(Error::LoginError(LoginError::EmptyCredentials));
-        };
+        }
 
         let client: reqwest::Client = build_request(None)?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
             .multipart(
-                reqwest::multipart::Form::new()
+                reqwest::multipart::Form
+                    ::new()
                     .text("username", self.username.clone())
                     .text("password", self.password.clone())
-                    .text("remember", "true"),
+                    .text("remember", "true")
             )
-            .send()
-            .await?;
+            .send().await?;
 
-        let (session, signature, device_token) =
-            response
-                .cookies()
-                .fold((None, None, None), |session_cookies, cookie| {
-                    match cookie.name() {
-                        "sessionid" => (
-                            Some(cookie.value().to_string()),
-                            session_cookies.1,
-                            session_cookies.2,
-                        ),
-                        "sessionid_sign" => (
-                            session_cookies.0,
-                            Some(cookie.value().to_string()),
-                            session_cookies.2,
-                        ),
-                        "device_t" => (
-                            session_cookies.0,
-                            session_cookies.1,
-                            Some(cookie.value().to_string()),
-                        ),
-                        _ => session_cookies,
-                    }
-                });
+        let (session, signature, device_token) = response
+            .cookies()
+            .fold((None, None, None), |session_cookies, cookie| {
+                match cookie.name() {
+                    "sessionid" =>
+                        (Some(cookie.value().to_string()), session_cookies.1, session_cookies.2),
+                    "sessionid_sign" =>
+                        (session_cookies.0, Some(cookie.value().to_string()), session_cookies.2),
+                    "device_t" =>
+                        (session_cookies.0, session_cookies.1, Some(cookie.value().to_string())),
+                    _ => session_cookies,
+                }
+            });
         if session.is_none() || signature.is_none() {
             error!("unable to login, username or password is invalid");
             return Err(Error::LoginError(LoginError::InvalidCredentials));
@@ -179,33 +168,34 @@ impl User {
             let response = Self::handle_mfa(
                 &self.totp_secret,
                 session.clone().unwrap_or_default().as_str(),
-                signature.clone().unwrap_or_default().as_str(),
-            )
-            .await?;
+                signature.clone().unwrap_or_default().as_str()
+            ).await?;
 
-            let (session, signature, device_token) =
-                response
-                    .cookies()
-                    .fold((None, None, None), |session_cookies, cookie| {
-                        match cookie.name() {
-                            "sessionid" => (
+            let (session, signature, device_token) = response
+                .cookies()
+                .fold((None, None, None), |session_cookies, cookie| {
+                    match cookie.name() {
+                        "sessionid" =>
+                            (
                                 Some(cookie.value().to_string()),
                                 session_cookies.1,
                                 session_cookies.2,
                             ),
-                            "sessionid_sign" => (
+                        "sessionid_sign" =>
+                            (
                                 session_cookies.0,
                                 Some(cookie.value().to_string()),
                                 session_cookies.2,
                             ),
-                            "device_t" => (
+                        "device_t" =>
+                            (
                                 session_cookies.0,
                                 session_cookies.1,
                                 Some(cookie.value().to_string()),
                             ),
-                            _ => session_cookies,
-                        }
-                    });
+                        _ => session_cookies,
+                    }
+                });
 
             let body = response.json().await?;
             debug!("2FA login response: {:#?}", body);
@@ -236,7 +226,7 @@ impl User {
     async fn handle_mfa(
         totp_secret: &str,
         session: &str,
-        signature: &str,
+        signature: &str
     ) -> Result<reqwest::Response> {
         if totp_secret.is_empty() {
             return Err(Error::LoginError(LoginError::OTPSecretNotFound));
@@ -244,25 +234,22 @@ impl User {
 
         use reqwest::multipart::Form;
 
-        let client: reqwest::Client = crate::utils::build_request(Some(&format!(
-            "sessionid={}; sessionid_sign={};",
-            session, signature
-        )))?;
+        let client: reqwest::Client = crate::utils::build_request(
+            Some(&format!("sessionid={}; sessionid_sign={};", session, signature))
+        )?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
-            .multipart(Form::new().text(
-                "code",
-                match get_code!(totp_secret) {
+            .multipart(
+                Form::new().text("code", match get_code!(totp_secret) {
                     Ok(code) => code,
                     Err(e) => {
                         error!("Error generating TOTP code: {}", e);
                         return Err(Error::LoginError(LoginError::InvalidOTPSecret));
                     }
-                },
-            ))
-            .send()
-            .await?;
+                })
+            )
+            .send().await?;
 
         if response.status().is_success() {
             Ok(response)
@@ -279,17 +266,22 @@ impl User {
         let mut headers = HeaderMap::new();
         headers.insert(
             ACCEPT,
-            HeaderValue::from_static("text/html,application/xhtml+xml,application/xml"),
+            HeaderValue::from_static("text/html,application/xhtml+xml,application/xml")
         );
         headers.insert(
             COOKIE,
-            HeaderValue::from_str(&format!(
-                "sessionid={}; sessionid_sign={}; device_t={}",
-                self.session, self.signature, self.device_token
-            ))?,
+            HeaderValue::from_str(
+                &format!(
+                    "sessionid={}; sessionid_sign={}; device_t={}",
+                    self.session,
+                    self.signature,
+                    self.device_token
+                )
+            )?
         );
 
-        let resp = reqwest::Client::builder()
+        let resp = reqwest::Client
+            ::builder()
             .use_rustls_tls()
             .default_headers(headers)
             .https_only(true)
@@ -297,10 +289,8 @@ impl User {
             .gzip(true)
             .build()?
             .get(url.unwrap_or("https://www.tradingview.com/".to_owned()))
-            .send()
-            .await?
-            .text()
-            .await?;
+            .send().await?
+            .text().await?;
 
         if AUTH_TOKEN_REGEX.is_match(&resp) {
             info!("User is logged in, loading auth token and user info");
