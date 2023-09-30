@@ -72,7 +72,7 @@ pub async fn search_symbol(
             "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain={domain}&sort_by_country={country}",
             search = search,
             exchange = exchange,
-            search_type = market_type.to_string(),
+            search_type = market_type,
             start = start,
             country = country,
             domain = if domain.is_empty() { "production" } else { domain }
@@ -107,11 +107,11 @@ pub async fn list_symbols(
 
     let search_symbol_reps = search_symbol(
         "",
-        &*exchange,
-        &*market_type,
+        &exchange,
+        &market_type,
         0,
-        &*country,
-        &*domain
+        &country,
+        &domain
     ).await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
@@ -130,7 +130,7 @@ pub async fn list_symbols(
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            search_symbol("", &*exchange, &*market_type, i, &*country, &*domain).await.map(
+            search_symbol("", &exchange, &market_type, i, &country, &domain).await.map(
                 |resp| resp.symbols
             )
         });
@@ -176,7 +176,7 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
             });
         }
         None => {
-            return Err(Error::NoChartTokenFound);
+            Err(Error::NoChartTokenFound)
         }
     }
 }

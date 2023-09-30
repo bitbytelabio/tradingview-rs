@@ -174,7 +174,7 @@ mod tests {
             Some("aaaaaaaaaaaa".to_string())
         );
         assert!(test2.is_ok());
-        let test2_json: Value = serde_json::from_str(&test2.unwrap().replace("=", "")).unwrap();
+        let test2_json: Value = serde_json::from_str(&test2.unwrap().replace('=', "")).unwrap();
         let expected2_json =
             json!({
             "adjustment": "dividends",
