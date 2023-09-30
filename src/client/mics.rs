@@ -175,9 +175,7 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
                 }
             });
         }
-        None => {
-            Err(Error::NoChartTokenFound)
-        }
+        None => { Err(Error::NoChartTokenFound) }
     }
 }
 
@@ -343,14 +341,15 @@ pub async fn search_indicator(
 /// ```rust
 /// use tradingview::api::get_indicator_metadata;
 ///
-/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = None;
-/// let pinescript_id = "PUB;2187";
-/// let pinescript_version = "-1";
+/// async fn run() -> Result<(), Box<dyn std::error::Error>> {
+///     let client = None;
+///     let pinescript_id = "PUB;2187";
+///     let pinescript_version = "-1";
 ///
-/// let metadata = get_indicator_metadata(client.as_ref(), pinescript_id, pinescript_version).await?;
-/// # Ok(())
-/// # }
+///     let metadata = get_indicator_metadata(client.as_ref(), pinescript_id, pinescript_version).await?;
+///     println!("{:?}", metadata);
+///     Ok(())
+/// }
 /// ```
 #[tracing::instrument(skip(client))]
 pub async fn get_indicator_metadata(
