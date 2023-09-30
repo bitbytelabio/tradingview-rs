@@ -32,9 +32,9 @@ pub mod api {
         get_indicator_metadata,
         list_symbols,
         search_indicator,
+        get_quote_token,
     };
 }
 
-pub use crate::error::Error;
-
-pub type Result<T> = std::result::Result<T, Error>;
+use crate::error::Error;
+type Result<T> = std::result::Result<T, Error>;
