@@ -181,6 +181,24 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
     }
 }
 
+/// Retrieves the quote token from TradingView.
+///
+/// # Arguments
+///
+/// * `client` - A reference to a `UserCookies` struct containing the user's cookies.
+///
+/// # Returns
+///
+/// A `Result` containing a `String` with the quote token if successful, or an error if the request fails.
+#[tracing::instrument(skip(client))]
+pub async fn get_quote_token(client: &UserCookies) -> Result<String> {
+    let data: String = get(
+        Some(client),
+        "https://www.tradingview.com/quote_token"
+    ).await?.json().await?;
+    Ok(data)
+}
+
 /// Retrieves a chart drawing from TradingView's charts-storage API.
 ///
 /// # Arguments
@@ -264,6 +282,29 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
     Ok(indicators)
 }
 
+/// Searches for indicators on TradingView.
+///
+/// # Arguments
+///
+/// * `client` - An optional reference to a `UserCookies` object.
+/// * `search` - A string slice containing the search query.
+/// * `offset` - An integer representing the offset of the search results.
+///
+/// # Returns
+///
+/// A `Result` containing a vector of `PineSearchResult` objects if successful, or an `Error` if unsuccessful.
+///
+/// # Example
+///
+/// ```rust
+/// use tradingview::api::search_indicator;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let results = search_indicator(None, "rsi", 0).await.unwrap();
+///     println!("{:?}", results);
+/// }
+/// ```
 #[tracing::instrument(skip(client))]
 pub async fn search_indicator(
     client: Option<&UserCookies>,
@@ -278,13 +319,39 @@ pub async fn search_indicator(
     let resp: pine_indicator::SearchResponse = get(client, &url).await?.json().await?;
     debug!("Response: {:?}", resp);
 
-    if resp.result.is_empty() {
+    if resp.results.is_empty() {
         return Err(Error::Generic("No results found".to_string()));
     }
 
-    Ok(resp.result)
+    Ok(resp.results)
 }
 
+/// Retrieves metadata for a TradingView Pine indicator.
+///
+/// # Arguments
+///
+/// * `client` - An optional reference to a `UserCookies` struct.
+/// * `pinescript_id` - The ID of the Pine script.
+/// * `pinescript_version` - The version of the Pine script.
+///
+/// # Returns
+///
+/// Returns a `Result` containing a `PineMetadata` struct if successful, or an `Error` if unsuccessful.
+///
+/// # Examples
+///
+/// ```rust
+/// use tradingview::api::get_indicator_metadata;
+///
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// let client = None;
+/// let pinescript_id = "PUB;2187";
+/// let pinescript_version = "-1";
+///
+/// let metadata = get_indicator_metadata(client.as_ref(), pinescript_id, pinescript_version).await?;
+/// # Ok(())
+/// # }
+/// ```
 #[tracing::instrument(skip(client))]
 pub async fn get_indicator_metadata(
     client: Option<&UserCookies>,

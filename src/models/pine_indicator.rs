@@ -74,7 +74,7 @@ pub struct TranslateResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SearchResponse {
     pub next: String,
-    pub result: Vec<PineSearchResult>,
+    pub results: Vec<PineSearchResult>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
@@ -84,7 +84,7 @@ pub struct PineSearchResult {
     pub script_name: String,
     pub script_source: String,
     pub access: i64,
-    pub script_id: String,
+    pub script_id_part: String,
     pub version: String,
     pub extra: PineSearchExtra,
     pub agree_count: i64,
