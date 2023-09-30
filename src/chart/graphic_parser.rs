@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -138,15 +138,24 @@ struct GraphicDataResponse {
 
 fn _graphic_parse(
     raw_graphic: GraphicDataResponse,
-    indexes: Vec<i64>,
+    indexes: Vec<i64>
 ) -> HashMap<String, Vec<Box>> {
     let translator = Translator {
-        extend: [('r', "right"), ('l', "left"), ('b', "both"), ('n', "none")]
+        extend: [
+            ('r', "right"),
+            ('l', "left"),
+            ('b', "both"),
+            ('n', "none"),
+        ]
             .iter()
             .cloned()
             .map(|(k, v)| (k, v.to_string()))
             .collect(),
-        y_loc: [("pr", "price"), ("ab", "abovebar"), ("bl", "belowbar")]
+        y_loc: [
+            ("pr", "price"),
+            ("ab", "abovebar"),
+            ("bl", "belowbar"),
+        ]
             .iter()
             .cloned()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -173,10 +182,10 @@ fn _graphic_parse(
             ("sq", "square"),
             ("dia", "diamond"),
         ]
-        .iter()
-        .cloned()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect(),
+            .iter()
+            .cloned()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
         line_style: [
             ("sol", "solid"),
             ("dot", "dotted"),
@@ -185,11 +194,15 @@ fn _graphic_parse(
             ("ar", "arrow_right"),
             ("ab", "arrow_both"),
         ]
-        .iter()
-        .cloned()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect(),
-        box_style: [("sol", "solid"), ("dot", "dotted"), ("dsh", "dashed")]
+            .iter()
+            .cloned()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+        box_style: [
+            ("sol", "solid"),
+            ("dot", "dotted"),
+            ("dsh", "dashed"),
+        ]
             .iter()
             .cloned()
             .map(|(k, v)| (k.to_string(), v.to_string()))

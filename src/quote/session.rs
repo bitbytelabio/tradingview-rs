@@ -11,7 +11,7 @@ use crate::{
         TradingViewDataEvent,
     },
     utils::gen_session_id,
-    Error,
+    error::Error,
     Result,
 };
 use async_trait::async_trait;

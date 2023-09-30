@@ -10,7 +10,7 @@ use crate::{
         ChartDrawing,
     },
     utils::build_request,
-    Error,
+    error::Error,
     Result,
 };
 use reqwest::Response;
