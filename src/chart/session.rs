@@ -58,19 +58,19 @@ pub struct WebSocket {
 struct ChartSeriesInfo {
     id: String,
     chart_session: String,
-    _version: String,
-    _symbol_series_id: String,
-    _replay_info: Option<ReplayInfo>,
+    version: String,
+    symbol_series_id: String,
+    replay_info: Option<ReplayInfo>,
     chart_series: ChartSeries,
 }
 
 #[derive(Debug, Clone, Default)]
 struct ReplayInfo {
-    _timestamp: i64,
-    _replay_session_id: String,
-    _replay_series_id: String,
-    _replay_step: u64,
-    _resolution: Interval,
+    timestamp: i64,
+    replay_session_id: String,
+    replay_series_id: String,
+    replay_step: u64,
+    resolution: Interval,
 }
 
 pub struct ChartCallbackFn {
@@ -416,9 +416,9 @@ impl WebSocket {
             ).await?;
 
             self.replay_info.insert(symbol.to_string(), ReplayInfo {
-                _replay_session_id: replay_session_id,
-                _replay_series_id: replay_series_id,
-                _timestamp: config.replay_from.unwrap(),
+                replay_session_id,
+                replay_series_id,
+                timestamp: config.replay_from.unwrap(),
                 ..Default::default()
             });
         } else {
@@ -452,8 +452,8 @@ impl WebSocket {
         let series_info = ChartSeriesInfo {
             chart_session,
             id: series_id,
-            _version: series_version,
-            _symbol_series_id: symbol_series_id,
+            version: series_version,
+            symbol_series_id,
             chart_series: ChartSeries {
                 symbol_id: symbol.to_string(),
                 interval: config.resolution,
@@ -523,7 +523,7 @@ impl WebSocket {
 
         for handler in tasks {
             if let Some(data) = handler.await?? {
-                (self.callbacks.on_chart_data)(data).await?;
+                (self.callbacks.on_chart_data)(data).await;
             }
         }
         Ok(())
@@ -541,7 +541,7 @@ impl Socket for WebSocket {
             TradingViewDataEvent::OnSymbolResolved => {
                 let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
                 debug!("received symbol information: {:?}", symbol_info);
-                (self.callbacks.on_symbol_resolved)(symbol_info).await?;
+                (self.callbacks.on_symbol_resolved)(symbol_info).await;
             }
             TradingViewDataEvent::OnSeriesCompleted => {
                 let message = SeriesCompletedMessage {
@@ -551,7 +551,7 @@ impl Socket for WebSocket {
                     version: get_string_value(&message.p, 3),
                 };
                 info!("series is completed: {:#?}", message);
-                (self.callbacks.on_series_completed)(message).await?;
+                (self.callbacks.on_series_completed)(message).await;
             }
             TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);

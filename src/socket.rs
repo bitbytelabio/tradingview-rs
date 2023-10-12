@@ -22,7 +22,7 @@ use tokio_tungstenite::{
 use tracing::{ debug, error, info, trace, warn };
 use url::Url;
 
-pub(crate) type AsyncCallback<T> = Box<dyn (Fn(T) -> BoxFuture<'static, Result<()>>) + Send + Sync>;
+pub(crate) type AsyncCallback<T> = Box<dyn (Fn(T) -> BoxFuture<'static, ()>) + Send + Sync>;
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {

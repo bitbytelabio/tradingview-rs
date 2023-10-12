@@ -196,17 +196,17 @@ impl Socket for WebSocket {
                     } else {
                         self.prev_quotes.insert(qsd.name.clone(), qsd.value.clone());
                     }
-                    (self.callbacks.data)(self.prev_quotes.clone()).await?;
+                    (self.callbacks.data)(self.prev_quotes.clone()).await;
                     return Ok(());
                 } else {
                     (self.callbacks.error)(
                         Error::TradingViewError(TradingViewError::QuoteDataStatusError)
-                    ).await?;
+                    ).await;
                     return Ok(());
                 }
             }
             TradingViewDataEvent::OnQuoteCompleted => {
-                (self.callbacks.loaded)(message.p.clone()).await?;
+                (self.callbacks.loaded)(message.p.clone()).await;
             }
             TradingViewDataEvent::OnError(e) => {
                 self.handle_error(Error::TradingViewError(e)).await;

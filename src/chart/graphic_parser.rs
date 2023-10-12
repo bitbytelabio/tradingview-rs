@@ -227,7 +227,7 @@ fn graphic_parse(raw_graphic: GraphicDataResponse, indexes: Vec<i64>) -> HashMap
             text_h_align: label.text_align,
             text_wrap: "".to_string(),
         };
-        boxes.entry(id).or_insert_with(Vec::new).push(boxy);
+        boxes.entry(id).or_default().push(boxy);
     }
 
     for (id, line) in raw_graphic.dwglines {
@@ -249,7 +249,7 @@ fn graphic_parse(raw_graphic: GraphicDataResponse, indexes: Vec<i64>) -> HashMap
             text_h_align: "".to_string(),
             text_wrap: "".to_string(),
         };
-        boxes.entry(id).or_insert_with(Vec::new).push(boxy);
+        boxes.entry(id).or_default().push(boxy);
     }
 
     for (id, b) in raw_graphic.dwgboxes {
@@ -271,7 +271,7 @@ fn graphic_parse(raw_graphic: GraphicDataResponse, indexes: Vec<i64>) -> HashMap
             text_h_align: b.text_h_align,
             text_wrap: b.text_wrap,
         };
-        boxes.entry(id).or_insert_with(Vec::new).push(boxy);
+        boxes.entry(id).or_default().push(boxy);
     }
 
     boxes
