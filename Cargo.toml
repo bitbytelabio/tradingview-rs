@@ -48,6 +48,7 @@ zip = "^0.6"
 base64 = "^0.21"
 rayon = "^1"
 google-authenticator = { version = "^0.4", optional = true }
+chrono = { version = "0.4.31", features = ["serde"] }
 
 [dev-dependencies]
 polars = { version = "^0.33" }
@@ -56,10 +57,6 @@ anyhow = "1"
 protobuf = "3"
 dotenv = "0.15.0"
 tracing-subscriber = "0.3"
-# Not used yet
-# serde_with = { version = "^3.3" }
-# chrono = "0.4.31"
-# tracing-appender = "0.2"
 
 
 [[bench]]

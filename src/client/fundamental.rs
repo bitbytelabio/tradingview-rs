@@ -20,11 +20,11 @@ pub enum FundamentalCategory {
 
 impl FundamentalCategory {
     pub fn from_str(s: &str) -> Option<Self> {
-        let s = s.to_lowercase().replace(" ", "");
-        match s.as_str() {
-            "balancesheet" => Some(Self::BalanceSheet),
-            "cashflow" => Some(Self::CashFlow),
-            "incomestatement" => Some(Self::IncomeStatement),
+        // let s = s.to_lowercase().replace(" ", "");
+        match s {
+            "Balance sheet" => Some(Self::BalanceSheet),
+            "Cash flow" => Some(Self::CashFlow),
+            "Income statement" => Some(Self::IncomeStatement),
             _ => None,
         }
     }
