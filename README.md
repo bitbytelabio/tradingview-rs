@@ -26,6 +26,10 @@ This is a data source library for algorithmic trading written in Rust inspired b
 - [ ] Get Screener top values
 - [ ] Get Calendar
 
+## Use cases
+
+- [Fenrir Data](https://github.com/bitbytelabio/fenrir-data) - A data engine that applies an event-driven architecture with RedPanda (Kafka), SurrealDB, DragonflyDB (Redis).
+
 ## Getting Started
 
 ### Prerequisites

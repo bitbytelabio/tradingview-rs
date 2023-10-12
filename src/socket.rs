@@ -2,7 +2,7 @@ use crate::{
     error::TradingViewError,
     payload,
     utils::{ format_packet, parse_packet },
-    Error,
+    error::Error,
     Result,
     UA,
 };
@@ -22,7 +22,7 @@ use tokio_tungstenite::{
 use tracing::{ debug, error, info, trace, warn };
 use url::Url;
 
-pub(crate) type AsyncCallback<T> = Box<dyn (Fn(T) -> BoxFuture<'static, Result<()>>) + Send + Sync>;
+pub(crate) type AsyncCallback<T> = Box<dyn (Fn(T) -> BoxFuture<'static, ()>) + Send + Sync>;
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -80,6 +80,7 @@ impl From<String> for TradingViewDataEvent {
             "critical_error" => TradingViewDataEvent::OnError(TradingViewError::CriticalError),
             "study_error" => TradingViewDataEvent::OnError(TradingViewError::StudyError),
             "protocol_error" => TradingViewDataEvent::OnError(TradingViewError::ProtocolError),
+            "replay_error" => TradingViewDataEvent::OnError(TradingViewError::ReplayError),
 
             s => TradingViewDataEvent::UnknownEvent(s.to_string()),
         }
@@ -209,6 +210,7 @@ impl SocketSession {
 
     pub async fn ping(&mut self, ping: &Message) -> Result<()> {
         self.write.lock().await.send(ping.clone()).await?;
+        trace!("sent ping message {}", ping);
         Ok(())
     }
 
@@ -316,5 +318,5 @@ pub(crate) trait Socket {
 
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()>;
 
-    async fn handle_error(&mut self, error: Error);
+    async fn handle_error(&mut self, error: Error) {}
 }

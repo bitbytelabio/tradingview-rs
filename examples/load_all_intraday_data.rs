@@ -1,17 +1,19 @@
 use dotenv::dotenv;
 use std::env;
-
 use tracing::info;
 use tradingview::{
     chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeries },
     models::Interval,
     socket::DataServer,
 };
+use polars::prelude::*;
+use chrono::{ DateTime, TimeZone, Utc };
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
     tracing_subscriber::fmt::init();
+
     let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
 
     let handlers = ChartCallbackFn {
@@ -30,6 +32,10 @@ async fn main() {
         .set_market("BINANCE:BTCUSDT", ChartOptions {
             resolution: Interval::OneMinute,
             bar_count: 50_000,
+            collect_all: Some(true),
+            expected_data_size: Some(100_000),
+            // replay_mode: Some(true),
+            // replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
             ..Default::default()
         }).await
         .unwrap();
@@ -60,9 +66,57 @@ async fn main() {
 }
 
 async fn on_chart_data(data: ChartSeries) {
-    // info!("on_chart_data: {:?}", data);
-    // let end = data.data.first().unwrap().timestamp;
-    info!("on_chart_data: {:?} - {:?}", data.data.len(), data);
+    let timestamp: Vec<i64> = data.data
+        .iter()
+        .map(|item| item.timestamp)
+        .collect();
+    let opens: Vec<f64> = data.data
+        .iter()
+        .map(|item| item.open)
+        .collect();
+    let highs: Vec<f64> = data.data
+        .iter()
+        .map(|item| item.high)
+        .collect();
+    let lows: Vec<f64> = data.data
+        .iter()
+        .map(|item| item.low)
+        .collect();
+    let closes: Vec<f64> = data.data
+        .iter()
+        .map(|item| item.close)
+        .collect();
+    let volumes: Vec<f64> = data.data
+        .iter()
+        .map(|item| item.volume)
+        .collect();
+
+    // Create a Polars DataFrame
+    let mut df = DataFrame::new(
+        vec![
+            Series::new("timestamp", timestamp),
+            Series::new("open", opens),
+            Series::new("high", highs),
+            Series::new("low", lows),
+            Series::new("close", closes),
+            Series::new("volume", volumes)
+        ]
+    ).unwrap();
+
+    df.with_column(
+        df
+            .column("timestamp")
+            .unwrap()
+            .cast(&DataType::Datetime(TimeUnit::Milliseconds, Some("Utc".to_owned())))
+            .unwrap()
+    ).unwrap();
+    df.rename("timestamp", "date").unwrap();
+
+    let csv_out = "tmp/BINANCE_BTCUSDT.csv";
+    if std::fs::metadata(csv_out).is_err() {
+        let f = std::fs::File::create(csv_out).unwrap();
+        CsvWriter::new(f).finish(&mut df).unwrap();
+    }
 }
 
 async fn on_symbol_resolved(data: tradingview::chart::SymbolInfo) {

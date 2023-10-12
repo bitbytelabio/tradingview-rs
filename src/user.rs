@@ -1,4 +1,5 @@
-use crate::{ error::LoginError, utils::build_request, Error, Result };
+#![allow(unused_imports)]
+use crate::{ error::LoginError, utils::build_request, error::Error, Result, models::UserCookies };
 use google_authenticator::get_code;
 use google_authenticator::GA_AUTH;
 use regex::Regex;
@@ -14,6 +15,8 @@ lazy_static::lazy_static! {
     static ref PRIVATE_CHANNEL_REGEX: Regex = Regex::new(r#""private_channel":"(.*?)""#).unwrap();
     static ref AUTH_TOKEN_REGEX: Regex = Regex::new(r#""auth_token":"(.*?)""#).unwrap();
 }
+
+// TODO: refactor this to use UserCookies struct
 
 #[derive(Default, Debug, Clone, Deserialize, PartialEq)]
 pub struct User {

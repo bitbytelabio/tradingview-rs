@@ -27,12 +27,12 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market("HOSE:FPT", ChartOptions {
+        .set_market("BINANCE:BTCUSDT", ChartOptions {
             resolution: Interval::Daily,
             bar_count: 1,
             study_config: Some(StudyOptions {
-                script_id: "STD;Fund_total_revenue_fq".to_string(),
-                script_version: "62.0".to_string(),
+                script_id: "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby".to_string(),
+                script_version: "33.0".to_string(),
                 script_type: tradingview::models::pine_indicator::ScriptType::IntervalScript,
             }),
             ..Default::default()
@@ -42,23 +42,16 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(_data: ChartSeries) -> Result<(), tradingview::error::Error> {
+async fn on_chart_data(_data: ChartSeries) {
     // info!("on_chart_data: {:?}", data);
     // let end = data.data.first().unwrap().0;
     // info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
-    Ok(())
 }
 
-async fn on_symbol_resolved(
-    data: tradingview::chart::SymbolInfo
-) -> Result<(), tradingview::error::Error> {
+async fn on_symbol_resolved(data: tradingview::chart::SymbolInfo) {
     info!("on_symbol_resolved: {:?}", data);
-    Ok(())
 }
 
-async fn on_series_completed(
-    data: tradingview::chart::SeriesCompletedMessage
-) -> Result<(), tradingview::error::Error> {
+async fn on_series_completed(data: tradingview::chart::SeriesCompletedMessage) {
     info!("on_series_completed: {:?}", data);
-    Ok(())
 }

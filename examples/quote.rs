@@ -5,7 +5,6 @@ use tracing::{ error, info };
 use tradingview::quote::session::{ QuoteCallbackFn, WebSocket };
 use tradingview::quote::QuoteValue;
 use tradingview::socket::DataServer;
-type Result<T> = std::result::Result<T, tradingview::error::Error>;
 
 #[tokio::main]
 async fn main() {
@@ -45,20 +44,17 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_data(data: HashMap<String, QuoteValue>) -> Result<()> {
+async fn on_data(data: HashMap<String, QuoteValue>) {
     data.iter().for_each(|(_, v)| {
         let json_string = serde_json::to_string(&v).unwrap();
         info!("{}", json_string);
     });
-    Ok(())
 }
 
-async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<()> {
+async fn on_loaded(msg: Vec<serde_json::Value>) {
     info!("Data: {:#?}", msg);
-    Ok(())
 }
 
-async fn on_error(err: tradingview::error::Error) -> Result<()> {
+async fn on_error(err: tradingview::error::Error) {
     error!("Error: {:#?}", err);
-    Ok(())
 }

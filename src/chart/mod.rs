@@ -1,9 +1,9 @@
 #![allow(clippy::type_complexity)]
 use iso_currency::Currency;
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 use serde_json::Value;
 
-use crate::models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType, OHLCV};
+use crate::models::{ pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType, OHLCV };
 
 mod graphic_parser;
 pub mod session;
@@ -51,10 +51,11 @@ pub struct StudyResponseData {
     pub raw_graphics: GraphicDataResponse,
 }
 
+// TODO: Implement graphic parser for indexes response
 #[derive(Debug, Clone, Deserialize)]
 pub struct GraphicDataResponse {
     pub d: String,
-    pub indexes: Vec<i64>,
+    pub indexes: Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -142,6 +143,8 @@ pub struct ChartOptions {
     pub currency: Option<Currency>,
     pub session_type: Option<SessionType>,
     pub study_config: Option<StudyOptions>,
+    pub collect_all: Option<bool>,
+    pub expected_data_size: Option<usize>,
 }
 
 #[derive(Clone)]

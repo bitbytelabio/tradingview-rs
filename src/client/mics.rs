@@ -10,7 +10,7 @@ use crate::{
         ChartDrawing,
     },
     utils::build_request,
-    Error,
+    error::Error,
     Result,
 };
 use reqwest::Response;
@@ -72,7 +72,7 @@ pub async fn search_symbol(
             "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={search_type}&start={start}&domain={domain}&sort_by_country={country}",
             search = search,
             exchange = exchange,
-            search_type = market_type.to_string(),
+            search_type = market_type,
             start = start,
             country = country,
             domain = if domain.is_empty() { "production" } else { domain }
@@ -107,11 +107,11 @@ pub async fn list_symbols(
 
     let search_symbol_reps = search_symbol(
         "",
-        &*exchange,
-        &*market_type,
+        &exchange,
+        &market_type,
         0,
-        &*country,
-        &*domain
+        &country,
+        &domain
     ).await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
@@ -130,7 +130,7 @@ pub async fn list_symbols(
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            search_symbol("", &*exchange, &*market_type, i, &*country, &*domain).await.map(
+            search_symbol("", &exchange, &market_type, i, &country, &domain).await.map(
                 |resp| resp.symbols
             )
         });
@@ -175,10 +175,26 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
                 }
             });
         }
-        None => {
-            return Err(Error::NoChartTokenFound);
-        }
+        None => { Err(Error::NoChartTokenFound) }
     }
+}
+
+/// Retrieves the quote token from TradingView.
+///
+/// # Arguments
+///
+/// * `client` - A reference to a `UserCookies` struct containing the user's cookies.
+///
+/// # Returns
+///
+/// A `Result` containing a `String` with the quote token if successful, or an error if the request fails.
+#[tracing::instrument(skip(client))]
+pub async fn get_quote_token(client: &UserCookies) -> Result<String> {
+    let data: String = get(
+        Some(client),
+        "https://www.tradingview.com/quote_token"
+    ).await?.json().await?;
+    Ok(data)
 }
 
 /// Retrieves a chart drawing from TradingView's charts-storage API.
@@ -264,6 +280,29 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
     Ok(indicators)
 }
 
+/// Searches for indicators on TradingView.
+///
+/// # Arguments
+///
+/// * `client` - An optional reference to a `UserCookies` object.
+/// * `search` - A string slice containing the search query.
+/// * `offset` - An integer representing the offset of the search results.
+///
+/// # Returns
+///
+/// A `Result` containing a vector of `PineSearchResult` objects if successful, or an `Error` if unsuccessful.
+///
+/// # Example
+///
+/// ```rust
+/// use tradingview::api::search_indicator;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let results = search_indicator(None, "rsi", 0).await.unwrap();
+///     println!("{:?}", results);
+/// }
+/// ```
 #[tracing::instrument(skip(client))]
 pub async fn search_indicator(
     client: Option<&UserCookies>,
@@ -278,13 +317,40 @@ pub async fn search_indicator(
     let resp: pine_indicator::SearchResponse = get(client, &url).await?.json().await?;
     debug!("Response: {:?}", resp);
 
-    if resp.result.is_empty() {
+    if resp.results.is_empty() {
         return Err(Error::Generic("No results found".to_string()));
     }
 
-    Ok(resp.result)
+    Ok(resp.results)
 }
 
+/// Retrieves metadata for a TradingView Pine indicator.
+///
+/// # Arguments
+///
+/// * `client` - An optional reference to a `UserCookies` struct.
+/// * `pinescript_id` - The ID of the Pine script.
+/// * `pinescript_version` - The version of the Pine script.
+///
+/// # Returns
+///
+/// Returns a `Result` containing a `PineMetadata` struct if successful, or an `Error` if unsuccessful.
+///
+/// # Examples
+///
+/// ```rust
+/// use tradingview::api::get_indicator_metadata;
+///
+/// async fn run() -> Result<(), Box<dyn std::error::Error>> {
+///     let client = None;
+///     let pinescript_id = "PUB;2187";
+///     let pinescript_version = "-1";
+///
+///     let metadata = get_indicator_metadata(client.as_ref(), pinescript_id, pinescript_version).await?;
+///     println!("{:?}", metadata);
+///     Ok(())
+/// }
+/// ```
 #[tracing::instrument(skip(client))]
 pub async fn get_indicator_metadata(
     client: Option<&UserCookies>,

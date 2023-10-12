@@ -1,7 +1,4 @@
-use crate::{
-    chart::{ChartResponseData, StudyResponseData},
-    models::OHLCV,
-};
+use crate::{ chart::{ ChartResponseData, StudyResponseData }, models::OHLCV };
 use rayon::prelude::*;
 use serde_json::Value;
 use std::sync::Mutex;
@@ -62,9 +59,7 @@ pub fn par_extract_ohlcv_data(data: &ChartResponseData) -> Vec<OHLCV> {
 ///
 pub fn sort_ohlcv_tuples(tuples: &mut [OHLCV]) {
     tuples.sort_by(|a, b| {
-        a.timestamp
-            .partial_cmp(&b.timestamp)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        a.timestamp.partial_cmp(&b.timestamp).unwrap_or(std::cmp::Ordering::Equal)
     });
 }
 
@@ -78,17 +73,16 @@ pub fn sort_ohlcv_tuples(tuples: &mut [OHLCV]) {
 /// * `data` - A mutable reference to a vector of OHLCV data.
 /// * `new_data` - The new OHLCV data point to update or add to `data`.
 pub fn update_ohlcv_data_point(data: &mut Vec<OHLCV>, new_data: OHLCV) {
-    if let Some(index) = data
-        .iter()
-        .position(|&x| ((x.timestamp - new_data.timestamp) as f64).abs() < f64::EPSILON)
+    if
+        let Some(index) = data
+            .iter()
+            .position(|&x| ((x.timestamp - new_data.timestamp) as f64).abs() < f64::EPSILON)
     {
         data[index] = new_data;
     } else {
         data.push(new_data);
         data.sort_by(|a, b| {
-            a.timestamp
-                .partial_cmp(&b.timestamp)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            a.timestamp.partial_cmp(&b.timestamp).unwrap_or(std::cmp::Ordering::Equal)
         });
     }
 }
@@ -119,10 +113,11 @@ pub fn update_ohlcv_data(old_data: &mut Vec<OHLCV>, new_data: &Vec<OHLCV>) {
 /// If the value at the given index is not a string, an empty string is returned.
 pub fn get_string_value(values: &[Value], index: usize) -> String {
     match values.get(index) {
-        Some(value) => match value.as_str() {
-            Some(string_value) => string_value.to_string(),
-            None => "".to_string(),
-        },
+        Some(value) =>
+            match value.as_str() {
+                Some(string_value) => string_value.to_string(),
+                None => "".to_string(),
+            }
         None => "".to_string(),
     }
 }
@@ -130,7 +125,7 @@ pub fn get_string_value(values: &[Value], index: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chart::{ChartResponseData, DataPoint};
+    use crate::chart::{ ChartResponseData, DataPoint };
     use serde_json::json;
 
     #[test]
@@ -140,7 +135,7 @@ mod tests {
             OHLCV::new((1691647200.0, 82600.0, 82800.0, 82200.0, 82200.0, 784500.0)),
             OHLCV::new((1691733600.0, 81600.0, 83000.0, 81500.0, 82000.0, 625500.0)),
             OHLCV::new((1691632800.0, 83100.0, 83300.0, 82300.0, 82600.0, 558800.0)),
-            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0)),
+            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0))
         ];
 
         sort_ohlcv_tuples(&mut tuples);
@@ -150,7 +145,7 @@ mod tests {
             OHLCV::new((1691632800.0, 83100.0, 83300.0, 82300.0, 82600.0, 558800.0)),
             OHLCV::new((1691647200.0, 82600.0, 82800.0, 82200.0, 82200.0, 784500.0)),
             OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0)),
-            OHLCV::new((1691733600.0, 81600.0, 83000.0, 81500.0, 82000.0, 625500.0)),
+            OHLCV::new((1691733600.0, 81600.0, 83000.0, 81500.0, 82000.0, 625500.0))
         ];
 
         assert_eq!(tuples, expected_output);
@@ -163,7 +158,7 @@ mod tests {
             OHLCV::new((1691647200.0, 82600.0, 82800.0, 82200.0, 82200.0, 784500.0)),
             OHLCV::new((1691733600.0, 81600.0, 83000.0, 81500.0, 82000.0, 625500.0)),
             OHLCV::new((1691632800.0, 83100.0, 83300.0, 82300.0, 82600.0, 558800.0)),
-            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0)),
+            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0))
         ];
 
         let new_data = OHLCV::new((1691647200.0, 82700.0, 82900.0, 82100.0, 82300.0, 800000.0));
@@ -175,7 +170,7 @@ mod tests {
             OHLCV::new((1691647200.0, 82700.0, 82900.0, 82100.0, 82300.0, 800000.0)),
             OHLCV::new((1691733600.0, 81600.0, 83000.0, 81500.0, 82000.0, 625500.0)),
             OHLCV::new((1691632800.0, 83100.0, 83300.0, 82300.0, 82600.0, 558800.0)),
-            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0)),
+            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0))
         ];
 
         assert_eq!(data, expected_output);
@@ -188,14 +183,14 @@ mod tests {
             OHLCV::new((1691647200.0, 82600.0, 82800.0, 82200.0, 82200.0, 784500.0)),
             OHLCV::new((1691733600.0, 81600.0, 83000.0, 81500.0, 82000.0, 625500.0)),
             OHLCV::new((1691632800.0, 83100.0, 83300.0, 82300.0, 82600.0, 558800.0)),
-            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0)),
+            OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0))
         ];
 
         let new_data = vec![
             OHLCV::new((1691647200.0, 82700.0, 82900.0, 82100.0, 82300.0, 800000.0)),
             OHLCV::new((1691733600.0, 81700.0, 83100.0, 81600.0, 83000.0, 700000.0)),
             OHLCV::new((1691632800.0, 83200.0, 83400.0, 82400.0, 82700.0, 600000.0)),
-            OHLCV::new((1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0)),
+            OHLCV::new((1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0))
         ];
 
         update_ohlcv_data(&mut old_data, &new_data);
@@ -206,7 +201,7 @@ mod tests {
             OHLCV::new((1691647200.0, 82700.0, 82900.0, 82100.0, 82300.0, 800000.0)),
             OHLCV::new((1691719200.0, 82000.0, 82200.0, 81600.0, 81600.0, 517400.0)),
             OHLCV::new((1691733600.0, 81700.0, 83100.0, 81600.0, 83000.0, 700000.0)),
-            OHLCV::new((1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0)),
+            OHLCV::new((1691805600.0, 82500.0, 82700.0, 82000.0, 82100.0, 900000.0))
         ];
 
         assert_eq!(old_data, expected_output, "values don't match");
@@ -256,7 +251,7 @@ mod tests {
                 DataPoint {
                     index: 10,
                     value: (10.0, 11.0, 12.0, 13.0, 14.0, 15.0),
-                },
+                }
             ],
         };
         let expected_output = vec![
@@ -269,7 +264,7 @@ mod tests {
             OHLCV::new((7.0, 8.0, 9.0, 10.0, 11.0, 12.0)),
             OHLCV::new((8.0, 9.0, 10.0, 11.0, 12.0, 13.0)),
             OHLCV::new((9.0, 10.0, 11.0, 12.0, 13.0, 14.0)),
-            OHLCV::new((10.0, 11.0, 12.0, 13.0, 14.0, 15.0)),
+            OHLCV::new((10.0, 11.0, 12.0, 13.0, 14.0, 15.0))
         ];
         let output = extract_ohlcv_data(&chart_data);
         let output2 = par_extract_ohlcv_data(&chart_data);

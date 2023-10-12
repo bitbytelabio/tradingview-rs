@@ -38,7 +38,7 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Error> {
+async fn on_chart_data(data: ChartSeries) {
     // Assuming you have the OHLCV data in a Vec<OHLCV> named `data`
 
     // Extract the individual fields from OHLCV objects
@@ -84,20 +84,13 @@ async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Erro
         let f = std::fs::File::create(csv_out).unwrap();
         CsvWriter::new(f).finish(&mut df).unwrap();
     }
-
-    Ok(())
 }
 
-async fn on_symbol_resolved(
-    data: tradingview::chart::SymbolInfo
-) -> Result<(), tradingview::error::Error> {
+async fn on_symbol_resolved(data: tradingview::chart::SymbolInfo) {
     info!("on_symbol_resolved: {:?}", data);
-    Ok(())
 }
 
-async fn on_series_completed(
-    data: tradingview::chart::SeriesCompletedMessage
-) -> Result<(), tradingview::error::Error> {
+async fn on_series_completed(data: tradingview::chart::SeriesCompletedMessage) {
     info!("on_series_completed: {:?}", data);
     exit(0);
 }

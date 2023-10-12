@@ -16,12 +16,18 @@ Accept: application/json
 
 ```http
 GET /pine-facade/list?filter=candlestick HTTP/1.1
-Host: pine-facade.tradingview.com{{host}}
+Host: pine-facade.tradingview.com
 Accept: application/json
 ```
 
 ```http
 GET /pine-facade/translate/STD%3BPrice_Oscillator/28.0 HTTP/2.0
+Host: pine-facade.tradingview.com
+Accept: application/json
+```
+
+```http
+GET /pine-facade/translate/STD%3BCandlestick%251Pattern%251Bearish%251Abandoned%251Baby/33.0 HTTP/2.0
 Host: pine-facade.tradingview.com
 Accept: application/json
 ```

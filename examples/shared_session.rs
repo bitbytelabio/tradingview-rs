@@ -83,39 +83,29 @@ async fn main() {
     }
 }
 
-async fn on_chart_data(data: ChartSeries) -> Result<(), tradingview::error::Error> {
+async fn on_chart_data(data: ChartSeries) {
     info!("on_chart_data: {:?}", data);
-    Ok(())
 }
 
-async fn on_data(data: HashMap<String, QuoteValue>) -> Result<(), tradingview::error::Error> {
+async fn on_data(data: HashMap<String, QuoteValue>) {
     data.iter().for_each(|(_, v)| {
         let json_string = serde_json::to_string(&v).unwrap();
         info!("{}", json_string);
     });
-    Ok(())
 }
 
-async fn on_loaded(msg: Vec<serde_json::Value>) -> Result<(), tradingview::error::Error> {
+async fn on_loaded(msg: Vec<serde_json::Value>) {
     info!("Data: {:#?}", msg);
-    Ok(())
 }
 
-async fn on_error(err: tradingview::error::Error) -> Result<(), tradingview::error::Error> {
+async fn on_error(err: tradingview::error::Error) {
     error!("Error: {:#?}", err);
-    Ok(())
 }
 
-async fn on_symbol_resolved(
-    data: tradingview::chart::SymbolInfo
-) -> Result<(), tradingview::error::Error> {
+async fn on_symbol_resolved(data: tradingview::chart::SymbolInfo) {
     info!("on_symbol_resolved: {:?}", data);
-    Ok(())
 }
 
-async fn on_series_completed(
-    data: tradingview::chart::SeriesCompletedMessage
-) -> Result<(), tradingview::error::Error> {
+async fn on_series_completed(data: tradingview::chart::SeriesCompletedMessage) {
     info!("on_series_completed: {:?}", data);
-    Ok(())
 }
