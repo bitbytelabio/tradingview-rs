@@ -132,8 +132,7 @@ impl WebSocket {
     }
 
     pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
-        self.auth_token = auth_token.to_owned();
-        self.socket.send("set_auth_token", &payload!(auth_token)).await?;
+        self.socket.update_auth_token(auth_token).await?;
         Ok(())
     }
 
