@@ -51,10 +51,11 @@ pub struct StudyResponseData {
     pub raw_graphics: GraphicDataResponse,
 }
 
+// TODO: Implement graphic parser for indexes response
 #[derive(Debug, Clone, Deserialize)]
 pub struct GraphicDataResponse {
     pub d: String,
-    pub indexes: Vec<i64>,
+    pub indexes: Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]

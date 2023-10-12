@@ -27,12 +27,12 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market("HOSE:FPT", ChartOptions {
+        .set_market("BINANCE:BTCUSDT", ChartOptions {
             resolution: Interval::Daily,
             bar_count: 1,
             study_config: Some(StudyOptions {
-                script_id: "STD;Fund_total_revenue_fq".to_string(),
-                script_version: "62.0".to_string(),
+                script_id: "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby".to_string(),
+                script_version: "33.0".to_string(),
                 script_type: tradingview::models::pine_indicator::ScriptType::IntervalScript,
             }),
             ..Default::default()

@@ -136,10 +136,7 @@ struct GraphicDataResponse {
     hhists: HashMap<String, HorizHist>,
 }
 
-fn _graphic_parse(
-    raw_graphic: GraphicDataResponse,
-    indexes: Vec<i64>
-) -> HashMap<String, Vec<Box>> {
+fn graphic_parse(raw_graphic: GraphicDataResponse, indexes: Vec<i64>) -> HashMap<String, Vec<Box>> {
     let translator = Translator {
         extend: [
             ('r', "right"),
