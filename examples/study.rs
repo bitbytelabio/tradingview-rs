@@ -27,7 +27,8 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market("BINANCE:BTCUSDT", ChartOptions {
+        .set_market(ChartOptions {
+            symbol: "BINANCE:BTCUSDT".to_string(),
             resolution: Interval::Daily,
             bar_count: 1,
             study_config: Some(StudyOptions {

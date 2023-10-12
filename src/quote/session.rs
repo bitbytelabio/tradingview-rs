@@ -206,7 +206,7 @@ impl Socket for WebSocket {
                 }
             }
             TradingViewDataEvent::OnQuoteCompleted => {
-                (self.callbacks.loaded)(message.p.clone()).await;
+                tokio::spawn((self.callbacks.loaded)(message.p.clone()));
             }
             TradingViewDataEvent::OnError(e) => {
                 self.handle_error(Error::TradingViewError(e)).await;

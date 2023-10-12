@@ -27,7 +27,8 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market("BINANCE:BTCUSDT", ChartOptions {
+        .set_market(ChartOptions {
+            symbol: "BINANCE:BTCUSDT".to_string(),
             resolution: Interval::OneMinute,
             bar_count: 50_000,
             replay_mode: Some(true),

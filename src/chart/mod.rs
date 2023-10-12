@@ -132,6 +132,7 @@ pub struct Subsession {
 
 #[derive(Default, Clone)]
 pub struct ChartOptions {
+    pub symbol: String,
     pub resolution: Interval,
     pub bar_count: u64,
     pub range: Option<String>,

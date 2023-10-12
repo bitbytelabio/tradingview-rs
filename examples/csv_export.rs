@@ -29,7 +29,8 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market("NASDAQ:AMZN", ChartOptions {
+        .set_market(ChartOptions {
+            symbol: "NASDAQ:AMZN".to_string(),
             resolution: Interval::Daily,
             bar_count: 50_000,
             ..Default::default()

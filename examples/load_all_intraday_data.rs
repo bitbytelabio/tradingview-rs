@@ -7,7 +7,6 @@ use tradingview::{
     socket::DataServer,
 };
 use polars::prelude::*;
-use chrono::{ DateTime, TimeZone, Utc };
 
 #[tokio::main]
 async fn main() {
@@ -29,13 +28,12 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market("BINANCE:BTCUSDT", ChartOptions {
+        .set_market(ChartOptions {
+            symbol: "BINANCE:BTCUSDT".to_string(),
             resolution: Interval::OneMinute,
             bar_count: 50_000,
             collect_all: Some(true),
             expected_data_size: Some(100_000),
-            // replay_mode: Some(true),
-            // replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
             ..Default::default()
         }).await
         .unwrap();

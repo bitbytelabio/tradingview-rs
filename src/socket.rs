@@ -318,5 +318,5 @@ pub(crate) trait Socket {
 
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()>;
 
-    async fn handle_error(&mut self, error: Error) {}
+    async fn handle_error(&mut self, error: Error);
 }

@@ -40,23 +40,16 @@ pub struct WebSocketsBuilder {
     auth_token: Option<String>,
     socket: Option<SocketSession>,
     relay_mode: bool,
-    collect_all: bool,
 }
 
 pub struct WebSocket {
-    symbol: String,
-    interval: Interval,
+    options: ChartOptions,
     socket: SocketSession,
     series_info: HashMap<String, ChartSeriesInfo>,
     series_count: u16,
     study_count: u16,
-    expected_data_size: usize,
     studies: HashMap<String, String>,
-    replay_mode: bool,
-    collect_all: bool,
-    collector: Vec<OHLCV>,
-    // expected_data_size: u64,
-    // replay_info: HashMap<String, ReplayInfo>,
+    replay_collectors: Vec<OHLCV>,
     auth_token: String,
     callbacks: ChartCallbackFn,
 }
@@ -65,20 +58,8 @@ pub struct WebSocket {
 struct ChartSeriesInfo {
     id: String,
     chart_session: String,
-    // version: String,
-    // symbol_series_id: String,
-    // replay_info: Option<ReplayInfo>,
     chart_series: ChartSeries,
 }
-
-// #[derive(Debug, Clone, Default)]
-// struct ReplayInfo {
-//     timestamp: i64,
-//     replay_session_id: String,
-//     replay_series_id: String,
-//     replay_step: u64,
-//     resolution: Interval,
-// }
 
 pub struct ChartCallbackFn {
     pub on_chart_data: AsyncCallback<ChartSeries>,
@@ -118,19 +99,14 @@ impl WebSocketsBuilder {
 
         Ok(WebSocket {
             socket,
-            symbol: String::default(),
-            interval: Interval::default(),
-            replay_mode: self.relay_mode,
-            collect_all: self.collect_all,
-            collector: Vec::new(),
+            replay_collectors: Vec::new(),
             series_info: HashMap::new(),
-            expected_data_size: 0,
-            // replay_info: HashMap::new(),
             series_count: 0,
             study_count: 0,
             studies: HashMap::new(),
             auth_token,
             callbacks: callback,
+            options: ChartOptions::default(),
         })
     }
 }
@@ -395,29 +371,28 @@ impl WebSocket {
 
     // End TradingView WebSocket methods
 
-    pub async fn set_market(&mut self, symbol: &str, config: ChartOptions) -> Result<()> {
+    pub async fn set_market(&mut self, config: ChartOptions) -> Result<()> {
         self.series_count += 1;
-        self.symbol = symbol.to_string();
-        self.interval = config.resolution.clone();
-        self.collect_all = config.collect_all.unwrap_or_default();
-        self.expected_data_size = config.expected_data_size.unwrap_or_default();
-
+        self.options = config.clone();
         let series_count = self.series_count;
         let symbol_series_id = format!("sds_sym_{}", series_count);
         let series_id = format!("sds_{}", series_count);
         let series_version = format!("s{}", series_count);
         let chart_session = gen_session_id("cs");
 
-        self.replay_mode = config.replay_mode.unwrap_or_default();
-
         self.create_chart_session(&chart_session).await?;
 
-        if self.replay_mode && config.replay_from.is_some() {
+        if config.replay_mode.unwrap_or_default() && config.replay_from.is_some() {
             let replay_session_id = gen_session_id("rs");
             let replay_series_id = gen_id();
 
             self.create_replay_session(&replay_session_id).await?;
-            self.add_replay_series(&replay_session_id, &replay_series_id, symbol, &config).await?;
+            self.add_replay_series(
+                &replay_session_id,
+                &replay_series_id,
+                &config.symbol,
+                &config
+            ).await?;
             self.replay_reset(
                 &replay_session_id,
                 &replay_series_id,
@@ -427,19 +402,18 @@ impl WebSocket {
             self.resolve_symbol(
                 &chart_session,
                 &symbol_series_id,
-                symbol,
+                &config.symbol,
                 &config,
                 Some(replay_session_id.clone())
             ).await?;
-
-            // self.replay_info.insert(ticker.to_string(), ReplayInfo {
-            //     replay_session_id,
-            //     replay_series_id,
-            //     timestamp: config.replay_from.unwrap(),
-            //     ..Default::default()
-            // });
         } else {
-            self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config, None).await?;
+            self.resolve_symbol(
+                &chart_session,
+                &symbol_series_id,
+                &config.symbol,
+                &config,
+                None
+            ).await?;
         }
 
         self.create_series(
@@ -469,17 +443,15 @@ impl WebSocket {
         let series_info = ChartSeriesInfo {
             chart_session,
             id: series_id,
-            // version: series_version,
-            // symbol_series_id,
             chart_series: ChartSeries {
-                symbol_id: symbol.to_string(),
+                symbol_id: config.symbol.clone(),
                 interval: config.resolution,
                 ..Default::default()
             },
             ..Default::default()
         };
 
-        self.series_info.insert(symbol.to_string(), series_info);
+        self.series_info.insert(config.symbol, series_info);
 
         Ok(())
     }
@@ -544,32 +516,29 @@ impl WebSocket {
 
         for handler in tasks {
             if let Some(data) = handler.await?? {
-                if self.collect_all {
-                    self.set_market(&self.symbol.clone(), ChartOptions {
-                        resolution: self.interval.clone(),
-                        bar_count: 50_000,
+                if self.options.collect_all.unwrap_or_default() {
+                    self.set_market(ChartOptions {
                         replay_mode: Some(true),
                         collect_all: Some(true),
                         replay_from: Some((data.data.first().unwrap().timestamp / 1000) as i64),
-                        expected_data_size: Some(self.expected_data_size),
-                        ..Default::default()
+                        ..self.options.clone()
                     }).await?;
-                    self.collector.extend(data.data);
-                    self.collector.dedup();
-                    info!("collector length: {}", self.collector.len());
-                    if self.collector.len() >= self.expected_data_size {
-                        self.collect_all = false;
+                    self.replay_collectors.extend(data.data);
+                    self.replay_collectors.dedup();
+                    if
+                        self.replay_collectors.len() >=
+                        self.options.expected_data_size.unwrap_or_default()
+                    {
+                        self.options.collect_all = Some(false);
                         tokio::spawn(
                             (self.callbacks.on_chart_data)(ChartSeries {
-                                symbol_id: self.symbol.clone(),
-                                interval: self.interval.clone(),
-                                data: self.collector.clone(),
+                                symbol_id: self.options.symbol.clone(),
+                                interval: self.options.resolution,
+                                data: self.replay_collectors.clone(),
                             })
                         );
-                        self.delete().await?;
                     }
                 } else {
-                    // self.collect_all = false;
                     tokio::spawn((self.callbacks.on_chart_data)(data));
                 }
             }

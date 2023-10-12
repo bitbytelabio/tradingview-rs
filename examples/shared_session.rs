@@ -59,7 +59,8 @@ async fn main() {
         .unwrap();
 
     chart_socket
-        .set_market("BINANCE:ETHUSDT", ChartOptions {
+        .set_market(ChartOptions {
+            symbol: "BINANCE:BTCUSDT".to_string(),
             resolution: Interval::FourHours,
             bar_count: 5,
             range: Some("60M".to_string()),
