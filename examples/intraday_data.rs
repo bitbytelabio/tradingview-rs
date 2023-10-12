@@ -34,33 +34,24 @@ async fn main() {
             bar_count: 50_000,
 
             fetch_all_data: true,
-            fetch_data_count: 100_000,
+            fetch_data_count: 200_000,
 
             ..Default::default()
         }).await
         .unwrap();
 
-    // socket
-    //     .set_market(
-    //         "BINANCE:ETHUSDT",
-    //         Options {
-    //             resolution: Interval::FourHours,
-    //             bar_count: 5,
-    //             range: Some("60M".to_string()),
-    //             ..Default::default()
-    //         },
-    //     )
-    //     .await
-    //     .unwrap();
+    socket
+        .set_market(ChartOptions {
+            symbol: "BINANCE:ETHUSDT".to_string(),
+            interval: Interval::FourHours,
+            bar_count: 50_000,
 
-    // socket
-    //     .resolve_symbol("ser_1", "BINANCE:BTCUSDT", None, None, None)
-    //     .await
-    //     .unwrap();
-    // socket
-    //     .set_series(tradingview::models::Interval::FourHours, 20000, None)
-    //     .await
-    //     .unwrap();
+            fetch_all_data: true,
+            fetch_data_count: 100_000,
+
+            ..Default::default()
+        }).await
+        .unwrap();
 
     socket.subscribe().await;
 }
@@ -112,9 +103,9 @@ async fn on_chart_data(data: ChartSeriesData) {
     ).unwrap();
     df.rename("timestamp", "date").unwrap();
 
-    let csv_out = "tmp/BINANCE_BTCUSDT.csv";
-    if std::fs::metadata(csv_out).is_err() {
-        let f = std::fs::File::create(csv_out).unwrap();
+    let csv_out = format!("tmp/{}-{}.csv", data.symbol, data.interval);
+    if std::fs::metadata(&csv_out).is_err() {
+        let f = std::fs::File::create(&csv_out).unwrap();
         CsvWriter::new(f).finish(&mut df).unwrap();
     }
 }

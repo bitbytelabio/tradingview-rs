@@ -26,7 +26,7 @@ use crate::{
         TradingViewDataEvent,
     },
     utils::{ gen_id, gen_session_id, symbol_init },
-    error::Error,
+    error::{ Error, TradingViewError },
     Result,
 };
 use async_trait::async_trait;
@@ -47,7 +47,7 @@ pub struct WebSocket {
     series_count: u16,
     study_count: u16,
     studies: HashMap<String, String>,
-    replay_collectors: HashMap<String, ChartSeriesData>,
+    data_collectors: HashMap<String, ChartSeriesData>,
     auth_token: String,
     callbacks: ChartCallbackFn,
 }
@@ -97,7 +97,7 @@ impl WebSocketsBuilder {
 
         Ok(WebSocket {
             socket,
-            replay_collectors: HashMap::new(),
+            data_collectors: HashMap::new(),
             series: Vec::new(),
             series_count: 0,
             study_count: 0,
@@ -457,8 +457,8 @@ impl WebSocket {
     }
 
     async fn on_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        let series_info = self.series.clone();
-        for s in series_info {
+        let mut series_info = self.series.clone();
+        for s in series_info.iter_mut() {
             trace!("received v: {:?}, m: {:?}", s, message);
             match message.p[1].get(s.id.as_str()) {
                 Some(resp_data) => {
@@ -470,15 +470,15 @@ impl WebSocket {
                     };
                     debug!("series data extracted: {:?}", data);
                     let k = format!("{}-{}", s.options.symbol, s.options.interval);
-                    match self.replay_collectors.get_mut(&k) {
+                    match self.data_collectors.get_mut(&k) {
                         Some(collector) => {
                             if
                                 s.options.fetch_all_data &&
                                 collector.data.len() <= s.options.fetch_data_count
                             {
                                 collector.data.extend(data);
-                                collector.data.dedup();
-                                let replay_from = collector.data[0].timestamp / 1000;
+                                let replay_from = collector.data.first().unwrap().timestamp / 1000;
+                                info!("replay loading data from timestamp in seconds: {}", replay_from);
                                 self.set_market(ChartOptions {
                                     replay_mode: Some(true),
                                     replay_from: Some(replay_from),
@@ -486,6 +486,7 @@ impl WebSocket {
                                 }).await?;
                             } else if collector.data.len() >= s.options.fetch_data_count {
                                 tokio::spawn((self.callbacks.on_chart_data)(collector.clone()));
+                                s.options.fetch_all_data = false;
                             } else {
                                 tokio::spawn(
                                     (self.callbacks.on_chart_data)(ChartSeriesData {
@@ -497,7 +498,7 @@ impl WebSocket {
                             }
                         }
                         None => {
-                            self.replay_collectors.insert(k, ChartSeriesData {
+                            self.data_collectors.insert(k, ChartSeriesData {
                                 symbol: s.options.symbol.clone(),
                                 interval: s.options.interval,
                                 data,
@@ -545,7 +546,7 @@ impl Socket for WebSocket {
                     version: get_string_value(&message.p, 3),
                 };
                 info!("series is completed: {:#?}", message);
-                (self.callbacks.on_series_completed)(message).await;
+                tokio::spawn((self.callbacks.on_series_completed)(message));
             }
             TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
@@ -572,8 +573,19 @@ impl Socket for WebSocket {
                 trace!("received study completed message: {:?}", message);
             }
             TradingViewDataEvent::OnError(error) => {
-                error!("received error {:?}, with message: {:?}", error, message);
-                self.handle_error(Error::TradingViewError(error)).await;
+                match error {
+                    TradingViewError::SeriesError => todo!(),
+                    TradingViewError::SymbolError => todo!(),
+                    TradingViewError::CriticalError => todo!(),
+                    TradingViewError::StudyError => todo!(),
+                    TradingViewError::ProtocolError => {
+                        error!("received protocol error: {:?}, try to reconnect", message);
+                        self.handle_error(Error::TradingViewError(error)).await;
+                    }
+                    TradingViewError::QuoteDataStatusError => todo!(),
+                    TradingViewError::ReplayError =>
+                        warn!("received replay error {:?}, retry in the next request...", message),
+                }
             }
             TradingViewDataEvent::UnknownEvent(e) => {
                 warn!("received unknown event: {:?}", e);
@@ -586,7 +598,22 @@ impl Socket for WebSocket {
     }
 
     async fn handle_error(&mut self, error: Error) {
-        error!("error handling event: {:#?}", error);
+        match error {
+            Error::TradingViewError(e) => {
+                match e {
+                    TradingViewError::QuoteDataStatusError => {
+                        warn!("received quote data status error, reconnecting...");
+                        // self.socket.reconnect().await.unwrap();
+                    }
+                    _ => {
+                        error!("received error: {:?}", e);
+                    }
+                }
+            }
+            _ => {
+                error!("received error: {:?}", error);
+            }
+        }
         // TODO: better handle error
     }
 }
