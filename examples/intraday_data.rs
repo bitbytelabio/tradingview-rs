@@ -2,12 +2,11 @@ use dotenv::dotenv;
 use std::env;
 use tracing::info;
 use tradingview::{
-    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeries },
+    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeriesData },
     models::Interval,
     socket::DataServer,
 };
 use polars::prelude::*;
-use chrono::{ DateTime, TimeZone, Utc };
 
 #[tokio::main]
 async fn main() {
@@ -29,43 +28,35 @@ async fn main() {
         .unwrap();
 
     socket
-        .set_market("BINANCE:BTCUSDT", ChartOptions {
-            resolution: Interval::OneMinute,
+        .set_market(ChartOptions {
+            symbol: "BINANCE:BTCUSDT".to_string(),
+            interval: Interval::OneMinute,
             bar_count: 50_000,
-            collect_all: Some(true),
-            expected_data_size: Some(100_000),
-            // replay_mode: Some(true),
-            // replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
+
+            fetch_all_data: true,
+            fetch_data_count: 200_000,
+
             ..Default::default()
         }).await
         .unwrap();
 
-    // socket
-    //     .set_market(
-    //         "BINANCE:ETHUSDT",
-    //         Options {
-    //             resolution: Interval::FourHours,
-    //             bar_count: 5,
-    //             range: Some("60M".to_string()),
-    //             ..Default::default()
-    //         },
-    //     )
-    //     .await
-    //     .unwrap();
+    socket
+        .set_market(ChartOptions {
+            symbol: "BINANCE:ETHUSDT".to_string(),
+            interval: Interval::FourHours,
+            bar_count: 50_000,
 
-    // socket
-    //     .resolve_symbol("ser_1", "BINANCE:BTCUSDT", None, None, None)
-    //     .await
-    //     .unwrap();
-    // socket
-    //     .set_series(tradingview::models::Interval::FourHours, 20000, None)
-    //     .await
-    //     .unwrap();
+            fetch_all_data: true,
+            fetch_data_count: 100_000,
+
+            ..Default::default()
+        }).await
+        .unwrap();
 
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) {
+async fn on_chart_data(data: ChartSeriesData) {
     let timestamp: Vec<i64> = data.data
         .iter()
         .map(|item| item.timestamp)
@@ -112,9 +103,9 @@ async fn on_chart_data(data: ChartSeries) {
     ).unwrap();
     df.rename("timestamp", "date").unwrap();
 
-    let csv_out = "tmp/BINANCE_BTCUSDT.csv";
-    if std::fs::metadata(csv_out).is_err() {
-        let f = std::fs::File::create(csv_out).unwrap();
+    let csv_out = format!("tmp/{}-{}.csv", data.symbol, data.interval);
+    if std::fs::metadata(&csv_out).is_err() {
+        let f = std::fs::File::create(&csv_out).unwrap();
         CsvWriter::new(f).finish(&mut df).unwrap();
     }
 }

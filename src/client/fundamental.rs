@@ -5,7 +5,7 @@ use tracing::info;
 use super::mics::get_builtin_indicators;
 use crate::{
     models::{
-        pine_indicator::{ BuiltinIndicators, ScriptType, PineMetadataInfo },
+        pine_indicator::{ BuiltinIndicators, ScriptType },
         FinancialPeriod,
     },
     Result,
@@ -53,7 +53,7 @@ pub async fn test01() -> Result<()> {
                     let category = FundamentalCategory::from_str(category);
                     match category {
                         Some(cat) => {
-                            let vec = map.entry(cat).or_insert(vec![]);
+                            let vec = map.entry(cat).or_default();
                             vec.push(FundamentalIndicator {
                                 name: i.script_name.clone(),
                                 period: i.extra.financial_period.clone().unwrap(),

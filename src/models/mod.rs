@@ -346,7 +346,7 @@ impl std::fmt::Display for Timezone {
     }
 }
 
-#[derive(Default, Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Serialize, Hash)]
 pub enum Interval {
     OneSecond,
     FiveSeconds,
