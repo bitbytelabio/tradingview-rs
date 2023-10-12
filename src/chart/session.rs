@@ -48,7 +48,6 @@ pub struct WebSocket {
     study_count: u16,
     studies: HashMap<String, String>,
     data_collectors: HashMap<String, ChartSeriesData>,
-    auth_token: String,
     callbacks: ChartCallbackFn,
 }
 
@@ -102,7 +101,6 @@ impl WebSocketsBuilder {
             series_count: 0,
             study_count: 0,
             studies: HashMap::new(),
-            auth_token,
             callbacks: callback,
         })
     }

@@ -32,7 +32,6 @@ pub struct WebSocket {
     quote_session_id: String,
     quote_fields: Vec<Value>,
     prev_quotes: HashMap<String, QuoteValue>,
-    auth_token: String,
     callbacks: QuoteCallbackFn,
 }
 
@@ -117,7 +116,6 @@ impl WebSocketsBuilder {
             socket,
             quote_session_id: session,
             quote_fields,
-            auth_token,
             prev_quotes: HashMap::new(),
             callbacks: callback,
         })
@@ -159,8 +157,7 @@ impl WebSocket {
     }
 
     pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
-        self.auth_token = auth_token.to_owned();
-        self.socket.send("set_auth_token", &payload!(auth_token)).await?;
+        self.socket.update_auth_token(auth_token).await?;
         Ok(())
     }
 
