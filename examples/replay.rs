@@ -2,7 +2,7 @@ use dotenv::dotenv;
 use std::env;
 use tracing::info;
 use tradingview::{
-    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeries },
+    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeriesData },
     models::Interval,
     socket::DataServer,
 };
@@ -29,7 +29,7 @@ async fn main() {
     socket
         .set_market(ChartOptions {
             symbol: "BINANCE:BTCUSDT".to_string(),
-            resolution: Interval::OneMinute,
+            interval: Interval::OneMinute,
             bar_count: 50_000,
             replay_mode: Some(true),
             replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
@@ -62,7 +62,7 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) {
+async fn on_chart_data(data: ChartSeriesData) {
     let end = data.data.first().unwrap().timestamp;
     info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
 }

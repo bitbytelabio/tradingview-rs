@@ -76,8 +76,8 @@ pub struct ChartDataChanges {
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
-pub struct ChartSeries {
-    pub symbol_id: String,
+pub struct ChartSeriesData {
+    pub symbol: String,
     pub interval: Interval,
     pub data: Vec<OHLCV>,
 }
@@ -130,11 +130,15 @@ pub struct Subsession {
     pub session_display: String,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct ChartOptions {
     pub symbol: String,
-    pub resolution: Interval,
+    pub interval: Interval,
     pub bar_count: u64,
+
+    pub fetch_all_data: bool,
+    pub fetch_data_count: usize,
+
     pub range: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
@@ -144,11 +148,9 @@ pub struct ChartOptions {
     pub currency: Option<Currency>,
     pub session_type: Option<SessionType>,
     pub study_config: Option<StudyOptions>,
-    pub collect_all: Option<bool>,
-    pub expected_data_size: Option<usize>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct StudyOptions {
     pub script_id: String,
     pub script_version: String,

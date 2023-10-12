@@ -3,7 +3,11 @@ use std::{ collections::HashMap, env, sync::Arc };
 use tokio::sync::Mutex;
 use tracing::{ error, info };
 use tradingview::{
-    chart::{ session::{ ChartCallbackFn, WebSocket as ChartSocket }, ChartOptions, ChartSeries },
+    chart::{
+        session::{ ChartCallbackFn, WebSocket as ChartSocket },
+        ChartOptions,
+        ChartSeriesData,
+    },
     models::Interval,
     quote::{ session::{ QuoteCallbackFn, WebSocket as QuoteSocket }, QuoteValue },
     socket::DataServer,
@@ -61,7 +65,7 @@ async fn main() {
     chart_socket
         .set_market(ChartOptions {
             symbol: "BINANCE:BTCUSDT".to_string(),
-            resolution: Interval::FourHours,
+            interval: Interval::FourHours,
             bar_count: 5,
             range: Some("60M".to_string()),
             ..Default::default()
@@ -84,7 +88,7 @@ async fn main() {
     }
 }
 
-async fn on_chart_data(data: ChartSeries) {
+async fn on_chart_data(data: ChartSeriesData) {
     info!("on_chart_data: {:?}", data);
 }
 

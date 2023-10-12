@@ -5,7 +5,7 @@ use polars::prelude::*;
 
 use tracing::info;
 use tradingview::{
-    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeries },
+    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeriesData },
     models::Interval,
     socket::DataServer,
 };
@@ -31,7 +31,7 @@ async fn main() {
     socket
         .set_market(ChartOptions {
             symbol: "NASDAQ:AMZN".to_string(),
-            resolution: Interval::Daily,
+            interval: Interval::Daily,
             bar_count: 50_000,
             ..Default::default()
         }).await
@@ -39,7 +39,8 @@ async fn main() {
     socket.subscribe().await;
 }
 
-async fn on_chart_data(data: ChartSeries) {
+async fn on_chart_data(data: ChartSeriesData) {
+    info!("on_chart_data: {:?}", data);
     // Assuming you have the OHLCV data in a Vec<OHLCV> named `data`
 
     // Extract the individual fields from OHLCV objects
@@ -93,5 +94,5 @@ async fn on_symbol_resolved(data: tradingview::chart::SymbolInfo) {
 
 async fn on_series_completed(data: tradingview::chart::SeriesCompletedMessage) {
     info!("on_series_completed: {:?}", data);
-    exit(0);
+    // exit(0);
 }
