@@ -1,5 +1,5 @@
 use dotenv::dotenv;
-use std::{ collections::HashMap, env, sync::Arc };
+use std::{ collections::HashMap, env, sync::Arc, time, thread, process };
 use tokio::sync::Mutex;
 use tracing::{ error, info };
 use tradingview::{
@@ -113,4 +113,7 @@ async fn on_symbol_resolved(data: tradingview::chart::SymbolInfo) {
 
 async fn on_series_completed(data: tradingview::chart::SeriesCompletedMessage) {
     info!("on_series_completed: {:?}", data);
+    let ten_millis = time::Duration::from_secs(5);
+    thread::sleep(ten_millis);
+    process::exit(0);
 }

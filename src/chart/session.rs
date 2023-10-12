@@ -580,7 +580,7 @@ impl Socket for WebSocket {
                     TradingViewError::StudyError => todo!(),
                     TradingViewError::ProtocolError => {
                         error!("received protocol error: {:?}, try to reconnect", message);
-                        self.handle_error(Error::TradingViewError(error)).await;
+                        self.socket.reconnect().await?;
                     }
                     TradingViewError::QuoteDataStatusError => todo!(),
                     TradingViewError::ReplayError =>
