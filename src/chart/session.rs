@@ -15,7 +15,7 @@ use crate::{
         StudyResponseData,
         SymbolInfo,
     },
-    models::{ pine_indicator::PineIndicator, Interval, Timezone },
+    models::{ pine_indicator::PineIndicator, Interval, Timezone, OHLCV },
     payload,
     socket::{
         AsyncCallback,
@@ -40,16 +40,23 @@ pub struct WebSocketsBuilder {
     auth_token: Option<String>,
     socket: Option<SocketSession>,
     relay_mode: bool,
+    collect_all: bool,
 }
 
 pub struct WebSocket {
+    symbol: String,
+    interval: Interval,
     socket: SocketSession,
     series_info: HashMap<String, ChartSeriesInfo>,
     series_count: u16,
     study_count: u16,
+    expected_data_size: usize,
     studies: HashMap<String, String>,
     replay_mode: bool,
-    replay_info: HashMap<String, ReplayInfo>,
+    collect_all: bool,
+    collector: Vec<OHLCV>,
+    // expected_data_size: u64,
+    // replay_info: HashMap<String, ReplayInfo>,
     auth_token: String,
     callbacks: ChartCallbackFn,
 }
@@ -58,20 +65,20 @@ pub struct WebSocket {
 struct ChartSeriesInfo {
     id: String,
     chart_session: String,
-    version: String,
-    symbol_series_id: String,
-    replay_info: Option<ReplayInfo>,
+    // version: String,
+    // symbol_series_id: String,
+    // replay_info: Option<ReplayInfo>,
     chart_series: ChartSeries,
 }
 
-#[derive(Debug, Clone, Default)]
-struct ReplayInfo {
-    timestamp: i64,
-    replay_session_id: String,
-    replay_series_id: String,
-    replay_step: u64,
-    resolution: Interval,
-}
+// #[derive(Debug, Clone, Default)]
+// struct ReplayInfo {
+//     timestamp: i64,
+//     replay_session_id: String,
+//     replay_series_id: String,
+//     replay_step: u64,
+//     resolution: Interval,
+// }
 
 pub struct ChartCallbackFn {
     pub on_chart_data: AsyncCallback<ChartSeries>,
@@ -111,9 +118,14 @@ impl WebSocketsBuilder {
 
         Ok(WebSocket {
             socket,
+            symbol: String::default(),
+            interval: Interval::default(),
             replay_mode: self.relay_mode,
+            collect_all: self.collect_all,
+            collector: Vec::new(),
             series_info: HashMap::new(),
-            replay_info: HashMap::new(),
+            expected_data_size: 0,
+            // replay_info: HashMap::new(),
             series_count: 0,
             study_count: 0,
             studies: HashMap::new(),
@@ -385,6 +397,11 @@ impl WebSocket {
 
     pub async fn set_market(&mut self, symbol: &str, config: ChartOptions) -> Result<()> {
         self.series_count += 1;
+        self.symbol = symbol.to_string();
+        self.interval = config.resolution.clone();
+        self.collect_all = config.collect_all.unwrap_or_default();
+        self.expected_data_size = config.expected_data_size.unwrap_or_default();
+
         let series_count = self.series_count;
         let symbol_series_id = format!("sds_sym_{}", series_count);
         let series_id = format!("sds_{}", series_count);
@@ -415,12 +432,12 @@ impl WebSocket {
                 Some(replay_session_id.clone())
             ).await?;
 
-            self.replay_info.insert(symbol.to_string(), ReplayInfo {
-                replay_session_id,
-                replay_series_id,
-                timestamp: config.replay_from.unwrap(),
-                ..Default::default()
-            });
+            // self.replay_info.insert(ticker.to_string(), ReplayInfo {
+            //     replay_session_id,
+            //     replay_series_id,
+            //     timestamp: config.replay_from.unwrap(),
+            //     ..Default::default()
+            // });
         } else {
             self.resolve_symbol(&chart_session, &symbol_series_id, symbol, &config, None).await?;
         }
@@ -452,8 +469,8 @@ impl WebSocket {
         let series_info = ChartSeriesInfo {
             chart_session,
             id: series_id,
-            version: series_version,
-            symbol_series_id,
+            // version: series_version,
+            // symbol_series_id,
             chart_series: ChartSeries {
                 symbol_id: symbol.to_string(),
                 interval: config.resolution,
@@ -488,23 +505,27 @@ impl WebSocket {
             let value = Arc::new(value.clone());
             let message = Arc::clone(&message);
             let task = tokio::task::spawn(async move {
-                if let Some(resp_data) = message.p[1].get(value.id.as_str()) {
-                    let resp = serde_json::from_value::<ChartResponseData>(resp_data.clone())?;
-                    let data = if resp.series.len() > 20_000 {
-                        par_extract_ohlcv_data(&resp)
-                    } else {
-                        extract_ohlcv_data(&resp)
-                    };
-                    debug!("series data extracted: {} - {:?}", key, data);
-                    Ok(
-                        Some(ChartSeries {
-                            symbol_id: key.to_string(),
-                            interval: value.chart_series.interval,
-                            data,
-                        })
-                    )
-                } else {
-                    Ok(None)
+                match message.p[1].get(value.id.as_str()) {
+                    Some(resp_data) => {
+                        let resp = serde_json::from_value::<ChartResponseData>(resp_data.clone())?;
+                        let data = if resp.series.len() > 20_000 {
+                            par_extract_ohlcv_data(&resp)
+                        } else {
+                            extract_ohlcv_data(&resp)
+                        };
+                        debug!("series data extracted: {} - {:?}", key, data);
+                        return Ok(
+                            Some(ChartSeries {
+                                symbol_id: key.to_string(),
+                                interval: value.chart_series.interval,
+                                data,
+                            })
+                        );
+                    }
+                    None => {
+                        info!("receive empty series data on ticker: {}", key);
+                        return Ok(None);
+                    }
                 }
             });
             tasks.push(task);
@@ -523,7 +544,34 @@ impl WebSocket {
 
         for handler in tasks {
             if let Some(data) = handler.await?? {
-                (self.callbacks.on_chart_data)(data).await;
+                if self.collect_all {
+                    self.set_market(&self.symbol.clone(), ChartOptions {
+                        resolution: self.interval.clone(),
+                        bar_count: 50_000,
+                        replay_mode: Some(true),
+                        collect_all: Some(true),
+                        replay_from: Some((data.data.first().unwrap().timestamp / 1000) as i64),
+                        expected_data_size: Some(self.expected_data_size),
+                        ..Default::default()
+                    }).await?;
+                    self.collector.extend(data.data);
+                    self.collector.dedup();
+                    info!("collector length: {}", self.collector.len());
+                    if self.collector.len() >= self.expected_data_size {
+                        self.collect_all = false;
+                        tokio::spawn(
+                            (self.callbacks.on_chart_data)(ChartSeries {
+                                symbol_id: self.symbol.clone(),
+                                interval: self.interval.clone(),
+                                data: self.collector.clone(),
+                            })
+                        );
+                        self.delete().await?;
+                    }
+                } else {
+                    // self.collect_all = false;
+                    tokio::spawn((self.callbacks.on_chart_data)(data));
+                }
             }
         }
         Ok(())
@@ -578,7 +626,7 @@ impl Socket for WebSocket {
                 trace!("received study completed message: {:?}", message);
             }
             TradingViewDataEvent::OnError(error) => {
-                error!("received error: {:?}", error);
+                error!("received error {:?}, with message: {:?}", error, message);
                 self.handle_error(Error::TradingViewError(error)).await;
             }
             TradingViewDataEvent::UnknownEvent(e) => {

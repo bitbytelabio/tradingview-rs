@@ -25,7 +25,7 @@ pub struct Collector {
 }
 
 impl Collector {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
@@ -37,7 +37,7 @@ impl Collector {
 
     pub async fn connect(&mut self, auth_token: &str, server: &DataServer) -> Result<&mut Self> {
         let handlers = ChartCallbackFn {
-            on_chart_data: Box::new(|data| Box::pin(Self::on_chart_data(data))),
+            on_chart_data: Box::new(|data| { Box::pin(Self::on_chart_data(data)) }),
             on_symbol_resolved: Box::new(|data| Box::pin(Self::on_symbol_resolved(data))),
             on_series_completed: Box::new(|data| Box::pin(Self::on_series_completed(data))),
         };
@@ -58,11 +58,13 @@ impl Collector {
         socket.set_market(&self.ticker, ChartOptions {
             resolution: self.interval.clone(),
             bar_count: 50_000,
-            replay_mode: Some(true),
-            replay_from: Some(self.from_time), //1689552000 // 1688342400 // 1687132800
+            // replay_mode: Some(true),
+            // replay_from: Some(self.from_time), //1689552000 // 1688342400 // 1687132800
             currency: self.currency.clone(),
             ..Default::default()
         }).await?;
+
+        socket.subscribe().await;
 
         Ok(())
     }
@@ -70,6 +72,7 @@ impl Collector {
     async fn on_chart_data(data: ChartSeries) {
         let end = data.data.first().unwrap().timestamp;
         info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
+        // info!("on_chart_data: {:?} - {:?}", data.data.len(), end);
     }
 
     async fn on_symbol_resolved(data: SymbolInfo) {

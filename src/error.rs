@@ -51,6 +51,8 @@ pub enum TradingViewError {
     ProtocolError,
     #[error("error")]
     QuoteDataStatusError,
+    #[error("replay_error")]
+    ReplayError,
 }
 
 #[derive(Debug, Clone, Error)]

@@ -80,6 +80,7 @@ impl From<String> for TradingViewDataEvent {
             "critical_error" => TradingViewDataEvent::OnError(TradingViewError::CriticalError),
             "study_error" => TradingViewDataEvent::OnError(TradingViewError::StudyError),
             "protocol_error" => TradingViewDataEvent::OnError(TradingViewError::ProtocolError),
+            "replay_error" => TradingViewDataEvent::OnError(TradingViewError::ReplayError),
 
             s => TradingViewDataEvent::UnknownEvent(s.to_string()),
         }

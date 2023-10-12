@@ -143,6 +143,8 @@ pub struct ChartOptions {
     pub currency: Option<Currency>,
     pub session_type: Option<SessionType>,
     pub study_config: Option<StudyOptions>,
+    pub collect_all: Option<bool>,
+    pub expected_data_size: Option<usize>,
 }
 
 #[derive(Clone)]
