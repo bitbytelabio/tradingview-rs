@@ -482,9 +482,21 @@ impl WebSocket {
                         s.options.fetch_all_data &&
                         collector.data.len() >= s.options.fetch_data_count
                     {
-                        tokio::spawn((self.callbacks.on_chart_data)(collector.clone()));
-                        s.options.fetch_all_data = false;
-                        collector.data.clear();
+                        let task = tokio::spawn((self.callbacks.on_chart_data)(collector.clone()));
+                        match task.await {
+                            Ok(_) => {
+                                debug!("fetch all data completed for series: {:?}", s);
+                                s.options.fetch_all_data = false;
+                                collector.data.clear();
+                            }
+                            Err(e) => {
+                                error!(
+                                    "chart data callback panic with error: {:?}, on series {:?}",
+                                    e,
+                                    s
+                                );
+                            }
+                        }
                     } else {
                         tokio::spawn(
                             (self.callbacks.on_chart_data)(ChartSeriesData {
@@ -523,6 +535,7 @@ impl Socket for WebSocket {
                 self.handler_chart_data(message).await?;
             }
             TradingViewDataEvent::OnSymbolResolved => {
+                // TODO: Add callback for symbol resolved
                 let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
                 debug!("received symbol information: {:?}", symbol_info);
                 (self.callbacks.on_symbol_resolved)(symbol_info).await;
