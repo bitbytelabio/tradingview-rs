@@ -485,7 +485,10 @@ impl WebSocket {
                         let task = tokio::spawn((self.callbacks.on_chart_data)(collector.clone()));
                         match task.await {
                             Ok(_) => {
-                                debug!("fetch all data completed for series: {:?}", s);
+                                debug!(
+                                    "fetch all chart series data completely sent for series: {:?}",
+                                    s
+                                );
                                 s.options.fetch_all_data = false;
                                 collector.data.clear();
                             }
@@ -498,13 +501,27 @@ impl WebSocket {
                             }
                         }
                     } else {
-                        tokio::spawn(
+                        let task = tokio::spawn(
                             (self.callbacks.on_chart_data)(ChartSeriesData {
                                 symbol: collector.symbol.clone(),
                                 interval: collector.interval,
                                 data,
                             })
                         );
+                        match task.await {
+                            Ok(_) => {
+                                debug!("chart series data completely sent for series: {:?}", s);
+                                s.options.fetch_all_data = false;
+                                collector.data.clear();
+                            }
+                            Err(e) => {
+                                error!(
+                                    "chart data callback panic with error: {:?}, on series {:?}",
+                                    e,
+                                    s
+                                );
+                            }
+                        }
                     }
                 }
                 None => {
