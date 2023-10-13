@@ -38,16 +38,15 @@ pub struct WebSocketsBuilder {
     server: Option<DataServer>,
     auth_token: Option<String>,
     socket: Option<SocketSession>,
-    relay_mode: bool,
 }
 
 pub struct WebSocket {
     socket: SocketSession,
     series: Vec<SeriesInfo>,
     series_count: u16,
-    study_count: u16,
     studies: HashMap<String, String>,
-    data_collectors: HashMap<String, ChartSeriesData>,
+    studies_count: u16,
+    collectors: HashMap<String, ChartSeriesData>,
     callbacks: ChartCallbackFn,
 }
 
@@ -80,11 +79,6 @@ impl WebSocketsBuilder {
         self
     }
 
-    pub fn relay_mode(&mut self, relay_mode: bool) -> &mut Self {
-        self.relay_mode = relay_mode;
-        self
-    }
-
     pub async fn connect(&self, callback: ChartCallbackFn) -> Result<WebSocket> {
         let auth_token = self.auth_token.clone().unwrap_or("unauthorized_user_token".to_string());
 
@@ -96,10 +90,10 @@ impl WebSocketsBuilder {
 
         Ok(WebSocket {
             socket,
-            data_collectors: HashMap::new(),
+            collectors: HashMap::new(),
             series: Vec::new(),
             series_count: 0,
-            study_count: 0,
+            studies_count: 0,
             studies: HashMap::new(),
             callbacks: callback,
         })
@@ -415,8 +409,8 @@ impl WebSocket {
         ).await?;
 
         if let Some(study) = &config.study_config {
-            self.study_count += 1;
-            let study_count = self.study_count;
+            self.studies_count += 1;
+            let study_count = self.studies_count;
             let study_id = format!("st{}", study_count);
 
             let indicator = PineIndicator::build().fetch(
@@ -467,13 +461,11 @@ impl WebSocket {
                     };
                     debug!("series data extracted: {:?}", data);
                     let k = format!("{}-{}", s.options.symbol, s.options.interval);
-                    let collector = self.data_collectors
-                        .entry(k.clone())
-                        .or_insert(ChartSeriesData {
-                            symbol: s.options.symbol.clone(),
-                            interval: s.options.interval,
-                            data: Vec::new(),
-                        });
+                    let collector = self.collectors.entry(k.clone()).or_insert(ChartSeriesData {
+                        symbol: s.options.symbol.clone(),
+                        interval: s.options.interval,
+                        data: Vec::new(),
+                    });
                     if
                         s.options.fetch_all_data &&
                         collector.data.len() <= s.options.fetch_data_count
