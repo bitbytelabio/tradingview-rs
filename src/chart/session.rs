@@ -467,40 +467,38 @@ impl WebSocket {
                     };
                     debug!("series data extracted: {:?}", data);
                     let k = format!("{}-{}", s.options.symbol, s.options.interval);
-                    match self.data_collectors.get_mut(&k) {
-                        Some(collector) => {
-                            if
-                                s.options.fetch_all_data &&
-                                collector.data.len() <= s.options.fetch_data_count
-                            {
-                                collector.data.extend(data);
-                                let replay_from = collector.data.first().unwrap().timestamp / 1000;
-                                info!("replay loading data from timestamp in seconds: {}", replay_from);
-                                self.set_market(ChartOptions {
-                                    replay_mode: Some(true),
-                                    replay_from: Some(replay_from),
-                                    ..s.options.clone()
-                                }).await?;
-                            } else if collector.data.len() >= s.options.fetch_data_count {
-                                tokio::spawn((self.callbacks.on_chart_data)(collector.clone()));
-                                s.options.fetch_all_data = false;
-                            } else {
-                                tokio::spawn(
-                                    (self.callbacks.on_chart_data)(ChartSeriesData {
-                                        symbol: collector.symbol.clone(),
-                                        interval: collector.interval,
-                                        data,
-                                    })
-                                );
-                            }
-                        }
-                        None => {
-                            self.data_collectors.insert(k, ChartSeriesData {
-                                symbol: s.options.symbol.clone(),
-                                interval: s.options.interval,
+                    let collector = self.data_collectors.entry(k).or_insert(ChartSeriesData {
+                        symbol: s.options.symbol.clone(),
+                        interval: s.options.interval,
+                        data: Vec::new(),
+                    });
+                    if
+                        s.options.fetch_all_data &&
+                        collector.data.len() <= s.options.fetch_data_count
+                    {
+                        collector.data.extend(data);
+                        let replay_from = collector.data.first().unwrap().timestamp / 1000;
+                        info!("replay loading data from timestamp in seconds: {}", replay_from);
+                        self.set_market(ChartOptions {
+                            replay_mode: Some(true),
+                            replay_from: Some(replay_from),
+                            ..s.options.clone()
+                        }).await?;
+                        return Ok(());
+                    } else if
+                        s.options.fetch_all_data &&
+                        collector.data.len() >= s.options.fetch_data_count
+                    {
+                        tokio::spawn((self.callbacks.on_chart_data)(collector.clone()));
+                        s.options.fetch_all_data = false;
+                    } else {
+                        tokio::spawn(
+                            (self.callbacks.on_chart_data)(ChartSeriesData {
+                                symbol: collector.symbol.clone(),
+                                interval: collector.interval,
                                 data,
-                            });
-                        }
+                            })
+                        );
                     }
                 }
                 None => {

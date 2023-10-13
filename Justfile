@@ -24,29 +24,8 @@ format:
 checks: build quick-test clippy format
 	@git status
 
-quote-example:
-	cargo run --package tradingview-rs --example quote
-
-chart-example:
-	cargo run --package tradingview-rs --example chart
-
-user-example:
-	cargo run --package tradingview-rs --example user
-
-client-example:
-	cargo run --package tradingview-rs --example client
-
-shared_session-example:
-	cargo run --package tradingview-rs --example shared_session
-
-replay-example:
-	cargo run --package tradingview-rs --example replay
-
-study-example:
-	cargo run --package tradingview-rs --example study
-
-csv_export-example:
-	cargo run --package tradingview-rs --example csv_export
+example bin:
+	cargo run --package tradingview-rs --example {{bin}}
 
 lines-of-code:
 	@git ls-files | grep '\.rs' | xargs wc -l
