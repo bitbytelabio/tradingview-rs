@@ -484,7 +484,6 @@ impl WebSocket {
                             replay_from: Some(replay_from),
                             ..s.options.clone()
                         }).await?;
-                        return Ok(());
                     } else if
                         s.options.fetch_all_data &&
                         collector.data.len() >= s.options.fetch_data_count
