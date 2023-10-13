@@ -467,11 +467,13 @@ impl WebSocket {
                     };
                     debug!("series data extracted: {:?}", data);
                     let k = format!("{}-{}", s.options.symbol, s.options.interval);
-                    let collector = self.data_collectors.entry(k).or_insert(ChartSeriesData {
-                        symbol: s.options.symbol.clone(),
-                        interval: s.options.interval,
-                        data: Vec::new(),
-                    });
+                    let collector = self.data_collectors
+                        .entry(k.clone())
+                        .or_insert(ChartSeriesData {
+                            symbol: s.options.symbol.clone(),
+                            interval: s.options.interval,
+                            data: Vec::new(),
+                        });
                     if
                         s.options.fetch_all_data &&
                         collector.data.len() <= s.options.fetch_data_count
@@ -490,6 +492,7 @@ impl WebSocket {
                     {
                         tokio::spawn((self.callbacks.on_chart_data)(collector.clone()));
                         s.options.fetch_all_data = false;
+                        collector.data.clear();
                     } else {
                         tokio::spawn(
                             (self.callbacks.on_chart_data)(ChartSeriesData {
