@@ -42,7 +42,7 @@ pub struct WebSocketsBuilder {
 
 pub struct WebSocket {
     socket: SocketSession,
-    series: Vec<SeriesInfo>,
+    series: HashMap<String, SeriesInfo>,
     series_count: u16,
     studies: HashMap<String, String>,
     studies_count: u16,
@@ -52,8 +52,8 @@ pub struct WebSocket {
 
 #[derive(Debug, Clone, Default)]
 struct SeriesInfo {
-    id: String,
     chart_session: String,
+    is_completed: bool,
     options: ChartOptions,
 }
 
@@ -91,7 +91,7 @@ impl WebSocketsBuilder {
         Ok(WebSocket {
             socket,
             collectors: HashMap::new(),
-            series: Vec::new(),
+            series: HashMap::new(),
             series_count: 0,
             studies_count: 0,
             studies: HashMap::new(),
@@ -357,6 +357,14 @@ impl WebSocket {
         Ok(())
     }
 
+    pub async fn delete(&mut self) -> Result<()> {
+        for (_, s) in self.series.clone() {
+            self.delete_chart_session_id(&s.chart_session).await?;
+        }
+        self.socket.close().await?;
+        Ok(())
+    }
+
     // End TradingView WebSocket methods
 
     pub async fn set_market(&mut self, config: ChartOptions) -> Result<()> {
@@ -426,32 +434,20 @@ impl WebSocket {
 
         let series_info = SeriesInfo {
             chart_session,
-            id: series_id,
+            is_completed: false,
             options: config,
         };
 
-        self.series.push(series_info);
+        self.series.insert(series_id, series_info);
 
         Ok(())
-    }
-
-    pub async fn delete(&mut self) -> Result<()> {
-        for s in self.series.clone() {
-            self.delete_chart_session_id(&s.chart_session).await?;
-        }
-        self.socket.close().await?;
-        Ok(())
-    }
-
-    pub async fn subscribe(&mut self) {
-        self.event_loop(&mut self.socket.clone()).await;
     }
 
     async fn handler_chart_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let mut series_info = self.series.clone();
-        for s in series_info.iter_mut() {
+        for (id, s) in series_info.iter_mut() {
             trace!("received v: {:?}, m: {:?}", s, message);
-            match message.p[1].get(s.id.as_str()) {
+            match message.p[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let resp = serde_json::from_value::<ChartResponseData>(resp_data.clone())?;
                     let data = if resp.series.len() > 20_000 {
@@ -541,6 +537,10 @@ impl WebSocket {
         }
         Ok(())
     }
+
+    pub async fn subscribe(&mut self) {
+        self.event_loop(&mut self.socket.clone()).await;
+    }
 }
 
 #[async_trait]
@@ -565,6 +565,17 @@ impl Socket for WebSocket {
                     version: get_string_value(&message.p, 3),
                 };
                 info!("series is completed: {:#?}", message);
+                match self.series.get_mut(&message.id) {
+                    Some(s) => {
+                        s.is_completed = true;
+                    }
+                    None => {
+                        warn!(
+                            "received series completed message but series not found: {:?}",
+                            message
+                        );
+                    }
+                }
                 tokio::spawn((self.callbacks.on_series_completed)(message));
             }
             TradingViewDataEvent::OnSeriesLoading => {
@@ -597,16 +608,39 @@ impl Socket for WebSocket {
                     TradingViewError::SymbolError => todo!(),
                     TradingViewError::CriticalError => {
                         error!("received critical error: {:?}, try to reconnect", message);
+                        match self.socket.reconnect().await {
+                            Ok(_) => {
+                                info!("reconnect successfully from TradingView critical error");
+                            }
+                            Err(e) => {
+                                error!(
+                                    "unable to reconnect from TradingView critical error with: {:?}",
+                                    e
+                                );
+                                self.handle_error(error.into()).await;
+                            }
+                        }
                     }
                     TradingViewError::StudyError => todo!(),
                     TradingViewError::ProtocolError => {
                         error!("received protocol error: {:?}, try to reconnect", message);
+                        match self.socket.reconnect().await {
+                            Ok(_) => {
+                                info!("reconnect successfully from TradingView critical error");
+                            }
+                            Err(e) => {
+                                error!(
+                                    "unable to reconnect from TradingView protocol error with: {:?}",
+                                    e
+                                );
+                                self.handle_error(error.into()).await;
+                            }
+                        }
                     }
                     TradingViewError::QuoteDataStatusError => todo!(),
                     TradingViewError::ReplayError =>
                         warn!("received replay error {:?}, retry in the next request...", message),
                 }
-                self.handle_error(Error::TradingViewError(error)).await;
             }
             TradingViewDataEvent::UnknownEvent(e) => {
                 warn!("received unknown event: {:?} with message: {:?}", e, message);
@@ -620,25 +654,7 @@ impl Socket for WebSocket {
 
     async fn handle_error(&mut self, error: Error) {
         match error {
-            Error::TradingViewError(e) => {
-                match e {
-                    TradingViewError::ProtocolError => {
-                        warn!("try to reconnect websocket session...");
-                        self.socket
-                            .reconnect().await
-                            .expect("todo!: better handle error on websocket reconnect");
-                    }
-                    TradingViewError::CriticalError => {
-                        warn!("try to reconnect websocket session...");
-                        self.socket
-                            .reconnect().await
-                            .expect("todo!: better handle error on websocket reconnect");
-                    }
-                    _ => {
-                        error!("received error: {:?}", e);
-                    }
-                }
-            }
+            Error::TradingViewError(_) => {}
             _ => {
                 error!("received error: {:?}", error);
             }
