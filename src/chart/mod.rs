@@ -9,6 +9,7 @@ mod graphic_parser;
 pub mod session;
 pub mod study;
 pub(crate) mod utils;
+pub(crate) mod options;
 
 pub enum ChartType {
     HeikinAshi,
