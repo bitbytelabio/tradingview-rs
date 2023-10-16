@@ -9,6 +9,7 @@ mod graphic_parser;
 pub mod session;
 pub mod study;
 pub(crate) mod utils;
+pub(crate) mod options;
 
 pub enum ChartType {
     HeikinAshi,
@@ -132,13 +133,16 @@ pub struct Subsession {
 
 #[derive(Default, Debug, Clone)]
 pub struct ChartOptions {
+    // Required
     pub symbol: String,
     pub interval: Interval,
     pub bar_count: u64,
 
+    // Optional
     pub fetch_all_data: bool,
     pub fetch_data_count: usize,
 
+    // TODO: Implement this
     pub range: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,

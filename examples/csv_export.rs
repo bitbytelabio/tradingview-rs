@@ -94,5 +94,5 @@ async fn on_symbol_resolved(data: tradingview::chart::SymbolInfo) {
 
 async fn on_series_completed(data: tradingview::chart::SeriesCompletedMessage) {
     info!("on_series_completed: {:?}", data);
-    // exit(0);
+    exit(0);
 }

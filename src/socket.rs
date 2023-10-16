@@ -164,6 +164,8 @@ impl std::fmt::Display for DataServer {
 
 #[derive(Clone)]
 pub struct SocketSession {
+    server: Arc<DataServer>,
+    auth_token: Arc<String>,
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
 }
@@ -194,13 +196,31 @@ impl SocketSession {
         Ok((write, read))
     }
 
+    pub async fn reconnect(&mut self) -> Result<()> {
+        let (write, read) = SocketSession::connect(
+            self.server.clone().as_ref(),
+            self.auth_token.clone().as_ref()
+        ).await?;
+        self.write = Arc::from(Mutex::new(write));
+        self.read = Arc::from(Mutex::new(read));
+        Ok(())
+    }
+
+    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
+        self.auth_token = Arc::new(auth_token.to_string());
+        self.send("set_auth_token", &payload!(auth_token)).await?;
+        Ok(())
+    }
+
     pub async fn new(server: DataServer, auth_token: String) -> Result<SocketSession> {
         let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
 
         let write = Arc::from(Mutex::new(write_stream));
         let read = Arc::from(Mutex::new(read_stream));
+        let server = Arc::new(server);
+        let auth_token = Arc::new(auth_token);
 
-        Ok(SocketSession { write, read })
+        Ok(SocketSession { server, auth_token, write, read })
     }
 
     pub async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
