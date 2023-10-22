@@ -18,7 +18,7 @@ use zip::ZipArchive;
 
 lazy_static::lazy_static! {
     static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").unwrap();
-    static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~[0-9]{1,}~m~").unwrap();
+    static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~\d+~m~").unwrap();
 }
 
 #[macro_export]
@@ -78,7 +78,7 @@ pub fn parse_packet(message: &str) -> Result<Vec<SocketMessage<SocketMessageDe>>
                 Ok(value) => value,
                 Err(error) => {
                     if error.is_syntax() {
-                        error!("error parsing packet: invalid JSON: {}", error);
+                        error!("error parsing packet, invalid JSON: {}", error);
                     } else {
                         error!("error parsing packet: {}", error);
                     }
@@ -91,7 +91,7 @@ pub fn parse_packet(message: &str) -> Result<Vec<SocketMessage<SocketMessageDe>>
     Ok(packets)
 }
 
-pub fn format_packet<T>(packet: T) -> Result<Message> where T: Serialize {
+pub fn format_packet<T: Serialize>(packet: T) -> Result<Message> {
     let json_string = serde_json::to_string(&packet)?;
     let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
     debug!("Formatted packet: {}", formatted_message);
