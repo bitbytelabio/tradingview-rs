@@ -193,13 +193,13 @@ impl Socket for WebSocket {
                     } else {
                         self.prev_quotes.insert(qsd.name.clone(), qsd.value.clone());
                     }
-                    (self.callbacks.data)(self.prev_quotes.clone()).await;
-                    return Ok(());
+                    tokio::spawn((self.callbacks.data)(self.prev_quotes.clone()));
                 } else {
-                    (self.callbacks.error)(
-                        Error::TradingViewError(TradingViewError::QuoteDataStatusError)
-                    ).await;
-                    return Ok(());
+                    tokio::spawn(
+                        (self.callbacks.error)(
+                            Error::TradingViewError(TradingViewError::QuoteDataStatusError)
+                        )
+                    );
                 }
             }
             TradingViewDataEvent::OnQuoteCompleted => {
