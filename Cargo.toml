@@ -51,7 +51,7 @@ google-authenticator = { version = "^0.4", optional = true }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 [dev-dependencies]
-polars = { version = "^0.33" }
+polars = { version = "^0.34" }
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
 protobuf = "3"
