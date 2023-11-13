@@ -73,7 +73,7 @@ impl UserCookies {
                 return Err(Error::LoginError(LoginError::OTPSecretNotFound));
             }
             let response = Self::handle_mfa(
-                &totp_secret.unwrap(),
+                totp_secret.unwrap(),
                 session.clone().unwrap_or_default().as_str(),
                 signature.clone().unwrap_or_default().as_str()
             ).await?;

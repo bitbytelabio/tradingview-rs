@@ -1,5 +1,5 @@
 use dotenv::dotenv;
-use std::env;
+
 use tracing::info;
 use tradingview::models::UserCookies;
 

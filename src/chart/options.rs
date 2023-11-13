@@ -11,7 +11,7 @@ impl ChartOptions {
     pub fn new(symbol: &str, interval: Interval) -> Self {
         Self {
             symbol: symbol.to_string(),
-            interval: interval,
+            interval,
             bar_count: 5000,
             ..Default::default()
         }
@@ -76,7 +76,7 @@ impl ChartOptions {
         self.study_config = Some(StudyOptions {
             script_id: script_id.to_string(),
             script_version: script_version.to_string(),
-            script_type: script_type,
+            script_type,
         });
         self
     }

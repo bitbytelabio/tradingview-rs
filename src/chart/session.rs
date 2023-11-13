@@ -372,13 +372,13 @@ impl WebSocket {
         let replay_session = gen_session_id("rs");
 
         self.create_replay_session(&replay_session).await?;
-        self.add_replay_series(&replay_session, &replay_series_id, &symbol, &options).await?;
+        self.add_replay_series(&replay_session, &replay_series_id, symbol, options).await?;
         self.replay_reset(&replay_session, &replay_series_id, options.replay_from).await?;
         self.resolve_symbol(
-            &chart_session,
-            &symbol_series_id,
+            chart_session,
+            symbol_series_id,
             &options.symbol,
-            &options,
+            options,
             Some(replay_session.to_string())
         ).await?;
 
@@ -460,7 +460,7 @@ impl WebSocket {
                     let resp = serde_json::from_value::<ChartResponseData>(resp_data.clone())?;
                     let data = extract_ohlcv_data(&resp);
                     debug!("series data extracted: {:?}", data);
-                    let _ = tokio::spawn(
+                    tokio::spawn(
                         (self.callbacks.on_chart_data)(ChartSeriesData {
                             symbol: s.options.symbol.clone(),
                             interval: s.options.interval,

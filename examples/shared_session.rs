@@ -19,8 +19,8 @@ async fn main() {
     dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let session = env::var("TV_SESSION").unwrap();
-    let signature = env::var("TV_SIGNATURE").unwrap();
+    let _session = env::var("TV_SESSION").unwrap();
+    let _signature = env::var("TV_SIGNATURE").unwrap();
 
     // let user = User::build().session(&session, &signature).get().await.unwrap();
 
