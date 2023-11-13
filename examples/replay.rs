@@ -28,7 +28,7 @@ async fn main() {
 
     let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute)
         .replay_mode(true)
-        .replay_from(1617235200);
+        .replay_from(1698624060);
 
     socket.set_market(opts).await.unwrap();
 

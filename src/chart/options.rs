@@ -33,17 +33,7 @@ impl ChartOptions {
     }
 
     pub fn replay_session_id(mut self, replay_session_id: &str) -> Self {
-        self.replay_session_id = Some(replay_session_id.to_string());
-        self
-    }
-
-    pub fn fetch_all_data(mut self, fetch_all_data: bool) -> Self {
-        self.fetch_all_data = fetch_all_data;
-        self
-    }
-
-    pub fn fetch_data_count(mut self, fetch_data_count: usize) -> Self {
-        self.fetch_data_count = fetch_data_count;
+        self.replay_session = Some(replay_session_id.to_string());
         self
     }
 

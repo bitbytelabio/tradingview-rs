@@ -138,15 +138,12 @@ pub struct ChartOptions {
     pub interval: Interval,
     bar_count: u64,
 
-    // Optional
-    fetch_all_data: bool,
-    fetch_data_count: usize,
     range: Option<String>,
     from: Option<u64>,
     to: Option<u64>,
     replay_mode: bool,
     replay_from: i64,
-    replay_session_id: Option<String>,
+    replay_session: Option<String>,
     adjustment: Option<MarketAdjustment>,
     currency: Option<Currency>,
     session_type: Option<SessionType>,
