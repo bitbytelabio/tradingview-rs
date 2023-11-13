@@ -55,6 +55,7 @@ pub struct WebSocket {
 #[derive(Debug, Clone, Default)]
 struct SeriesInfo {
     chart_session: String,
+    replay_session: Option<String>,
     is_completed: bool,
     options: ChartOptions,
 }
@@ -375,10 +376,14 @@ impl WebSocket {
         options: &ChartOptions,
         chart_session: &str,
         symbol_series_id: &str
-    ) -> Result<()> {
-        let replay_session_id = gen_session_id("rs");
+    ) -> Result<String> {
         let replay_series_id = gen_id();
-        self.create_replay_session(&replay_session_id).await?;
+        let mut replay_session_id = options.replay_session_id.clone().unwrap_or_default();
+        if replay_session_id.is_empty() {
+            replay_session_id = gen_session_id("rs");
+            self.create_replay_session(&replay_session_id).await?;
+        }
+
         self.add_replay_series(&replay_session_id, &replay_series_id, &symbol, &options).await?;
         self.replay_reset(&replay_session_id, &replay_series_id, options.replay_from).await?;
         self.resolve_symbol(
@@ -389,7 +394,7 @@ impl WebSocket {
             Some(replay_session_id.clone())
         ).await?;
 
-        Ok(())
+        Ok(replay_session_id)
     }
 
     pub async fn set_study(
@@ -421,11 +426,14 @@ impl WebSocket {
         let series_id = format!("sds_{}", series_count);
         let series_version = format!("s{}", series_count);
         let chart_session = gen_session_id("cs");
+        let mut replay_session: Option<String> = None;
 
         self.create_chart_session(&chart_session).await?;
 
         if options.replay_mode {
-            self.set_replay(&options.symbol, &options, &chart_session, &symbol_series_id).await?;
+            replay_session = Some(
+                self.set_replay(&options.symbol, &options, &chart_session, &symbol_series_id).await?
+            );
         } else {
             self.resolve_symbol(
                 &chart_session,
@@ -451,6 +459,7 @@ impl WebSocket {
         let series_info = SeriesInfo {
             chart_session,
             is_completed: false,
+            replay_session,
             options,
         };
 
@@ -484,9 +493,18 @@ impl WebSocket {
                     {
                         collector.data.extend(data);
                         let replay_from = collector.data.first().unwrap().timestamp / 1000;
+
                         info!("replay loading data from timestamp in seconds: {}", replay_from);
 
-                        let opts = s.options.clone().replay_mode(true).replay_from(replay_from);
+                        let mut opts = s.options
+                            .clone()
+                            .replay_mode(true)
+                            .replay_from(replay_from)
+                            .bar_count(500_000);
+
+                        if let Some(replay_session) = &s.options.replay_session_id {
+                            opts = opts.replay_session_id(replay_session);
+                        }
 
                         self.set_market(opts).await?;
                     } else if
