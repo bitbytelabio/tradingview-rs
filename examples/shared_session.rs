@@ -12,7 +12,6 @@ use tradingview::{
     quote::{ session::{ QuoteCallbackFn, WebSocket as QuoteSocket }, QuoteValue },
     socket::DataServer,
     socket::SocketSession,
-    user::User,
 };
 
 #[tokio::main]
@@ -23,7 +22,7 @@ async fn main() {
     let session = env::var("TV_SESSION").unwrap();
     let signature = env::var("TV_SIGNATURE").unwrap();
 
-    let user = User::build().session(&session, &signature).get().await.unwrap();
+    // let user = User::build().session(&session, &signature).get().await.unwrap();
 
     let handlers = ChartCallbackFn {
         on_chart_data: Box::new(|data| Box::pin(on_chart_data(data))),
@@ -31,7 +30,10 @@ async fn main() {
         on_series_completed: Box::new(|data| Box::pin(on_series_completed(data))),
     };
 
-    let socket_session = SocketSession::new(DataServer::ProData, user.auth_token).await.unwrap();
+    let socket_session = SocketSession::new(
+        DataServer::ProData,
+        "user.auth_token".to_owned()
+    ).await.unwrap();
 
     let mut chart_socket = ChartSocket::build()
         .socket(socket_session.clone())
@@ -76,9 +78,9 @@ async fn main() {
         // wait for receiving data
         // dummy loop
         std::thread::sleep(std::time::Duration::from_secs(60));
-        let new_token = User::build().session(&session, &signature).get().await.unwrap().auth_token;
+        // let new_token = User::build().session(&session, &signature).get().await.unwrap().auth_token;
 
-        socket_session.clone().update_token(&new_token).await.unwrap();
+        socket_session.clone().update_token("").await.unwrap();
     }
 }
 
