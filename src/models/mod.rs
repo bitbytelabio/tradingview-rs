@@ -60,7 +60,7 @@ pub struct ChartDrawingSourceStatePoint {
     price: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct UserCookies {
     pub id: u32,
     pub username: String,
