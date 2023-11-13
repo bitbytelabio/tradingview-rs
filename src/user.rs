@@ -1,8 +1,10 @@
 use crate::{ error::LoginError, error::Error, Result, models::UserCookies, UA };
-use google_authenticator::get_code;
-use google_authenticator::GA_AUTH;
-use reqwest::Client;
-use reqwest::header::{ HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, ORIGIN, REFERER };
+use google_authenticator::{ GA_AUTH, get_code };
+use reqwest::{
+    header::{ HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, ORIGIN, REFERER, COOKIE },
+    Client,
+    Response,
+};
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::{ debug, error, info, warn };
@@ -130,25 +132,33 @@ impl UserCookies {
         })
     }
 
-    async fn handle_mfa(
-        totp_secret: &str,
-        session: &str,
-        signature: &str
-    ) -> Result<reqwest::Response> {
+    async fn handle_mfa(totp_secret: &str, session: &str, signature: &str) -> Result<Response> {
         if totp_secret.is_empty() {
             return Err(Error::LoginError(LoginError::OTPSecretNotFound));
         }
 
-        use reqwest::multipart::Form;
+        let mut headers = HeaderMap::new();
 
-        let client: reqwest::Client = crate::utils::build_request(
-            Some(&format!("sessionid={}; sessionid_sign={};", session, signature))
-        )?;
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        headers.insert(ORIGIN, HeaderValue::from_static("https://www.tradingview.com"));
+        headers.insert(REFERER, HeaderValue::from_static("https://www.tradingview.com/"));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-www-form-urlencoded"));
+        headers.insert(
+            COOKIE,
+            HeaderValue::from_str(&format!("sessionid={}; sessionid_sign={};", session, signature))?
+        );
+
+        let client = Client::builder()
+            .use_rustls_tls()
+            .default_headers(headers)
+            .https_only(true)
+            .user_agent(UA)
+            .build()?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
-            .multipart(
-                Form::new().text("code", match get_code!(totp_secret) {
+            .body(
+                format!("code={}", match get_code!(totp_secret) {
                     Ok(code) => code,
                     Err(e) => {
                         error!("Error generating TOTP code: {}", e);

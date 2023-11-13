@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::{
     models::{ MarketAdjustment, SessionType },
     socket::{ SocketMessage, SocketMessageDe },
@@ -46,7 +45,6 @@ pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {
         .default_headers(headers)
         .https_only(true)
         .user_agent(crate::UA)
-        .gzip(true)
         .build()?;
     Ok(client)
 }
