@@ -62,15 +62,9 @@ async fn main() {
         ).await
         .unwrap();
 
-    chart_socket
-        .set_market(ChartOptions {
-            symbol: "BINANCE:BTCUSDT".to_string(),
-            interval: Interval::FourHours,
-            bar_count: 5,
-            range: Some("60M".to_string()),
-            ..Default::default()
-        }).await
-        .unwrap();
+    let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute);
+
+    chart_socket.set_market(opts).await.unwrap();
 
     let chart_socket = Arc::new(Mutex::new(chart_socket));
     let quote_socket = Arc::new(Mutex::new(quote_socket));

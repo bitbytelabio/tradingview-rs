@@ -2,8 +2,8 @@ use dotenv::dotenv;
 use std::env;
 use tracing::info;
 use tradingview::{
-    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeriesData, StudyOptions },
-    models::Interval,
+    chart::{ session::{ ChartCallbackFn, WebSocket }, ChartOptions, ChartSeriesData },
+    models::{ Interval, pine_indicator::ScriptType },
     socket::DataServer,
 };
 
@@ -26,19 +26,13 @@ async fn main() {
         .connect(handlers).await
         .unwrap();
 
-    socket
-        .set_market(ChartOptions {
-            symbol: "BINANCE:BTCUSDT".to_string(),
-            interval: Interval::Daily,
-            bar_count: 1,
-            study_config: Some(StudyOptions {
-                script_id: "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby".to_string(),
-                script_version: "33.0".to_string(),
-                script_type: tradingview::models::pine_indicator::ScriptType::IntervalScript,
-            }),
-            ..Default::default()
-        }).await
-        .unwrap();
+    let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily).study_config(
+        "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby",
+        "33.0",
+        ScriptType::IntervalScript
+    );
+
+    socket.set_market(opts).await.unwrap();
 
     socket.subscribe().await;
 }

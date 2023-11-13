@@ -26,14 +26,9 @@ async fn main() {
         .connect(handlers).await
         .unwrap();
 
-    socket
-        .set_market(ChartOptions {
-            symbol: "BINANCE:BTCUSDT".to_string(),
-            interval: Interval::OneMinute,
-            bar_count: 50_000,
-            ..Default::default()
-        }).await
-        .unwrap();
+    let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
+
+    socket.set_market(opts).await.unwrap();
 
     // socket
     //     .set_market(

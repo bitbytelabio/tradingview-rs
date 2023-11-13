@@ -26,16 +26,11 @@ async fn main() {
         .connect(handlers).await
         .unwrap();
 
-    socket
-        .set_market(ChartOptions {
-            symbol: "BINANCE:BTCUSDT".to_string(),
-            interval: Interval::OneMinute,
-            bar_count: 50_000,
-            replay_mode: Some(true),
-            replay_from: Some(1688342400), //1689552000 // 1688342400 // 1687132800
-            ..Default::default()
-        }).await
-        .unwrap();
+    let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute)
+        .replay_mode(true)
+        .replay_from(1617235200);
+
+    socket.set_market(opts).await.unwrap();
 
     // socket
     //     .set_market(

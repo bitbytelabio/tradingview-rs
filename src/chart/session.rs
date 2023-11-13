@@ -33,6 +33,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tracing::{ debug, error, info, trace, warn };
 
+use super::StudyOptions;
+
 #[derive(Default)]
 pub struct WebSocketsBuilder {
     server: Option<DataServer>,
@@ -367,43 +369,69 @@ impl WebSocket {
 
     // End TradingView WebSocket methods
 
-    pub async fn set_market(&mut self, config: ChartOptions) -> Result<()> {
+    pub async fn set_replay(
+        &mut self,
+        symbol: &str,
+        options: &ChartOptions,
+        chart_session: &str,
+        symbol_series_id: &str
+    ) -> Result<()> {
+        let replay_session_id = gen_session_id("rs");
+        let replay_series_id = gen_id();
+        self.create_replay_session(&replay_session_id).await?;
+        self.add_replay_series(&replay_session_id, &replay_series_id, &symbol, &options).await?;
+        self.replay_reset(&replay_session_id, &replay_series_id, options.replay_from).await?;
+        self.resolve_symbol(
+            &chart_session,
+            &symbol_series_id,
+            &options.symbol,
+            &options,
+            Some(replay_session_id.clone())
+        ).await?;
+
+        Ok(())
+    }
+
+    pub async fn set_study(
+        &mut self,
+        study: &StudyOptions,
+        chart_session: &str,
+        series_id: &str
+    ) -> Result<()> {
+        self.studies_count += 1;
+        let study_count = self.studies_count;
+        let study_id = format!("st{}", study_count);
+
+        let indicator = PineIndicator::build().fetch(
+            &study.script_id,
+            &study.script_version,
+            study.script_type.clone()
+        ).await?;
+
+        self.studies.insert(indicator.metadata.data.id.clone(), study_id.clone());
+
+        self.create_study(chart_session, &study_id, series_id, indicator).await?;
+        Ok(())
+    }
+
+    pub async fn set_market(&mut self, options: ChartOptions) -> Result<()> {
         self.series_count += 1;
         let series_count = self.series_count;
         let symbol_series_id = format!("sds_sym_{}", series_count);
         let series_id = format!("sds_{}", series_count);
         let series_version = format!("s{}", series_count);
         let chart_session = gen_session_id("cs");
+
         self.create_chart_session(&chart_session).await?;
 
-        if config.replay_mode.unwrap_or_default() && config.replay_from.is_some() {
-            let replay_session_id = gen_session_id("rs");
-            let replay_series_id = gen_id();
-            self.create_replay_session(&replay_session_id).await?;
-            self.add_replay_series(
-                &replay_session_id,
-                &replay_series_id,
-                &config.symbol,
-                &config
-            ).await?;
-            self.replay_reset(
-                &replay_session_id,
-                &replay_series_id,
-                config.replay_from.unwrap()
-            ).await?;
-            self.resolve_symbol(
-                &chart_session,
-                &symbol_series_id,
-                &config.symbol,
-                &config,
-                Some(replay_session_id.clone())
-            ).await?;
+        if options.replay_mode {
+            self.set_replay(&options.symbol, &options, &chart_session, &symbol_series_id).await?;
         } else {
             self.resolve_symbol(
                 &chart_session,
                 &symbol_series_id,
-                &config.symbol,
-                &config,
+                &options.symbol,
+                &options,
                 None
             ).await?;
         }
@@ -413,29 +441,17 @@ impl WebSocket {
             &series_id,
             &series_version,
             &symbol_series_id,
-            &config
+            &options
         ).await?;
 
-        if let Some(study) = &config.study_config {
-            self.studies_count += 1;
-            let study_count = self.studies_count;
-            let study_id = format!("st{}", study_count);
-
-            let indicator = PineIndicator::build().fetch(
-                &study.script_id,
-                &study.script_version,
-                study.script_type.clone()
-            ).await?;
-
-            self.studies.insert(indicator.metadata.data.id.clone(), study_id.clone());
-
-            self.create_study(&chart_session, &study_id, &series_id, indicator).await?;
+        if let Some(study) = &options.study_config {
+            self.set_study(study, &chart_session, &series_id).await?;
         }
 
         let series_info = SeriesInfo {
             chart_session,
             is_completed: false,
-            options: config,
+            options,
         };
 
         self.series.insert(series_id, series_info);
@@ -469,11 +485,10 @@ impl WebSocket {
                         collector.data.extend(data);
                         let replay_from = collector.data.first().unwrap().timestamp / 1000;
                         info!("replay loading data from timestamp in seconds: {}", replay_from);
-                        self.set_market(ChartOptions {
-                            replay_mode: Some(true),
-                            replay_from: Some(replay_from),
-                            ..s.options.clone()
-                        }).await?;
+
+                        let opts = s.options.clone().replay_mode(true).replay_from(replay_from);
+
+                        self.set_market(opts).await?;
                     } else if
                         s.options.fetch_all_data &&
                         collector.data.len() >= s.options.fetch_data_count

@@ -136,25 +136,24 @@ pub struct ChartOptions {
     // Required
     pub symbol: String,
     pub interval: Interval,
-    pub bar_count: u64,
+    bar_count: u64,
 
     // Optional
-    pub fetch_all_data: bool,
-    pub fetch_data_count: usize,
-
-    // TODO: Implement this
-    pub range: Option<String>,
-    pub from: Option<u64>,
-    pub to: Option<u64>,
-    pub replay_mode: Option<bool>,
-    pub replay_from: Option<i64>,
-    pub adjustment: Option<MarketAdjustment>,
-    pub currency: Option<Currency>,
-    pub session_type: Option<SessionType>,
-    pub study_config: Option<StudyOptions>,
+    fetch_all_data: bool,
+    fetch_data_count: usize,
+    range: Option<String>,
+    from: Option<u64>,
+    to: Option<u64>,
+    replay_mode: bool,
+    replay_from: i64,
+    replay_session_id: Option<String>,
+    adjustment: Option<MarketAdjustment>,
+    currency: Option<Currency>,
+    session_type: Option<SessionType>,
+    study_config: Option<StudyOptions>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct StudyOptions {
     pub script_id: String,
     pub script_version: String,

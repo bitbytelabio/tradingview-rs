@@ -27,31 +27,17 @@ async fn main() {
         .connect(handlers).await
         .unwrap();
 
-    socket
-        .set_market(ChartOptions {
-            symbol: "BINANCE:BTCUSDT".to_string(),
-            interval: Interval::OneMinute,
-            bar_count: 50_000,
+    let opts1 = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute)
+        .fetch_all_data(true)
+        .fetch_data_count(200_000);
 
-            fetch_all_data: true,
-            fetch_data_count: 200_000,
+    socket.set_market(opts1).await.unwrap();
 
-            ..Default::default()
-        }).await
-        .unwrap();
+    let opts2 = ChartOptions::new("BINANCE:ETHUSDT", Interval::FourHours)
+        .fetch_all_data(true)
+        .fetch_data_count(200_000);
 
-    socket
-        .set_market(ChartOptions {
-            symbol: "BINANCE:ETHUSDT".to_string(),
-            interval: Interval::FourHours,
-            bar_count: 50_000,
-
-            fetch_all_data: true,
-            fetch_data_count: 100_000,
-
-            ..Default::default()
-        }).await
-        .unwrap();
+    socket.set_market(opts2).await.unwrap();
 
     socket.subscribe().await;
 }

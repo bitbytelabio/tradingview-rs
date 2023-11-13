@@ -162,6 +162,8 @@ impl std::fmt::Display for DataServer {
     }
 }
 
+// TODO: Create session pool for reusing sessions
+
 #[derive(Clone)]
 pub struct SocketSession {
     server: Arc<DataServer>,
@@ -340,3 +342,6 @@ pub(crate) trait Socket {
 
     async fn handle_error(&mut self, error: Error);
 }
+
+#[async_trait]
+pub(crate) trait SocketEventHandler {}

@@ -28,14 +28,9 @@ async fn main() {
         .connect(handlers).await
         .unwrap();
 
-    socket
-        .set_market(ChartOptions {
-            symbol: "NASDAQ:AMZN".to_string(),
-            interval: Interval::Daily,
-            bar_count: 50_000,
-            ..Default::default()
-        }).await
-        .unwrap();
+    let opts = ChartOptions::new("NASDAQ:AMZN", Interval::Daily).bar_count(50_000);
+
+    socket.set_market(opts).await.unwrap();
     socket.subscribe().await;
 }
 
