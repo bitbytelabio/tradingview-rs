@@ -452,8 +452,7 @@ impl WebSocket {
     }
 
     async fn handler_chart_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        let mut series_info = self.series.clone();
-        for (id, s) in series_info.iter_mut() {
+        for (id, s) in self.series.iter() {
             trace!("received v: {:?}, m: {:?}", s, message);
             match message.p[1].get(id.as_str()) {
                 Some(resp_data) => {

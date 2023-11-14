@@ -28,7 +28,7 @@ async fn main() {
         .connect(handlers).await
         .unwrap();
 
-    let opts = ChartOptions::new("NASDAQ:AMZN", Interval::Daily).bar_count(50_000);
+    let opts = ChartOptions::new("VANTAGE:SP500", Interval::Daily).bar_count(50_000);
 
     socket.set_market(opts).await.unwrap();
     socket.subscribe().await;
@@ -76,7 +76,7 @@ async fn on_chart_data(data: ChartSeriesData) {
         ]
     ).unwrap();
 
-    let csv_out = "tmp/nasdaq_amzn.csv";
+    let csv_out = "tmp/sp500.csv";
     if std::fs::metadata(csv_out).is_err() {
         let f = std::fs::File::create(csv_out).unwrap();
         CsvWriter::new(f).finish(&mut df).unwrap();
