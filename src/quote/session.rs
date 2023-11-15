@@ -1,146 +1,60 @@
 use crate::{
-    error::TradingViewError,
     payload,
-    quote::{ QuoteData, QuoteValue, ALL_QUOTE_FIELDS },
-    socket::{
-        AsyncCallback,
-        DataServer,
-        Socket,
-        SocketMessageDe,
-        SocketSession,
-        TradingViewDataEvent,
-    },
+    quote::ALL_QUOTE_FIELDS,
+    socket::{ Socket, SocketMessageDe, SocketSession, TradingViewDataEvent },
     utils::gen_session_id,
-    error::Error,
     Result,
+    subscriber::Subscriber,
 };
 use async_trait::async_trait;
 use serde_json::Value;
-use std::collections::HashMap;
-use tracing::{ debug, error, trace };
 
-#[derive(Default)]
-pub struct WebSocketsBuilder {
-    server: Option<DataServer>,
-    auth_token: Option<String>,
-    quote_fields: Option<Vec<String>>,
-    socket: Option<SocketSession>,
-}
+// #[derive(Default)]
+// pub struct WebSocketsBuilder {
+//     server: Option<DataServer>,
+//     auth_token: Option<String>,
+//     quote_fields: Option<Vec<String>>,
+//     socket: Option<SocketSession>,
+// }
 
 pub struct WebSocket {
+    subscriber: Subscriber,
     socket: SocketSession,
-    quote_session_id: String,
+    quote_session: String,
     quote_fields: Vec<Value>,
-    prev_quotes: HashMap<String, QuoteValue>,
-    callbacks: QuoteCallbackFn,
-}
-
-fn merge_quotes(quote_old: &QuoteValue, quote_new: &QuoteValue) -> QuoteValue {
-    QuoteValue {
-        ask: quote_new.ask.or(quote_old.ask),
-        ask_size: quote_new.ask_size.or(quote_old.ask_size),
-        bid: quote_new.bid.or(quote_old.bid),
-        bid_size: quote_new.bid_size.or(quote_old.bid_size),
-        change: quote_new.change.or(quote_old.change),
-        change_percent: quote_new.change_percent.or(quote_old.change_percent),
-        open: quote_new.open.or(quote_old.open),
-        high: quote_new.high.or(quote_old.high),
-        low: quote_new.low.or(quote_old.low),
-        prev_close: quote_new.prev_close.or(quote_old.prev_close),
-        price: quote_new.price.or(quote_old.price),
-        timestamp: quote_new.timestamp.or(quote_old.timestamp),
-        volume: quote_new.volume.or(quote_old.volume),
-        description: quote_new.description.clone().or(quote_old.description.clone()),
-        country: quote_new.country.clone().or(quote_old.country.clone()),
-        currency: quote_new.currency.clone().or(quote_old.currency.clone()),
-        data_provider: quote_new.data_provider.clone().or(quote_old.data_provider.clone()),
-        symbol: quote_new.symbol.clone().or(quote_old.symbol.clone()),
-        symbol_id: quote_new.symbol_id.clone().or(quote_old.symbol_id.clone()),
-        exchange: quote_new.exchange.clone().or(quote_old.exchange.clone()),
-        market_type: quote_new.market_type.clone().or(quote_old.market_type.clone()),
-    }
-}
-
-pub struct QuoteCallbackFn {
-    pub data: AsyncCallback<HashMap<String, QuoteValue>>,
-    pub loaded: AsyncCallback<Vec<Value>>,
-    pub error: AsyncCallback<Error>,
-}
-
-impl WebSocketsBuilder {
-    pub fn socket(&mut self, socket: SocketSession) -> &mut Self {
-        self.socket = Some(socket);
-        self
-    }
-
-    pub fn server(&mut self, server: DataServer) -> &mut Self {
-        self.server = Some(server);
-        self
-    }
-
-    pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
-        self.auth_token = Some(auth_token);
-        self
-    }
-
-    pub fn quote_fields(&mut self, quote_fields: Vec<String>) -> &mut Self {
-        self.quote_fields = Some(quote_fields);
-        self
-    }
-
-    pub async fn connect(&self, callback: QuoteCallbackFn) -> Result<WebSocket> {
-        let auth_token = self.auth_token.clone().unwrap_or("unauthorized_user_token".to_string());
-
-        let server = self.server.clone().unwrap_or_default();
-
-        let session = gen_session_id("qs");
-
-        let quote_fields: Vec<Value> = match self.quote_fields.clone() {
-            Some(fields) => {
-                let mut quote_fields = payload![session.clone().to_string()];
-                quote_fields.extend(fields.into_iter().map(Value::from));
-                quote_fields
-            }
-            None => {
-                let mut quote_fields = payload![session.clone().to_string()];
-                quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
-                quote_fields
-            }
-        };
-
-        let socket = self.socket
-            .clone()
-            .unwrap_or(SocketSession::new(server, auth_token.clone()).await?);
-
-        Ok(WebSocket {
-            socket,
-            quote_session_id: session,
-            quote_fields,
-            prev_quotes: HashMap::new(),
-            callbacks: callback,
-        })
-    }
+    // prev_quotes: HashMap<String, QuoteValue>,
 }
 
 impl WebSocket {
-    pub fn build() -> WebSocketsBuilder {
-        WebSocketsBuilder::default()
+    pub fn new(subscriber: Subscriber, socket: SocketSession) -> Self {
+        let quote_session = gen_session_id("qs");
+
+        let mut quote_fields = payload![quote_session.clone().to_string()];
+        quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
+
+        Self {
+            subscriber,
+            socket,
+            quote_session,
+            quote_fields,
+            // prev_quotes:,
+        }
     }
 
     pub async fn create_session(&mut self) -> Result<()> {
-        self.socket.send("quote_create_session", &payload!(self.quote_session_id.clone())).await?;
+        self.socket.send("quote_create_session", &payload!(self.quote_session.clone())).await?;
         Ok(())
     }
 
     pub async fn delete_session(&mut self) -> Result<()> {
-        self.socket.send("quote_delete_session", &payload!(self.quote_session_id.clone())).await?;
+        self.socket.send("quote_delete_session", &payload!(self.quote_session.clone())).await?;
         Ok(())
     }
 
     pub async fn update_session(&mut self) -> Result<()> {
         self.delete_session().await?;
-        self.quote_session_id = gen_session_id("qs");
-        self.socket.send("quote_create_session", &payload!(self.quote_session_id.clone())).await?;
+        self.quote_session = gen_session_id("qs");
+        self.socket.send("quote_create_session", &payload!(self.quote_session.clone())).await?;
         Ok(())
     }
 
@@ -150,7 +64,7 @@ impl WebSocket {
     }
 
     pub async fn add_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
-        let mut payloads = payload![self.quote_session_id.clone()];
+        let mut payloads = payload![self.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_add_symbols", &payloads).await?;
         Ok(())
@@ -162,14 +76,14 @@ impl WebSocket {
     }
 
     pub async fn fast_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
-        let mut payloads = payload![self.quote_session_id.clone()];
+        let mut payloads = payload![self.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_fast_symbols", &payloads).await?;
         Ok(())
     }
 
     pub async fn remove_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
-        let mut payloads = payload![self.quote_session_id.clone()];
+        let mut payloads = payload![self.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(())
@@ -183,35 +97,37 @@ impl WebSocket {
 #[async_trait]
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        match TradingViewDataEvent::from(message.m.clone()) {
-            TradingViewDataEvent::OnQuoteData => {
-                trace!("received OnQuoteData: {:#?}", message);
-                let qsd = serde_json::from_value::<QuoteData>(message.p[1].clone())?;
-                if qsd.status == "ok" {
-                    if let Some(prev_quote) = self.prev_quotes.get_mut(&qsd.name) {
-                        *prev_quote = merge_quotes(prev_quote, &qsd.value);
-                    } else {
-                        self.prev_quotes.insert(qsd.name.clone(), qsd.value.clone());
-                    }
-                    tokio::spawn((self.callbacks.data)(self.prev_quotes.clone()));
-                } else {
-                    tokio::spawn(
-                        (self.callbacks.error)(
-                            Error::TradingViewError(TradingViewError::QuoteDataStatusError)
-                        )
-                    );
-                }
-            }
-            TradingViewDataEvent::OnQuoteCompleted => {
-                tokio::spawn((self.callbacks.loaded)(message.p.clone()));
-            }
-            TradingViewDataEvent::OnError(e) => {
-                self.handle_error(Error::TradingViewError(e)).await;
-            }
-            _ => {
-                debug!("unhandled event on this session: {:?}", message);
-            }
-        }
+        let event = TradingViewDataEvent::from(message.m.clone());
+        self.subscriber.event_handler(event, &message.p, None).await;
+        // match TradingViewDataEvent::from(message.m.clone()) {
+        //     TradingViewDataEvent::OnQuoteData => {
+        //         trace!("received OnQuoteData: {:#?}", message);
+        //         let qsd = serde_json::from_value::<QuoteData>(message.p[1].clone())?;
+        //         if qsd.status == "ok" {
+        //             if let Some(prev_quote) = self.prev_quotes.get_mut(&qsd.name) {
+        //                 *prev_quote = merge_quotes(prev_quote, &qsd.value);
+        //             } else {
+        //                 self.prev_quotes.insert(qsd.name.clone(), qsd.value.clone());
+        //             }
+        //             tokio::spawn((self.callbacks.data)(self.prev_quotes.clone()));
+        //         } else {
+        //             tokio::spawn(
+        //                 (self.callbacks.error)(
+        //                     Error::TradingViewError(TradingViewError::QuoteDataStatusError)
+        //                 )
+        //             );
+        //         }
+        //     }
+        //     TradingViewDataEvent::OnQuoteCompleted => {
+        //         tokio::spawn((self.callbacks.loaded)(message.p.clone()));
+        //     }
+        //     TradingViewDataEvent::OnError(e) => {
+        //         self.handle_error(Error::TradingViewError(e)).await;
+        //     }
+        //     _ => {
+        //         debug!("unhandled event on this session: {:?}", message);
+        //     }
+        // }
         Ok(())
     }
 }

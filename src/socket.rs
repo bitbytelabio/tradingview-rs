@@ -5,7 +5,6 @@ use crate::{
     error::Error,
     Result,
     UA,
-    subscriber::Subscriber,
 };
 use async_trait::async_trait;
 use futures_util::{ future::BoxFuture, stream::{ SplitSink, SplitStream }, SinkExt, StreamExt };
@@ -98,10 +97,6 @@ pub struct SocketMessageSer {
 pub struct SocketMessageDe {
     pub m: String,
     pub p: Vec<Value>,
-    #[serde(default)]
-    pub t: Option<u64>,
-    #[serde(default)]
-    pub t_ms: Option<u64>,
 }
 
 impl SocketMessageSer {

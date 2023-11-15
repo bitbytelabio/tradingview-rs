@@ -1,42 +1,18 @@
 use std::collections::HashMap;
 
 use crate::{
-    chart::{
-        utils::{ extract_studies_data, get_string_value },
-        ChartOptions,
-        ChartResponseData,
-        ChartSeriesData,
-        SeriesCompletedMessage,
-        StudyResponseData,
-        SymbolInfo,
-    },
+    chart::{ ChartOptions, StudyOptions },
     models::{ pine_indicator::PineIndicator, Interval, Timezone },
     payload,
-    socket::{
-        AsyncCallback,
-        DataServer,
-        Socket,
-        SocketMessageDe,
-        SocketSession,
-        TradingViewDataEvent,
-    },
+    socket::{ Socket, SocketMessageDe, SocketSession, TradingViewDataEvent },
     utils::{ gen_id, gen_session_id, symbol_init },
-    error::{ Error, TradingViewError },
+    error::Error,
     Result,
     subscriber::Subscriber,
 };
 use async_trait::async_trait;
 use serde_json::Value;
-use tracing::{ debug, error, info, trace, warn };
-
-use super::StudyOptions;
-
-#[derive(Default)]
-pub struct WebSocketsBuilder {
-    server: Option<DataServer>,
-    auth_token: Option<String>,
-    socket: Option<SocketSession>,
-}
+use tracing::error;
 
 pub struct WebSocket {
     subscriber: Subscriber,
@@ -45,62 +21,15 @@ pub struct WebSocket {
     series_count: u16,
     studies: HashMap<String, String>,
     studies_count: u16,
-    // callbacks: ChartCallbackFn,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct SeriesInfo {
-    chart_session: String,
-    options: ChartOptions,
-}
-
-pub struct ChartCallbackFn {
-    pub on_chart_data: AsyncCallback<ChartSeriesData>,
-    pub on_symbol_resolved: AsyncCallback<SymbolInfo>,
-    pub on_series_completed: AsyncCallback<SeriesCompletedMessage>,
-}
-
-impl WebSocketsBuilder {
-    pub fn socket(&mut self, socket: SocketSession) -> &mut Self {
-        self.socket = Some(socket);
-        self
-    }
-
-    pub fn server(&mut self, server: DataServer) -> &mut Self {
-        self.server = Some(server);
-        self
-    }
-
-    pub fn auth_token(&mut self, auth_token: String) -> &mut Self {
-        self.auth_token = Some(auth_token);
-        self
-    }
-
-    // pub async fn connect(&self, callback: ChartCallbackFn) -> Result<WebSocket> {
-    //     let auth_token = self.auth_token.clone().unwrap_or("unauthorized_user_token".to_string());
-
-    //     let server = self.server.clone().unwrap_or_default();
-
-    //     let socket = self.socket
-    //         .clone()
-    //         .unwrap_or(SocketSession::new(server, auth_token.clone()).await?);
-
-    //     Ok(WebSocket {
-    //         socket,
-    //         series: HashMap::new(),
-    //         series_count: 0,
-    //         studies_count: 0,
-    //         studies: HashMap::new(),
-    //         callbacks: callback,
-    //     })
-    // }
+    pub chart_session: String,
+    pub options: ChartOptions,
 }
 
 impl WebSocket {
-    // pub fn build() -> WebSocketsBuilder {
-    //     WebSocketsBuilder::default()
-    // }
-
     pub fn new(subscriber: Subscriber, socket: SocketSession) -> Self {
         Self {
             subscriber,
@@ -515,6 +444,7 @@ impl Socket for WebSocket {
             Some(Metadata {
                 series: self.series.clone(),
                 studies: self.studies.clone(),
+                ..Default::default()
             })
         ).await;
 

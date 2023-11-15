@@ -1,4 +1,4 @@
-use crate::chart::{ ChartResponseData, StudyResponseData };
+use crate::chart::models::{ ChartResponseData, StudyResponseData };
 use serde_json::Value;
 
 /// Extracts OHLCV data from a `ChartResponseData` object and returns a vector of `OHLCV` structs.

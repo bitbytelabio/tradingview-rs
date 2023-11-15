@@ -1,18 +1,16 @@
 use iso_currency::Currency;
 
 use crate::{
-    chart::ChartOptions,
+    chart::{ ChartOptions, StudyOptions },
     models::{ Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType },
 };
-
-use super::StudyOptions;
 
 impl ChartOptions {
     pub fn new(symbol: &str, interval: Interval) -> Self {
         Self {
             symbol: symbol.to_string(),
             interval,
-            bar_count: 5000,
+            bar_count: 50_000,
             ..Default::default()
         }
     }

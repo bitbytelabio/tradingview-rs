@@ -9,12 +9,15 @@ use tracing::error;
 use tracing::info;
 use tracing::trace;
 
-use crate::chart::ChartResponseData;
-use crate::chart::SeriesCompletedMessage;
-use crate::chart::StudyResponseData;
-use crate::chart::SymbolInfo;
+use crate::chart::models::{
+    SymbolInfo,
+    ChartResponseData,
+    SeriesCompletedMessage,
+    StudyResponseData,
+};
 use crate::chart::utils::{ extract_studies_data, extract_ohlcv_data };
 use crate::chart::utils::get_string_value;
+use crate::quote::models::{ QuoteData, QuoteValue };
 use crate::socket::SocketMessageDe;
 use crate::socket::SocketSession;
 use crate::socket::TradingViewDataEvent;
@@ -25,9 +28,11 @@ use crate::chart::session::SeriesInfo;
 #[derive(Default)]
 pub struct Subscriber;
 
+#[derive(Default)]
 pub struct Metadata {
     pub series: HashMap<String, SeriesInfo>,
     pub studies: HashMap<String, String>,
+    pub quote: HashMap<String, QuoteValue>,
 }
 
 impl Subscriber {
@@ -57,7 +62,9 @@ impl Subscriber {
                     };
                 }
             }
-            TradingViewDataEvent::OnQuoteData => todo!("1"),
+            TradingViewDataEvent::OnQuoteData => {
+                let qsd = QuoteData::deserialize(&message[1]).unwrap();
+            }
             TradingViewDataEvent::OnQuoteCompleted => todo!("2"),
             TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
