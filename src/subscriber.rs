@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{ collections::HashMap, sync::Arc };
 use serde::Deserialize;
 use serde_json::Value;
-use tracing::{ debug, error, info, trace };
+use tracing::{ debug, error, info, trace, warn };
 
 use crate::{
     Result,
@@ -11,13 +11,13 @@ use crate::{
     chart::{
         session::SeriesInfo,
         models::{ SymbolInfo, ChartResponseData, SeriesCompletedMessage, StudyResponseData },
-        utils::{ extract_studies_data, extract_ohlcv_data, get_string_value },
     },
 };
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct Subscriber {
     pub metadata: Metadata,
+    // publisher: Vec<Box<dyn Socket + Send + Sync>>,
 }
 
 #[derive(Default, Clone)]
@@ -27,6 +27,7 @@ pub struct Metadata {
     pub studies_count: u16,
     pub studies: HashMap<String, String>,
     pub quotes: HashMap<String, QuoteValue>,
+    pub quote_session: String,
 }
 
 impl Subscriber {
@@ -41,8 +42,14 @@ impl Subscriber {
     pub fn new() -> Self {
         Self {
             metadata: Metadata::default(),
+            // publisher: Vec::new(),
         }
     }
+
+    // pub fn add(mut self, publisher: Box<dyn Socket + Send + Sync>) -> Self {
+    //     self.publisher.push(publisher);
+    //     self
+    // }
 
     pub async fn handle_events(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
@@ -119,7 +126,10 @@ impl Subscriber {
             trace!("received v: {:?}, m: {:?}", s, message);
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
-                    let data = extract_ohlcv_data(ChartResponseData::deserialize(resp_data)?);
+                    let data: Vec<Vec<f64>> = ChartResponseData::deserialize(resp_data)?
+                        .series.into_iter()
+                        .map(|point| point.value)
+                        .collect();
                     // timestamp, open, high, low, close, volume
                     debug!("series data extracted: {:?}", data);
 
@@ -133,8 +143,11 @@ impl Subscriber {
         for (k, v) in studies.into_iter() {
             if let Some(resp_data) = message[1].get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
-                let data = extract_studies_data(StudyResponseData::deserialize(resp_data)?);
-                debug!("study data extracted: {} - {:?}", k, data);
+                let data: Vec<Vec<f64>> = StudyResponseData::deserialize(resp_data)?
+                    .studies.into_iter()
+                    .map(|point| point.value)
+                    .collect();
+                warn!("study data extracted: {} - {:?}", k, data);
 
                 // TODO: Notify function
             }

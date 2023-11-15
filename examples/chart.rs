@@ -35,13 +35,15 @@ async fn main() {
     let opts3 = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneHour)
         .replay_mode(true)
         .replay_from(1698624060);
+
     chart
-        .set_market(opts).await
-        .unwrap()
+        // .set_market(opts).await
+        // .unwrap()
         .set_market(opts2).await
-        .unwrap()
-        .set_market(opts3).await
         .unwrap();
+    // .set_market(opts3).await
+    // .unwrap();
+
     quote
         .create_session().await
         .unwrap()
