@@ -1,15 +1,12 @@
 use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::Value;
-use tracing::debug;
-use tracing::error;
-use tracing::info;
-use tracing::trace;
+use tracing::{ debug, error, info, trace };
 
-use crate::quote::utils::merge_quotes;
 use crate::{
     Result,
-    quote::models::{ QuoteData, QuoteValue },
+    Error,
+    quote::{ models::{ QuoteData, QuoteValue }, utils::merge_quotes },
     socket::{ Socket, TradingViewDataEvent, SocketMessageDe, SocketSession },
     chart::{
         session::SeriesInfo,
@@ -18,12 +15,12 @@ use crate::{
     },
 };
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Subscriber {
     pub metadata: Metadata,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Metadata {
     pub series_count: u16,
     pub series: HashMap<String, SeriesInfo>,
@@ -40,6 +37,12 @@ impl Subscriber {
     // ) {
     //     listener.event_loop(&mut socket.clone()).await;
     // }
+
+    pub fn new() -> Self {
+        Self {
+            metadata: Metadata::default(),
+        }
+    }
 
     pub async fn handle_events(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
@@ -92,7 +95,11 @@ impl Subscriber {
         }
     }
 
-    pub fn unsubscribe<T: Socket>(&mut self, event_type: TradingViewDataEvent, listener: T) {}
+    pub fn unsubscribe<T: Socket + Send>(
+        &mut self,
+        event_type: TradingViewDataEvent,
+        listener: T
+    ) {}
 
     pub fn notify(&self, event_type: TradingViewDataEvent) {}
 

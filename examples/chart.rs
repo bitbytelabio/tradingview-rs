@@ -8,6 +8,7 @@ use tradingview::{
     models::Interval,
     socket::{ DataServer, SocketSession },
     subscriber::Subscriber,
+    quote,
 };
 
 #[tokio::main]
@@ -18,9 +19,11 @@ async fn main() {
 
     let socket = SocketSession::new(DataServer::ProData, auth_token).await.unwrap();
 
-    let subscriber = Subscriber::default();
+    let subscriber = Subscriber::new();
 
-    let mut chart = chart::session::WebSocket::new(subscriber, socket);
+    let mut chart = chart::session::WebSocket::new(subscriber.clone(), socket.clone());
+
+    let mut quote = quote::session::WebSocket::new(subscriber.clone(), socket.clone());
 
     // subscriber.subscribe(&mut chart, &mut socket);
 
@@ -28,5 +31,23 @@ async fn main() {
 
     chart.set_market(opts).await.unwrap();
 
-    chart.subscribe().await;
+    quote.create_session().await.unwrap();
+    quote.set_fields().await.unwrap();
+    quote
+        .add_symbols(
+            vec![
+                "SP:SPX",
+                "BINANCE:BTCUSDT",
+                "BINANCE:ETHUSDT",
+                "BITSTAMP:ETHUSD",
+                "NASDAQ:TSLA"
+                // "BINANCE:B",
+            ]
+        ).await
+        .unwrap();
+
+    tokio::spawn(async move { chart.subscribe().await });
+    tokio::spawn(async move { quote.subscribe().await });
+    loop {
+    }
 }
