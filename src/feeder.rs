@@ -16,7 +16,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Publisher {
-    pub metadata: Metadata,
+    pub(crate) metadata: Metadata,
     // publisher: Vec<Box<dyn Socket + Send + Sync>>,
 }
 
