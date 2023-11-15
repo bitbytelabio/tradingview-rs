@@ -51,6 +51,14 @@ impl Publisher {
     //     self
     // }
 
+    pub fn unsubscribe<T: Socket + Send>(
+        &mut self,
+        event_type: TradingViewDataEvent,
+        listener: T
+    ) {}
+
+    pub fn notify(&self, event_type: TradingViewDataEvent) {}
+
     pub async fn handle_events(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
@@ -108,14 +116,6 @@ impl Publisher {
         }
     }
 
-    pub fn unsubscribe<T: Socket + Send>(
-        &mut self,
-        event_type: TradingViewDataEvent,
-        listener: T
-    ) {}
-
-    pub fn notify(&self, event_type: TradingViewDataEvent) {}
-
     async fn handle_chart_data(
         &self,
         series: &HashMap<String, SeriesInfo>,
@@ -155,6 +155,8 @@ impl Publisher {
 
         Ok(())
     }
+
+    async fn handle_study_data(&self) {}
 
     async fn handle_quote_data(&mut self, message: &Vec<Value>) {
         let qsd = QuoteData::deserialize(&message[1]).unwrap();

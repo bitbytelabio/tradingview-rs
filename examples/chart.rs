@@ -7,7 +7,7 @@ use tradingview::{
     chart::ChartOptions,
     models::{ Interval, pine_indicator::ScriptType },
     socket::{ DataServer, SocketSession },
-    observer::Publisher,
+    feeder::Publisher,
     quote,
 };
 

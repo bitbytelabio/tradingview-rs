@@ -5,7 +5,7 @@ use crate::{
     socket::{ Socket, SocketMessageDe, SocketSession, TradingViewDataEvent },
     utils::{ gen_id, gen_session_id, symbol_init },
     Result,
-    observer::Publisher,
+    feeder::Publisher,
 };
 use async_trait::async_trait;
 use serde_json::Value;

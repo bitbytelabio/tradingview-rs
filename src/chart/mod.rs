@@ -2,11 +2,11 @@ use iso_currency::Currency;
 
 use crate::models::{ MarketAdjustment, SessionType, pine_indicator::ScriptType, Interval };
 
-mod graphic_parser;
 pub mod session;
 pub mod study;
 pub mod models;
 pub(crate) mod options;
+pub(crate) mod utils;
 
 #[derive(Default, Debug, Clone)]
 pub struct ChartOptions {

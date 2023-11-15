@@ -4,7 +4,7 @@ pub mod error;
 pub mod models;
 pub mod quote;
 pub mod socket;
-pub mod observer;
+pub mod feeder;
 
 #[cfg(feature = "user")]
 pub mod user;
