@@ -7,7 +7,7 @@ use tradingview::{
     chart::ChartOptions,
     models::{ Interval, pine_indicator::ScriptType },
     socket::{ DataServer, SocketSession },
-    subscriber::Subscriber,
+    observer::Publisher,
     quote,
 };
 
@@ -19,10 +19,10 @@ async fn main() {
 
     let socket = SocketSession::new(DataServer::ProData, auth_token).await.unwrap();
 
-    let subscriber = Subscriber::new();
+    let publisher = Publisher::new();
 
-    let mut chart = chart::session::WebSocket::new(subscriber.clone(), socket.clone());
-    let mut quote = quote::session::WebSocket::new(subscriber.clone(), socket.clone());
+    let mut chart = chart::session::WebSocket::new(publisher.clone(), socket.clone());
+    let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());
 
     // subscriber.subscribe(&mut chart, &mut socket);
 

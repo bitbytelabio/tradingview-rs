@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct Subscriber {
+pub struct Publisher {
     pub metadata: Metadata,
     // publisher: Vec<Box<dyn Socket + Send + Sync>>,
 }
@@ -30,7 +30,7 @@ pub struct Metadata {
     pub quote_session: String,
 }
 
-impl Subscriber {
+impl Publisher {
     // pub async fn subscribe<T: Socket + Send + Sync>(
     //     &mut self,
     //     listener: &mut T,
