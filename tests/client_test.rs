@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use tradingview::client::mics::*;
+    use tradingview::client::misc::*;
     use tradingview::models::*;
 
     #[tokio::test]
