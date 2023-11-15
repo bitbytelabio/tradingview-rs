@@ -39,7 +39,7 @@ pub struct ChartResponseData {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "s"))]
-    pub series: Vec<DataPoint<(f64, f64, f64, f64, f64, f64)>>,
+    pub series: Vec<DataPoint>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -47,7 +47,7 @@ pub struct StudyResponseData {
     #[serde(default)]
     pub node: Option<String>,
     #[serde(rename(deserialize = "st"))]
-    pub studies: Vec<DataPoint<Vec<f64>>>,
+    pub studies: Vec<DataPoint>,
     #[serde(rename(deserialize = "ns"))]
     pub raw_graphics: GraphicDataResponse,
 }
@@ -60,11 +60,11 @@ pub struct GraphicDataResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct DataPoint<T> {
+pub struct DataPoint {
     #[serde(rename(deserialize = "i"))]
     pub index: i64,
     #[serde(rename(deserialize = "v"))]
-    pub value: T,
+    pub value: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

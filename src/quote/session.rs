@@ -214,9 +214,4 @@ impl Socket for WebSocket {
         }
         Ok(())
     }
-
-    async fn handle_error(&mut self, error: Error) {
-        // TODO: better handle error
-        error!("error handling event: {:#?}", error);
-    }
 }

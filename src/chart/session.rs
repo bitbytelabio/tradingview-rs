@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     chart::{
-        utils::{ extract_ohlcv_data, extract_studies_data, get_string_value },
+        utils::{ extract_studies_data, get_string_value },
         ChartOptions,
         ChartResponseData,
         ChartSeriesData,
@@ -23,6 +23,7 @@ use crate::{
     utils::{ gen_id, gen_session_id, symbol_init },
     error::{ Error, TradingViewError },
     Result,
+    subscriber::Subscriber,
 };
 use async_trait::async_trait;
 use serde_json::Value;
@@ -38,16 +39,17 @@ pub struct WebSocketsBuilder {
 }
 
 pub struct WebSocket {
+    subscriber: Subscriber,
     socket: SocketSession,
     series: HashMap<String, SeriesInfo>,
     series_count: u16,
     studies: HashMap<String, String>,
     studies_count: u16,
-    callbacks: ChartCallbackFn,
+    // callbacks: ChartCallbackFn,
 }
 
 #[derive(Debug, Clone, Default)]
-struct SeriesInfo {
+pub struct SeriesInfo {
     chart_session: String,
     options: ChartOptions,
 }
@@ -74,29 +76,40 @@ impl WebSocketsBuilder {
         self
     }
 
-    pub async fn connect(&self, callback: ChartCallbackFn) -> Result<WebSocket> {
-        let auth_token = self.auth_token.clone().unwrap_or("unauthorized_user_token".to_string());
+    // pub async fn connect(&self, callback: ChartCallbackFn) -> Result<WebSocket> {
+    //     let auth_token = self.auth_token.clone().unwrap_or("unauthorized_user_token".to_string());
 
-        let server = self.server.clone().unwrap_or_default();
+    //     let server = self.server.clone().unwrap_or_default();
 
-        let socket = self.socket
-            .clone()
-            .unwrap_or(SocketSession::new(server, auth_token.clone()).await?);
+    //     let socket = self.socket
+    //         .clone()
+    //         .unwrap_or(SocketSession::new(server, auth_token.clone()).await?);
 
-        Ok(WebSocket {
-            socket,
-            series: HashMap::new(),
-            series_count: 0,
-            studies_count: 0,
-            studies: HashMap::new(),
-            callbacks: callback,
-        })
-    }
+    //     Ok(WebSocket {
+    //         socket,
+    //         series: HashMap::new(),
+    //         series_count: 0,
+    //         studies_count: 0,
+    //         studies: HashMap::new(),
+    //         callbacks: callback,
+    //     })
+    // }
 }
 
 impl WebSocket {
-    pub fn build() -> WebSocketsBuilder {
-        WebSocketsBuilder::default()
+    // pub fn build() -> WebSocketsBuilder {
+    //     WebSocketsBuilder::default()
+    // }
+
+    pub fn new(subscriber: Subscriber, socket: SocketSession) -> Self {
+        Self {
+            subscriber,
+            socket,
+            series: HashMap::new(),
+            series_count: 0,
+            studies: HashMap::new(),
+            studies_count: 0,
+        }
     }
 
     // Begin TradingView WebSocket methods
@@ -108,6 +121,7 @@ impl WebSocket {
 
     pub async fn set_data_quality(&mut self, data_quality: &str) -> Result<()> {
         self.socket.send("set_data_quality", &payload!(data_quality)).await?;
+
         Ok(())
     }
 
@@ -451,140 +465,151 @@ impl WebSocket {
         Ok(())
     }
 
-    async fn handler_chart_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        for (id, s) in self.series.iter() {
-            trace!("received v: {:?}, m: {:?}", s, message);
-            match message.p[1].get(id.as_str()) {
-                Some(resp_data) => {
-                    let resp = serde_json::from_value::<ChartResponseData>(resp_data.clone())?;
-                    let data = extract_ohlcv_data(&resp);
-                    debug!("series data extracted: {:?}", data);
-                    tokio::spawn(
-                        (self.callbacks.on_chart_data)(ChartSeriesData {
-                            symbol: s.options.symbol.clone(),
-                            interval: s.options.interval,
-                            data,
-                        })
-                    );
-                }
-                None => {
-                    debug!("receive empty data on series: {:?}", s);
-                }
-            }
-        }
-        if self.series_count != 0 {
-            for (k, v) in &self.studies {
-                if let Some(resp_data) = message.p[1].get(v.as_str()) {
-                    debug!("study data received: {} - {:?}", k, resp_data);
-                    let resp = serde_json::from_value::<StudyResponseData>(resp_data.clone())?;
-                    let data = extract_studies_data(&resp);
-                    debug!("study data extracted: {} - {:?}", k, data);
-                }
-            }
-        }
-        Ok(())
-    }
+    // async fn handler_chart_data(&mut self, message: SocketMessageDe) -> Result<()> {
+    //     for (id, s) in self.series.iter() {
+    //         trace!("received v: {:?}, m: {:?}", s, message);
+    //         match message.p[1].get(id.as_str()) {
+    //             Some(resp_data) => {
+    //                 let resp = serde_json::from_value::<ChartResponseData>(resp_data.clone())?;
+    //                 let data = extract_ohlcv_data(&resp);
+    //                 debug!("series data extracted: {:?}", data);
+    //                 tokio::spawn(
+    //                     (self.callbacks.on_chart_data)(ChartSeriesData {
+    //                         symbol: s.options.symbol.clone(),
+    //                         interval: s.options.interval,
+    //                         data,
+    //                     })
+    //                 );
+    //             }
+    //             None => {
+    //                 debug!("receive empty data on series: {:?}", s);
+    //             }
+    //         }
+    //     }
+    //     if self.series_count != 0 {
+    //         for (k, v) in &self.studies {
+    //             if let Some(resp_data) = message.p[1].get(v.as_str()) {
+    //                 debug!("study data received: {} - {:?}", k, resp_data);
+    //                 let resp = serde_json::from_value::<StudyResponseData>(resp_data.clone())?;
+    //                 let data = extract_studies_data(&resp);
+    //                 debug!("study data extracted: {} - {:?}", k, data);
+    //             }
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     pub async fn subscribe(&mut self) {
         self.event_loop(&mut self.socket.clone()).await;
     }
 }
+use crate::subscriber::Metadata;
 
 #[async_trait]
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        match TradingViewDataEvent::from(message.m.clone()) {
-            TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
-                trace!("received chart data: {:?}", message);
-                self.handler_chart_data(message).await?;
-            }
-            TradingViewDataEvent::OnSymbolResolved => {
-                // TODO: Add callback for symbol resolved
-                let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
-                debug!("received symbol information: {:?}", symbol_info);
-                (self.callbacks.on_symbol_resolved)(symbol_info).await;
-            }
-            TradingViewDataEvent::OnSeriesCompleted => {
-                let message = SeriesCompletedMessage {
-                    session: get_string_value(&message.p, 0),
-                    id: get_string_value(&message.p, 1),
-                    update_mode: get_string_value(&message.p, 2),
-                    version: get_string_value(&message.p, 3),
-                };
-                info!("series is completed: {:#?}", message);
-                tokio::spawn((self.callbacks.on_series_completed)(message));
-            }
-            TradingViewDataEvent::OnSeriesLoading => {
-                trace!("series is loading: {:#?}", message);
-            }
-            TradingViewDataEvent::OnReplayResolutions => {
-                trace!("received replay resolutions: {:?}", message);
-            }
-            TradingViewDataEvent::OnReplayPoint => {
-                trace!("received replay point: {:?}", message);
-            }
-            TradingViewDataEvent::OnReplayOk => {
-                trace!("received replay ok: {:?}", message);
-            }
-            TradingViewDataEvent::OnReplayInstanceId => {
-                trace!("received replay instance id: {:?}", message);
-            }
-            TradingViewDataEvent::OnReplayDataEnd => {
-                trace!("received replay data end: {:?}", message);
-            }
-            TradingViewDataEvent::OnStudyLoading => {
-                trace!("received study loading message: {:?}", message);
-            }
-            TradingViewDataEvent::OnStudyCompleted => {
-                trace!("received study completed message: {:?}", message);
-            }
-            TradingViewDataEvent::OnError(error) => {
-                match error {
-                    TradingViewError::SeriesError => todo!(),
-                    TradingViewError::SymbolError => todo!(),
-                    TradingViewError::CriticalError => {
-                        error!("received critical error: {:?}, try to reconnect", message);
-                        match self.socket.reconnect().await {
-                            Ok(_) => {
-                                info!("reconnect successfully from TradingView critical error");
-                            }
-                            Err(e) => {
-                                error!(
-                                    "unable to reconnect from TradingView critical error with: {:?}",
-                                    e
-                                );
-                                self.handle_error(error.into()).await;
-                            }
-                        }
-                    }
-                    TradingViewError::StudyError => todo!(),
-                    TradingViewError::ProtocolError => {
-                        error!("received protocol error: {:?}, try to reconnect", message);
-                        match self.socket.reconnect().await {
-                            Ok(_) => {
-                                info!("reconnect successfully from TradingView critical error");
-                            }
-                            Err(e) => {
-                                error!(
-                                    "unable to reconnect from TradingView protocol error with: {:?}",
-                                    e
-                                );
-                                self.handle_error(error.into()).await;
-                            }
-                        }
-                    }
-                    TradingViewError::QuoteDataStatusError => todo!(),
-                    TradingViewError::ReplayError =>
-                        error!("received replay error {:?}: ", message),
-                }
-            }
-            TradingViewDataEvent::UnknownEvent(e) => {
-                warn!("received unknown event: {:?} with message: {:?}", e, message);
-            }
-            _ => {
-                debug!("unhandled event on this session: {:?}", message);
-            }
-        }
+        let event = TradingViewDataEvent::from(message.m.clone());
+        self.subscriber.event_handler(
+            event,
+            &message.p,
+            Some(Metadata {
+                series: self.series.clone(),
+                studies: self.studies.clone(),
+            })
+        ).await;
+
+        // match TradingViewDataEvent::from(message.m.clone()) {
+        //     TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
+        //         trace!("received chart data: {:?}", message);
+        //         self.handler_chart_data(message).await?;
+        //     }
+        //     TradingViewDataEvent::OnSymbolResolved => {
+        //         // TODO: Add callback for symbol resolved
+        //         let symbol_info = serde_json::from_value::<SymbolInfo>(message.p[2].clone())?;
+        //         debug!("received symbol information: {:?}", symbol_info);
+        //         (self.callbacks.on_symbol_resolved)(symbol_info).await;
+        //     }
+        //     TradingViewDataEvent::OnSeriesCompleted => {
+        //         let message = SeriesCompletedMessage {
+        //             session: get_string_value(&message.p, 0),
+        //             id: get_string_value(&message.p, 1),
+        //             update_mode: get_string_value(&message.p, 2),
+        //             version: get_string_value(&message.p, 3),
+        //         };
+        //         info!("series is completed: {:#?}", message);
+        //         tokio::spawn((self.callbacks.on_series_completed)(message));
+        //     }
+        //     TradingViewDataEvent::OnSeriesLoading => {
+        //         trace!("series is loading: {:#?}", message);
+        //     }
+        //     TradingViewDataEvent::OnReplayResolutions => {
+        //         trace!("received replay resolutions: {:?}", message);
+        //     }
+        //     TradingViewDataEvent::OnReplayPoint => {
+        //         trace!("received replay point: {:?}", message);
+        //     }
+        //     TradingViewDataEvent::OnReplayOk => {
+        //         trace!("received replay ok: {:?}", message);
+        //     }
+        //     TradingViewDataEvent::OnReplayInstanceId => {
+        //         trace!("received replay instance id: {:?}", message);
+        //     }
+        //     TradingViewDataEvent::OnReplayDataEnd => {
+        //         trace!("received replay data end: {:?}", message);
+        //     }
+        //     TradingViewDataEvent::OnStudyLoading => {
+        //         trace!("received study loading message: {:?}", message);
+        //     }
+        //     TradingViewDataEvent::OnStudyCompleted => {
+        //         trace!("received study completed message: {:?}", message);
+        //     }
+        //     TradingViewDataEvent::OnError(error) => {
+        //         match error {
+        //             TradingViewError::SeriesError => todo!(),
+        //             TradingViewError::SymbolError => todo!(),
+        //             TradingViewError::CriticalError => {
+        //                 error!("received critical error: {:?}, try to reconnect", message);
+        //                 match self.socket.reconnect().await {
+        //                     Ok(_) => {
+        //                         info!("reconnect successfully from TradingView critical error");
+        //                     }
+        //                     Err(e) => {
+        //                         error!(
+        //                             "unable to reconnect from TradingView critical error with: {:?}",
+        //                             e
+        //                         );
+        //                         self.handle_error(error.into()).await;
+        //                     }
+        //                 }
+        //             }
+        //             TradingViewError::StudyError => todo!(),
+        //             TradingViewError::ProtocolError => {
+        //                 error!("received protocol error: {:?}, try to reconnect", message);
+        //                 match self.socket.reconnect().await {
+        //                     Ok(_) => {
+        //                         info!("reconnect successfully from TradingView critical error");
+        //                     }
+        //                     Err(e) => {
+        //                         error!(
+        //                             "unable to reconnect from TradingView protocol error with: {:?}",
+        //                             e
+        //                         );
+        //                         self.handle_error(error.into()).await;
+        //                     }
+        //                 }
+        //             }
+        //             TradingViewError::QuoteDataStatusError => todo!(),
+        //             TradingViewError::ReplayError =>
+        //                 error!("received replay error {:?}: ", message),
+        //         }
+        //     }
+        //     TradingViewDataEvent::UnknownEvent(e) => {
+        //         warn!("received unknown event: {:?} with message: {:?}", e, message);
+        //     }
+        //     _ => {
+        //         debug!("unhandled event on this session: {:?}", message);
+        //     }
+        // }
         Ok(())
     }
 

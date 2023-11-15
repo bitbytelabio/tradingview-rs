@@ -5,6 +5,7 @@ use crate::{
     error::Error,
     Result,
     UA,
+    subscriber::Subscriber,
 };
 use async_trait::async_trait;
 use futures_util::{ future::BoxFuture, stream::{ SplitSink, SplitStream }, SinkExt, StreamExt };
@@ -252,7 +253,7 @@ impl SocketSession {
 }
 
 #[async_trait]
-pub(crate) trait Socket {
+pub trait Socket {
     async fn event_loop(&mut self, session: &mut SocketSession) {
         let read = session.read.clone();
         let mut read_guard = read.lock().await;
@@ -340,8 +341,31 @@ pub(crate) trait Socket {
 
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()>;
 
-    async fn handle_error(&mut self, error: Error);
+    async fn handle_error(&mut self, error: Error) {
+        error!("{}", error);
+        match error {
+            Error::Generic(_) => todo!(),
+            Error::RequestError(_) => todo!(),
+            Error::JsonParseError(_) => todo!(),
+            Error::TypeConversionError(_) => todo!(),
+            Error::HeaderValueError(_) => todo!(),
+            Error::LoginError(_) => todo!(),
+            Error::RegexError(_) => todo!(),
+            Error::WebSocketError(_) => todo!(),
+            Error::NoChartTokenFound => todo!(),
+            Error::NoScanDataFound => todo!(),
+            Error::SymbolsNotInSameExchange => todo!(),
+            Error::ExchangeNotSpecified => todo!(),
+            Error::InvalidExchange => todo!(),
+            Error::SymbolsNotSpecified => todo!(),
+            Error::NoSearchDataFound => todo!(),
+            Error::IndicatorDataNotFound(_) => todo!(),
+            Error::TokioJoinError(_) => todo!(),
+            Error::UrlParseError(_) => todo!(),
+            Error::Base64DecodeError(_) => todo!(),
+            Error::ZipError(_) => todo!(),
+            Error::IOError(_) => todo!(),
+            Error::TradingViewError(_) => todo!(),
+        }
+    }
 }
-
-#[async_trait]
-pub(crate) trait SocketEventHandler {}

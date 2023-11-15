@@ -4,6 +4,7 @@ pub mod error;
 pub mod models;
 pub mod quote;
 pub mod socket;
+pub mod subscriber;
 
 #[cfg(feature = "user")]
 pub mod user;
@@ -11,16 +12,6 @@ pub mod user;
 mod utils;
 static UA: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36";
-
-pub mod tools {
-    pub use crate::chart::utils::{
-        extract_ohlcv_data,
-        par_extract_ohlcv_data,
-        sort_ohlcv_tuples,
-        update_ohlcv_data,
-        update_ohlcv_data_point,
-    };
-}
 
 pub mod api {
     pub use crate::client::mics::{
