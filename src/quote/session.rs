@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     payload,
     quote::ALL_QUOTE_FIELDS,
@@ -90,36 +88,7 @@ impl WebSocket {
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
-        self.subscriber.event_handler(event, &message.p).await;
-        // match TradingViewDataEvent::from(message.m.clone()) {
-        //     TradingViewDataEvent::OnQuoteData => {
-        //         trace!("received OnQuoteData: {:#?}", message);
-        //         let qsd = serde_json::from_value::<QuoteData>(message.p[1].clone())?;
-        //         if qsd.status == "ok" {
-        //             if let Some(prev_quote) = self.prev_quotes.get_mut(&qsd.name) {
-        //                 *prev_quote = merge_quotes(prev_quote, &qsd.value);
-        //             } else {
-        //                 self.prev_quotes.insert(qsd.name.clone(), qsd.value.clone());
-        //             }
-        //             tokio::spawn((self.callbacks.data)(self.prev_quotes.clone()));
-        //         } else {
-        //             tokio::spawn(
-        //                 (self.callbacks.error)(
-        //                     Error::TradingViewError(TradingViewError::QuoteDataStatusError)
-        //                 )
-        //             );
-        //         }
-        //     }
-        //     TradingViewDataEvent::OnQuoteCompleted => {
-        //         tokio::spawn((self.callbacks.loaded)(message.p.clone()));
-        //     }
-        //     TradingViewDataEvent::OnError(e) => {
-        //         self.handle_error(Error::TradingViewError(e)).await;
-        //     }
-        //     _ => {
-        //         debug!("unhandled event on this session: {:?}", message);
-        //     }
-        // }
+        self.subscriber.handle_events(event, &message.p).await;
         Ok(())
     }
 }

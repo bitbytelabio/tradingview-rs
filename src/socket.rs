@@ -7,7 +7,7 @@ use crate::{
     UA,
 };
 use async_trait::async_trait;
-use futures_util::{ future::BoxFuture, stream::{ SplitSink, SplitStream }, SinkExt, StreamExt };
+use futures_util::{ stream::{ SplitSink, SplitStream }, SinkExt, StreamExt };
 use reqwest::header::{ HeaderMap, HeaderValue };
 use serde::{ Deserialize, Serialize };
 use serde_json::Value;
@@ -21,8 +21,6 @@ use tokio_tungstenite::{
 };
 use tracing::{ debug, error, info, trace, warn };
 use url::Url;
-
-pub(crate) type AsyncCallback<T> = Box<dyn (Fn(T) -> BoxFuture<'static, ()>) + Send + Sync>;
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -157,8 +155,6 @@ impl std::fmt::Display for DataServer {
         }
     }
 }
-
-// TODO: Create session pool for reusing sessions
 
 #[derive(Clone)]
 pub struct SocketSession {

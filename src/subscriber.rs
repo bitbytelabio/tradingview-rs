@@ -41,13 +41,13 @@ impl Subscriber {
     //     listener.event_loop(&mut socket.clone()).await;
     // }
 
-    pub async fn event_handler(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
+    pub async fn handle_events(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
 
                 match
-                    self.chart_data_handler(
+                    self.handle_chart_data(
                         &self.metadata.series,
                         &self.metadata.studies,
                         message
@@ -57,7 +57,7 @@ impl Subscriber {
                     Err(e) => error!("{}", e),
                 };
             }
-            TradingViewDataEvent::OnQuoteData => { self.quote_data_handler(message).await }
+            TradingViewDataEvent::OnQuoteData => { self.handle_quote_data(message).await }
             TradingViewDataEvent::OnQuoteCompleted => { info!("quote completed: {:?}", message) }
             TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
@@ -96,7 +96,7 @@ impl Subscriber {
 
     pub fn notify(&self, event_type: TradingViewDataEvent) {}
 
-    async fn chart_data_handler(
+    async fn handle_chart_data(
         &self,
         series: &HashMap<String, SeriesInfo>,
         studies: &HashMap<String, String>,
@@ -130,7 +130,7 @@ impl Subscriber {
         Ok(())
     }
 
-    async fn quote_data_handler(&mut self, message: &Vec<Value>) {
+    async fn handle_quote_data(&mut self, message: &Vec<Value>) {
         let qsd = QuoteData::deserialize(&message[1]).unwrap();
         if qsd.status == "ok" {
             if let Some(prev_quote) = self.metadata.quotes.get_mut(&qsd.name) {
