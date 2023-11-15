@@ -10,6 +10,7 @@ use crate::{
 use async_trait::async_trait;
 use serde_json::Value;
 
+#[derive(Clone)]
 pub struct WebSocket {
     subscriber: Subscriber,
     socket: SocketSession,
@@ -31,36 +32,36 @@ impl WebSocket {
 
     // Begin TradingView WebSocket methods
 
-    pub async fn set_locale(&mut self) -> Result<()> {
+    pub async fn set_locale(&mut self) -> Result<&mut Self> {
         self.socket.send("set_locale", &payload!("en", "US")).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn set_data_quality(&mut self, data_quality: &str) -> Result<()> {
+    pub async fn set_data_quality(&mut self, data_quality: &str) -> Result<&mut Self> {
         self.socket.send("set_data_quality", &payload!(data_quality)).await?;
 
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn set_timezone(&mut self, session: &str, timezone: Timezone) -> Result<()> {
+    pub async fn set_timezone(&mut self, session: &str, timezone: Timezone) -> Result<&mut Self> {
         self.socket.send("switch_timezone", &payload!(session, timezone.to_string())).await?;
 
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
+    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<&mut Self> {
         self.socket.update_auth_token(auth_token).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn create_chart_session(&mut self, session: &str) -> Result<()> {
+    pub async fn create_chart_session(&mut self, session: &str) -> Result<&mut Self> {
         self.socket.send("chart_create_session", &payload!(session)).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn create_replay_session(&mut self, session: &str) -> Result<()> {
+    pub async fn create_replay_session(&mut self, session: &str) -> Result<&mut Self> {
         self.socket.send("replay_create_session", &payload!(session)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn add_replay_series(
@@ -69,7 +70,7 @@ impl WebSocket {
         series_id: &str,
         symbol: &str,
         config: &ChartOptions
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         self.socket.send(
             "replay_add_series",
             &payload!(
@@ -85,22 +86,27 @@ impl WebSocket {
                 config.interval.to_string()
             )
         ).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn delete_chart_session_id(&mut self, session: &str) -> Result<()> {
+    pub async fn delete_chart_session_id(&mut self, session: &str) -> Result<&mut Self> {
         self.socket.send("chart_delete_session", &payload!(session)).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn delete_replay_session_id(&mut self, session: &str) -> Result<()> {
+    pub async fn delete_replay_session_id(&mut self, session: &str) -> Result<&mut Self> {
         self.socket.send("replay_delete_session", &payload!(session)).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn replay_step(&mut self, session: &str, series_id: &str, step: u64) -> Result<()> {
+    pub async fn replay_step(
+        &mut self,
+        session: &str,
+        series_id: &str,
+        step: u64
+    ) -> Result<&mut Self> {
         self.socket.send("replay_step", &payload!(session, series_id, step)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn replay_start(
@@ -108,17 +114,17 @@ impl WebSocket {
         session: &str,
         series_id: &str,
         interval: Interval
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         self.socket.send(
             "replay_start",
             &payload!(session, series_id, interval.to_string())
         ).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn replay_stop(&mut self, session: &str, series_id: &str) -> Result<()> {
+    pub async fn replay_stop(&mut self, session: &str, series_id: &str) -> Result<&mut Self> {
         self.socket.send("replay_stop", &payload!(session, series_id)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn replay_reset(
@@ -126,9 +132,9 @@ impl WebSocket {
         session: &str,
         series_id: &str,
         timestamp: i64
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         self.socket.send("replay_reset", &payload!(session, series_id, timestamp)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn request_more_data(
@@ -136,9 +142,9 @@ impl WebSocket {
         session: &str,
         series_id: &str,
         num: u64
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         self.socket.send("request_more_data", &payload!(session, series_id, num)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn request_more_tickmarks(
@@ -146,9 +152,9 @@ impl WebSocket {
         session: &str,
         series_id: &str,
         num: u64
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         self.socket.send("request_more_tickmarks", &payload!(session, series_id, num)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn create_study(
@@ -157,7 +163,7 @@ impl WebSocket {
         study_id: &str,
         series_id: &str,
         indicator: PineIndicator
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         let inputs = indicator.to_study_inputs()?;
         let payloads: Vec<Value> = vec![
             Value::from(session),
@@ -168,7 +174,7 @@ impl WebSocket {
             inputs
         ];
         self.socket.send("create_study", &payloads).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn modify_study(
@@ -177,7 +183,7 @@ impl WebSocket {
         study_id: &str,
         series_id: &str,
         indicator: PineIndicator
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         let inputs = indicator.to_study_inputs()?;
         let payloads: Vec<Value> = vec![
             Value::from(session),
@@ -188,12 +194,12 @@ impl WebSocket {
             inputs
         ];
         self.socket.send("modify_study", &payloads).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn remove_study(&mut self, session: &str, study_id: &str) -> Result<()> {
+    pub async fn remove_study(&mut self, session: &str, study_id: &str) -> Result<&mut Self> {
         self.socket.send("remove_study", &payload!(session, study_id)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn create_series(
@@ -203,7 +209,7 @@ impl WebSocket {
         series_version: &str,
         series_symbol_id: &str,
         config: &ChartOptions
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
             (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
@@ -221,7 +227,7 @@ impl WebSocket {
                 range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
             )
         ).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn modify_series(
@@ -231,7 +237,7 @@ impl WebSocket {
         series_version: &str,
         series_symbol_id: &str,
         config: &ChartOptions
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
             (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
@@ -249,12 +255,12 @@ impl WebSocket {
                 range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
             )
         ).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn remove_series(&mut self, session: &str, series_id: &str) -> Result<()> {
+    pub async fn remove_series(&mut self, session: &str, series_id: &str) -> Result<&mut Self> {
         self.socket.send("remove_series", &payload!(session, series_id)).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn resolve_symbol(
@@ -264,7 +270,7 @@ impl WebSocket {
         symbol: &str,
         config: &ChartOptions,
         replay_session: Option<String>
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         self.socket.send(
             "resolve_symbol",
             &payload!(
@@ -279,15 +285,15 @@ impl WebSocket {
                 )?
             )
         ).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn delete(&mut self) -> Result<()> {
+    pub async fn delete(&mut self) -> Result<&mut Self> {
         for (_, s) in self.subscriber.metadata.series.clone() {
             self.delete_chart_session_id(&s.chart_session).await?;
         }
         self.socket.close().await?;
-        Ok(())
+        Ok(self)
     }
 
     // End TradingView WebSocket methods
@@ -298,7 +304,7 @@ impl WebSocket {
         options: &ChartOptions,
         chart_session: &str,
         symbol_series_id: &str
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         let replay_series_id = gen_id();
         let replay_session = gen_session_id("rs");
 
@@ -313,7 +319,7 @@ impl WebSocket {
             Some(replay_session.to_string())
         ).await?;
 
-        Ok(())
+        Ok(self)
     }
 
     pub async fn set_study(
@@ -321,7 +327,7 @@ impl WebSocket {
         study: &StudyOptions,
         chart_session: &str,
         series_id: &str
-    ) -> Result<()> {
+    ) -> Result<&mut Self> {
         self.subscriber.metadata.studies_count += 1;
         let study_count = self.subscriber.metadata.studies_count;
         let study_id = format!("st{}", study_count);
@@ -338,10 +344,10 @@ impl WebSocket {
         );
 
         self.create_study(chart_session, &study_id, series_id, indicator).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn set_market(&mut self, options: ChartOptions) -> Result<()> {
+    pub async fn set_market(&mut self, options: ChartOptions) -> Result<&mut Self> {
         self.subscriber.metadata.series_count += 1;
         let series_count = self.subscriber.metadata.series_count;
         let symbol_series_id = format!("sds_sym_{}", series_count);
@@ -382,7 +388,7 @@ impl WebSocket {
 
         self.subscriber.metadata.series.insert(series_id, series_info);
 
-        Ok(())
+        Ok(self)
     }
 
     pub async fn subscribe(&mut self) {

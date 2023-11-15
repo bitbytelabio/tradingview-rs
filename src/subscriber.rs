@@ -83,13 +83,19 @@ impl Subscriber {
                 info!("{:?}", symbol_info)
                 // let symbol_info = serde_json::from_value::<SymbolInfo>(message[2].clone())?;
             }
-            TradingViewDataEvent::OnReplayOk => todo!("5"),
-            TradingViewDataEvent::OnReplayPoint => todo!("6"),
+            TradingViewDataEvent::OnReplayOk => {
+                info!("replay ok: {:?}", message);
+            }
+            TradingViewDataEvent::OnReplayPoint => {
+                info!("replay point: {:?}", message);
+            }
             TradingViewDataEvent::OnReplayInstanceId => todo!("7"),
             TradingViewDataEvent::OnReplayResolutions => todo!("8"),
             TradingViewDataEvent::OnReplayDataEnd => todo!("9"),
             TradingViewDataEvent::OnStudyLoading => todo!("10"),
-            TradingViewDataEvent::OnStudyCompleted => todo!("11"),
+            TradingViewDataEvent::OnStudyCompleted => {
+                info!("study completed: {:?}", message);
+            }
             TradingViewDataEvent::OnError(_) => todo!("12"),
             TradingViewDataEvent::UnknownEvent(_) => todo!("13"),
         }

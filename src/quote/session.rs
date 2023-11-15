@@ -9,6 +9,7 @@ use crate::{
 use async_trait::async_trait;
 use serde_json::Value;
 
+#[derive(Clone)]
 pub struct WebSocket {
     subscriber: Subscriber,
     socket: SocketSession,
@@ -31,52 +32,45 @@ impl WebSocket {
         }
     }
 
-    pub async fn create_session(&mut self) -> Result<()> {
+    pub async fn create_session(&mut self) -> Result<&mut Self> {
         self.socket.send("quote_create_session", &payload!(self.quote_session.clone())).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn delete_session(&mut self) -> Result<()> {
+    pub async fn delete_session(&mut self) -> Result<&mut Self> {
         self.socket.send("quote_delete_session", &payload!(self.quote_session.clone())).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn update_session(&mut self) -> Result<()> {
-        self.delete_session().await?;
-        self.quote_session = gen_session_id("qs");
-        self.socket.send("quote_create_session", &payload!(self.quote_session.clone())).await?;
-        Ok(())
-    }
-
-    pub async fn set_fields(&mut self) -> Result<()> {
+    pub async fn set_fields(&mut self) -> Result<&mut Self> {
         self.socket.send("quote_set_fields", &self.quote_fields.clone()).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn add_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
+    pub async fn add_symbols(&mut self, symbols: Vec<&str>) -> Result<&mut Self> {
         let mut payloads = payload![self.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_add_symbols", &payloads).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
+    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<&mut Self> {
         self.socket.update_auth_token(auth_token).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn fast_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
+    pub async fn fast_symbols(&mut self, symbols: Vec<&str>) -> Result<&mut Self> {
         let mut payloads = payload![self.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_fast_symbols", &payloads).await?;
-        Ok(())
+        Ok(self)
     }
 
-    pub async fn remove_symbols(&mut self, symbols: Vec<&str>) -> Result<()> {
+    pub async fn remove_symbols(&mut self, symbols: Vec<&str>) -> Result<&mut Self> {
         let mut payloads = payload![self.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_remove_symbols", &payloads).await?;
-        Ok(())
+        Ok(self)
     }
 
     pub async fn subscribe(&mut self) {
