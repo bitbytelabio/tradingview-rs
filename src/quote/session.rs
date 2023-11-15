@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     payload,
     quote::ALL_QUOTE_FIELDS,
@@ -9,20 +11,11 @@ use crate::{
 use async_trait::async_trait;
 use serde_json::Value;
 
-// #[derive(Default)]
-// pub struct WebSocketsBuilder {
-//     server: Option<DataServer>,
-//     auth_token: Option<String>,
-//     quote_fields: Option<Vec<String>>,
-//     socket: Option<SocketSession>,
-// }
-
 pub struct WebSocket {
     subscriber: Subscriber,
     socket: SocketSession,
     quote_session: String,
     quote_fields: Vec<Value>,
-    // prev_quotes: HashMap<String, QuoteValue>,
 }
 
 impl WebSocket {
@@ -37,7 +30,6 @@ impl WebSocket {
             socket,
             quote_session,
             quote_fields,
-            // prev_quotes:,
         }
     }
 
@@ -98,7 +90,7 @@ impl WebSocket {
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
-        self.subscriber.event_handler(event, &message.p, None).await;
+        self.subscriber.event_handler(event, &message.p).await;
         // match TradingViewDataEvent::from(message.m.clone()) {
         //     TradingViewDataEvent::OnQuoteData => {
         //         trace!("received OnQuoteData: {:#?}", message);

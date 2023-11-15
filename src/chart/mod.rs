@@ -14,7 +14,7 @@ pub struct ChartOptions {
     // Required
     pub symbol: String,
     pub interval: Interval,
-    pub bar_count: u64,
+    bar_count: u64,
 
     range: Option<String>,
     from: Option<u64>,

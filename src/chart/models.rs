@@ -1,8 +1,7 @@
-use iso_currency::Currency;
 use serde::{ Serialize, Deserialize };
 use serde_json::Value;
 
-use crate::models::{ Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType };
+use crate::models::Interval;
 
 pub enum ChartType {
     HeikinAshi,

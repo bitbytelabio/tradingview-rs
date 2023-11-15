@@ -17,10 +17,10 @@ use tracing::error;
 pub struct WebSocket {
     subscriber: Subscriber,
     socket: SocketSession,
-    series: HashMap<String, SeriesInfo>,
-    series_count: u16,
-    studies: HashMap<String, String>,
-    studies_count: u16,
+    // series: HashMap<String, SeriesInfo>,
+    // series_count: u16,
+    // studies: HashMap<String, String>,
+    // studies_count: u16,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -34,10 +34,6 @@ impl WebSocket {
         Self {
             subscriber,
             socket,
-            series: HashMap::new(),
-            series_count: 0,
-            studies: HashMap::new(),
-            studies_count: 0,
         }
     }
 
@@ -295,7 +291,7 @@ impl WebSocket {
     }
 
     pub async fn delete(&mut self) -> Result<()> {
-        for (_, s) in self.series.clone() {
+        for (_, s) in self.subscriber.metadata.series.clone() {
             self.delete_chart_session_id(&s.chart_session).await?;
         }
         self.socket.close().await?;
@@ -334,8 +330,8 @@ impl WebSocket {
         chart_session: &str,
         series_id: &str
     ) -> Result<()> {
-        self.studies_count += 1;
-        let study_count = self.studies_count;
+        self.subscriber.metadata.studies_count += 1;
+        let study_count = self.subscriber.metadata.studies_count;
         let study_id = format!("st{}", study_count);
 
         let indicator = PineIndicator::build().fetch(
@@ -344,15 +340,18 @@ impl WebSocket {
             study.script_type.clone()
         ).await?;
 
-        self.studies.insert(indicator.metadata.data.id.clone(), study_id.clone());
+        self.subscriber.metadata.studies.insert(
+            indicator.metadata.data.id.clone(),
+            study_id.clone()
+        );
 
         self.create_study(chart_session, &study_id, series_id, indicator).await?;
         Ok(())
     }
 
     pub async fn set_market(&mut self, options: ChartOptions) -> Result<()> {
-        self.series_count += 1;
-        let series_count = self.series_count;
+        self.subscriber.metadata.series_count += 1;
+        let series_count = self.subscriber.metadata.series_count;
         let symbol_series_id = format!("sds_sym_{}", series_count);
         let series_id = format!("sds_{}", series_count);
         let series_version = format!("s{}", series_count);
@@ -389,7 +388,7 @@ impl WebSocket {
             options,
         };
 
-        self.series.insert(series_id, series_info);
+        self.subscriber.metadata.series.insert(series_id, series_info);
 
         Ok(())
     }
@@ -438,15 +437,7 @@ use crate::subscriber::Metadata;
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
-        self.subscriber.event_handler(
-            event,
-            &message.p,
-            Some(Metadata {
-                series: self.series.clone(),
-                studies: self.studies.clone(),
-                ..Default::default()
-            })
-        ).await;
+        self.subscriber.event_handler(event, &message.p).await;
 
         // match TradingViewDataEvent::from(message.m.clone()) {
         //     TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {

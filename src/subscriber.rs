@@ -1,7 +1,4 @@
 use std::collections::HashMap;
-use std::default;
-use std::sync::Arc;
-
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
@@ -9,30 +6,30 @@ use tracing::error;
 use tracing::info;
 use tracing::trace;
 
-use crate::chart::models::{
-    SymbolInfo,
-    ChartResponseData,
-    SeriesCompletedMessage,
-    StudyResponseData,
+use crate::quote::utils::merge_quotes;
+use crate::{
+    Result,
+    quote::models::{ QuoteData, QuoteValue },
+    socket::{ Socket, TradingViewDataEvent, SocketMessageDe, SocketSession },
+    chart::{
+        session::SeriesInfo,
+        models::{ SymbolInfo, ChartResponseData, SeriesCompletedMessage, StudyResponseData },
+        utils::{ extract_studies_data, extract_ohlcv_data, get_string_value },
+    },
 };
-use crate::chart::utils::{ extract_studies_data, extract_ohlcv_data };
-use crate::chart::utils::get_string_value;
-use crate::quote::models::{ QuoteData, QuoteValue };
-use crate::socket::SocketMessageDe;
-use crate::socket::SocketSession;
-use crate::socket::TradingViewDataEvent;
-use crate::socket::Socket;
-use crate::Result;
-use crate::chart::session::SeriesInfo;
 
 #[derive(Default)]
-pub struct Subscriber;
+pub struct Subscriber {
+    pub metadata: Metadata,
+}
 
 #[derive(Default)]
 pub struct Metadata {
+    pub series_count: u16,
     pub series: HashMap<String, SeriesInfo>,
+    pub studies_count: u16,
     pub studies: HashMap<String, String>,
-    pub quote: HashMap<String, QuoteValue>,
+    pub quotes: HashMap<String, QuoteValue>,
 }
 
 impl Subscriber {
@@ -44,28 +41,24 @@ impl Subscriber {
     //     listener.event_loop(&mut socket.clone()).await;
     // }
 
-    pub async fn event_handler(
-        &self,
-        event: TradingViewDataEvent,
-        message: &Vec<Value>,
-        metadata: Option<Metadata>
-    ) {
+    pub async fn event_handler(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
-                if let Some(metadata) = metadata {
-                    match
-                        self.chart_data_handler(&metadata.series, &metadata.studies, message).await
-                    {
-                        Ok(_) => (),
-                        Err(e) => error!("{}", e),
-                    };
-                }
+
+                match
+                    self.chart_data_handler(
+                        &self.metadata.series,
+                        &self.metadata.studies,
+                        message
+                    ).await
+                {
+                    Ok(_) => (),
+                    Err(e) => error!("{}", e),
+                };
             }
-            TradingViewDataEvent::OnQuoteData => {
-                let qsd = QuoteData::deserialize(&message[1]).unwrap();
-            }
-            TradingViewDataEvent::OnQuoteCompleted => todo!("2"),
+            TradingViewDataEvent::OnQuoteData => { self.quote_data_handler(message).await }
+            TradingViewDataEvent::OnQuoteCompleted => { info!("quote completed: {:?}", message) }
             TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
             }
@@ -137,5 +130,20 @@ impl Subscriber {
         Ok(())
     }
 
-    async fn quote_data_handler() {}
+    async fn quote_data_handler(&mut self, message: &Vec<Value>) {
+        let qsd = QuoteData::deserialize(&message[1]).unwrap();
+        if qsd.status == "ok" {
+            if let Some(prev_quote) = self.metadata.quotes.get_mut(&qsd.name) {
+                *prev_quote = merge_quotes(prev_quote, &qsd.value);
+            } else {
+                self.metadata.quotes.insert(qsd.name, qsd.value);
+            }
+
+            for (_, q) in &self.metadata.quotes {
+                debug!("quote data: {:?}", q);
+            }
+        } else {
+            error!("quote data status error: {:?}", qsd);
+        }
+    }
 }
