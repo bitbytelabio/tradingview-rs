@@ -1,27 +1,35 @@
-use crate::{ error::LoginError, error::Error, Result, models::UserCookies, UA };
-use google_authenticator::{ GA_AUTH, get_code };
+use crate::{error::Error, error::LoginError, models::UserCookies, Result, UA};
+use google_authenticator::{get_code, GA_AUTH};
 use reqwest::{
-    header::{ HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, ORIGIN, REFERER, COOKIE },
-    Client,
-    Response,
+    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, COOKIE, ORIGIN, REFERER},
+    Client, Response,
 };
 use serde::Deserialize;
 use serde_json::Value;
-use tracing::{ debug, error, info, warn };
+use tracing::{debug, error, info, warn};
 
 impl UserCookies {
     pub async fn login(
         &mut self,
         username: &str,
         password: &str,
-        totp_secret: Option<&str>
+        totp_secret: Option<&str>,
     ) -> Result<Self> {
         let mut headers = HeaderMap::new();
 
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-        headers.insert(ORIGIN, HeaderValue::from_static("https://www.tradingview.com"));
-        headers.insert(REFERER, HeaderValue::from_static("https://www.tradingview.com/"));
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-www-form-urlencoded"));
+        headers.insert(
+            ORIGIN,
+            HeaderValue::from_static("https://www.tradingview.com"),
+        );
+        headers.insert(
+            REFERER,
+            HeaderValue::from_static("https://www.tradingview.com/"),
+        );
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/x-www-form-urlencoded"),
+        );
 
         let client = Client::builder()
             .use_rustls_tls()
@@ -32,22 +40,36 @@ impl UserCookies {
 
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
-            .body(format!("username={}&password={}&remember=true", username, password))
-            .send().await?;
+            .body(format!(
+                "username={}&password={}&remember=true",
+                username, password
+            ))
+            .send()
+            .await?;
 
-        let (session, signature, device_token) = response
-            .cookies()
-            .fold((None, None, None), |session_cookies, cookie| {
-                match cookie.name() {
-                    "sessionid" =>
-                        (Some(cookie.value().to_string()), session_cookies.1, session_cookies.2),
-                    "sessionid_sign" =>
-                        (session_cookies.0, Some(cookie.value().to_string()), session_cookies.2),
-                    "device_t" =>
-                        (session_cookies.0, session_cookies.1, Some(cookie.value().to_string())),
-                    _ => session_cookies,
-                }
-            });
+        let (session, signature, device_token) =
+            response
+                .cookies()
+                .fold((None, None, None), |session_cookies, cookie| {
+                    match cookie.name() {
+                        "sessionid" => (
+                            Some(cookie.value().to_string()),
+                            session_cookies.1,
+                            session_cookies.2,
+                        ),
+                        "sessionid_sign" => (
+                            session_cookies.0,
+                            Some(cookie.value().to_string()),
+                            session_cookies.2,
+                        ),
+                        "device_t" => (
+                            session_cookies.0,
+                            session_cookies.1,
+                            Some(cookie.value().to_string()),
+                        ),
+                        _ => session_cookies,
+                    }
+                });
         if session.is_none() || signature.is_none() {
             error!("unable to login, username or password is invalid");
             return Err(Error::LoginError(LoginError::InvalidCredentials));
@@ -74,37 +96,37 @@ impl UserCookies {
                 error!("2FA is enabled for this account, but no TOTP secret was provided");
                 return Err(Error::LoginError(LoginError::OTPSecretNotFound));
             }
+
             let response = Self::handle_mfa(
                 totp_secret.unwrap(),
                 session.clone().unwrap_or_default().as_str(),
-                signature.clone().unwrap_or_default().as_str()
-            ).await?;
+                signature.clone().unwrap_or_default().as_str(),
+            )
+            .await?;
 
-            let (session, signature, device_token) = response
-                .cookies()
-                .fold((None, None, None), |session_cookies, cookie| {
-                    match cookie.name() {
-                        "sessionid" =>
-                            (
+            let (session, signature, device_token) =
+                response
+                    .cookies()
+                    .fold((None, None, None), |session_cookies, cookie| {
+                        match cookie.name() {
+                            "sessionid" => (
                                 Some(cookie.value().to_string()),
                                 session_cookies.1,
                                 session_cookies.2,
                             ),
-                        "sessionid_sign" =>
-                            (
+                            "sessionid_sign" => (
                                 session_cookies.0,
                                 Some(cookie.value().to_string()),
                                 session_cookies.2,
                             ),
-                        "device_t" =>
-                            (
+                            "device_t" => (
                                 session_cookies.0,
                                 session_cookies.1,
                                 Some(cookie.value().to_string()),
                             ),
-                        _ => session_cookies,
-                    }
-                });
+                            _ => session_cookies,
+                        }
+                    });
 
             let body = response.json().await?;
             debug!("2FA login response: {:#?}", body);
@@ -140,12 +162,21 @@ impl UserCookies {
         let mut headers = HeaderMap::new();
 
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-        headers.insert(ORIGIN, HeaderValue::from_static("https://www.tradingview.com"));
-        headers.insert(REFERER, HeaderValue::from_static("https://www.tradingview.com/"));
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-www-form-urlencoded"));
+        headers.insert(
+            ORIGIN,
+            HeaderValue::from_static("https://www.tradingview.com"),
+        );
+        headers.insert(
+            REFERER,
+            HeaderValue::from_static("https://www.tradingview.com/"),
+        );
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/x-www-form-urlencoded"),
+        );
         headers.insert(
             COOKIE,
-            HeaderValue::from_str(&format!("sessionid={}; sessionid_sign={};", session, signature))?
+            HeaderValue::from_str(&format!("sessionid={session}; sessionid_sign={signature};"))?,
         );
 
         let client = Client::builder()
@@ -157,16 +188,18 @@ impl UserCookies {
 
         let response = client
             .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
-            .body(
-                format!("code={}", match get_code!(totp_secret) {
+            .body(format!(
+                "code={}",
+                match get_code!(totp_secret) {
                     Ok(code) => code,
                     Err(e) => {
                         error!("Error generating TOTP code: {}", e);
                         return Err(Error::LoginError(LoginError::InvalidOTPSecret));
                     }
-                })
-            )
-            .send().await?;
+                }
+            ))
+            .send()
+            .await?;
 
         if response.status().is_success() {
             Ok(response)

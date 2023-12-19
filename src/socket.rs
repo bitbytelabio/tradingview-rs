@@ -1,25 +1,29 @@
 use crate::{
+    error::Error,
     error::TradingViewError,
     payload,
-    utils::{ format_packet, parse_packet },
-    error::Error,
-    Result,
-    UA,
+    utils::{format_packet, parse_packet},
+    Result, UA,
 };
 use async_trait::async_trait;
-use futures_util::{ stream::{ SplitSink, SplitStream }, SinkExt, StreamExt };
-use reqwest::header::{ HeaderMap, HeaderValue };
-use serde::{ Deserialize, Serialize };
+use futures_util::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::{ net::TcpStream, sync::Mutex };
+use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
     connect_async,
-    tungstenite::{ client::IntoClientRequest, protocol::Message },
-    MaybeTlsStream,
-    WebSocketStream,
+    tungstenite::{
+        client::IntoClientRequest,
+        http::{HeaderMap, HeaderValue},
+        protocol::Message,
+    },
+    MaybeTlsStream, WebSocketStream,
 };
-use tracing::{ debug, error, info, trace, warn };
+use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 lazy_static::lazy_static! {
@@ -98,7 +102,11 @@ pub struct SocketMessageDe {
 }
 
 impl SocketMessageSer {
-    pub fn new<M, P>(m: M, p: P) -> Self where M: Serialize, P: Serialize {
+    pub fn new<M, P>(m: M, p: P) -> Self
+    where
+        M: Serialize,
+        P: Serialize,
+    {
         let m = serde_json::to_value(m).expect("Failed to serialize Socket Message");
         let p = serde_json::to_value(p).expect("Failed to serialize Socket Message");
         SocketMessageSer { m, p }
@@ -167,25 +175,28 @@ pub struct SocketSession {
 impl SocketSession {
     async fn connect(
         server: &DataServer,
-        auth_token: &str
-    ) -> Result<
-        (
-            SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-            SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-        )
-    > {
-        let url = Url::parse(&format!("wss://{}.tradingview.com/socket.io/websocket", server))?;
+        auth_token: &str,
+    ) -> Result<(
+        SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    )> {
+        let url = Url::parse(&format!(
+            "wss://{}.tradingview.com/socket.io/websocket",
+            server
+        ))?;
 
         let mut request = url.into_client_request()?;
-        request.headers_mut().extend(WEBSOCKET_HEADERS.clone());
+        request
+            .headers_mut()
+            .extend(WEBSOCKET_HEADERS.clone().into_iter());
 
         let (socket, _response) = connect_async(request).await?;
 
         let (mut write, read) = socket.split();
 
-        write.send(
-            SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?
-        ).await?;
+        write
+            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
+            .await?;
 
         Ok((write, read))
     }
@@ -193,8 +204,9 @@ impl SocketSession {
     pub async fn reconnect(&mut self) -> Result<()> {
         let (write, read) = SocketSession::connect(
             self.server.clone().as_ref(),
-            self.auth_token.clone().as_ref()
-        ).await?;
+            self.auth_token.clone().as_ref(),
+        )
+        .await?;
         self.write = Arc::from(Mutex::new(write));
         self.read = Arc::from(Mutex::new(read));
         Ok(())
@@ -214,11 +226,20 @@ impl SocketSession {
         let server = Arc::new(server);
         let auth_token = Arc::new(auth_token);
 
-        Ok(SocketSession { server, auth_token, write, read })
+        Ok(SocketSession {
+            server,
+            auth_token,
+            write,
+            read,
+        })
     }
 
     pub async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
-        self.write.lock().await.send(SocketMessageSer::new(m, p).to_message()?).await?;
+        self.write
+            .lock()
+            .await
+            .send(SocketMessageSer::new(m, p).to_message()?)
+            .await?;
         Ok(())
     }
 
@@ -235,10 +256,10 @@ impl SocketSession {
 
     pub async fn update_token(&mut self, auth_token: &str) -> Result<()> {
         self.write
-            .lock().await
-            .send(
-                SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?
-            ).await?;
+            .lock()
+            .await
+            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
+            .await?;
         Ok(())
     }
 }
@@ -270,7 +291,8 @@ pub trait Socket {
                 trace!("parsing message: {:?}", text);
                 match parse_packet(text) {
                     Ok(parsed_messages) => {
-                        self.handle_parsed_messages(session, parsed_messages, &raw).await;
+                        self.handle_parsed_messages(session, parsed_messages, &raw)
+                            .await;
                     }
                     Err(e) => {
                         error!("error parsing message: {:?}", e);
@@ -300,7 +322,7 @@ pub trait Socket {
         &mut self,
         session: &mut SocketSession,
         messages: Vec<SocketMessage<SocketMessageDe>>,
-        raw: &Message
+        raw: &Message,
     ) {
         for message in messages {
             match message {
