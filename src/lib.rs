@@ -1,10 +1,10 @@
 pub mod chart;
 pub mod client;
 pub mod error;
+pub mod feeder;
 pub mod models;
 pub mod quote;
 pub mod socket;
-pub mod feeder;
 
 #[cfg(feature = "user")]
 pub mod user;
@@ -15,15 +15,8 @@ static UA: &str =
 
 pub mod api {
     pub use crate::client::misc::{
-        search_symbol,
-        get_chart_token,
-        get_drawing,
-        get_builtin_indicators,
-        get_private_indicators,
-        get_indicator_metadata,
-        list_symbols,
-        search_indicator,
-        get_quote_token,
+        get_builtin_indicators, get_chart_token, get_drawing, get_indicator_metadata,
+        get_private_indicators, get_quote_token, list_symbols, search_indicator, search_symbol,
     };
 }
 

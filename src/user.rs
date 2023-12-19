@@ -1,4 +1,5 @@
-use crate::{error::Error, error::LoginError, models::UserCookies, Result, UA};
+pub use crate::models::UserCookies;
+use crate::{error::Error, error::LoginError, Result, UA};
 use google_authenticator::{get_code, GA_AUTH};
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, COOKIE, ORIGIN, REFERER},
@@ -9,6 +10,10 @@ use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
 impl UserCookies {
+    pub fn new() -> Self {
+        UserCookies::default()
+    }
+
     pub async fn login(
         &mut self,
         username: &str,
