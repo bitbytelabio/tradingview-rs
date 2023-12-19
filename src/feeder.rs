@@ -1,21 +1,23 @@
-use std::{ collections::HashMap, sync::Arc };
 use serde::Deserialize;
 use serde_json::Value;
-use tracing::{ debug, error, info, trace, warn };
+use std::{collections::HashMap, sync::Arc};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
-    Result,
-    Error,
-    quote::{ models::{ QuoteData, QuoteValue }, utils::merge_quotes },
-    socket::{ Socket, TradingViewDataEvent, SocketMessageDe, SocketSession },
     chart::{
+        models::{ChartResponseData, SeriesCompletedMessage, StudyResponseData, SymbolInfo},
         session::SeriesInfo,
-        models::{ SymbolInfo, ChartResponseData, SeriesCompletedMessage, StudyResponseData },
     },
+    quote::{
+        models::{QuoteData, QuoteValue},
+        utils::merge_quotes,
+    },
+    socket::{Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
+    Error, Result,
 };
 
 #[derive(Clone)]
-pub struct Publisher {
+pub struct Feeder {
     pub(crate) metadata: Metadata,
     // publisher: Vec<Box<dyn Socket + Send + Sync>>,
 }
@@ -30,7 +32,7 @@ pub struct Metadata {
     pub quote_session: String,
 }
 
-impl Publisher {
+impl Feeder {
     // pub async fn subscribe<T: Socket + Send + Sync>(
     //     &mut self,
     //     listener: &mut T,
@@ -51,11 +53,8 @@ impl Publisher {
     //     self
     // }
 
-    pub fn unsubscribe<T: Socket + Send>(
-        &mut self,
-        event_type: TradingViewDataEvent,
-        listener: T
-    ) {}
+    pub fn unsubscribe<T: Socket + Send>(&mut self, event_type: TradingViewDataEvent, listener: T) {
+    }
 
     pub fn notify(&self, event_type: TradingViewDataEvent) {}
 
@@ -64,19 +63,18 @@ impl Publisher {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
 
-                match
-                    self.handle_chart_data(
-                        &self.metadata.series,
-                        &self.metadata.studies,
-                        message
-                    ).await
+                match self
+                    .handle_chart_data(&self.metadata.series, &self.metadata.studies, message)
+                    .await
                 {
                     Ok(_) => (),
                     Err(e) => error!("{}", e),
                 };
             }
-            TradingViewDataEvent::OnQuoteData => { self.handle_quote_data(message).await }
-            TradingViewDataEvent::OnQuoteCompleted => { info!("quote completed: {:?}", message) }
+            TradingViewDataEvent::OnQuoteData => self.handle_quote_data(message).await,
+            TradingViewDataEvent::OnQuoteCompleted => {
+                info!("quote completed: {:?}", message)
+            }
             TradingViewDataEvent::OnSeriesLoading => {
                 trace!("series is loading: {:#?}", message);
             }
@@ -120,14 +118,15 @@ impl Publisher {
         &self,
         series: &HashMap<String, SeriesInfo>,
         studies: &HashMap<String, String>,
-        message: &Vec<Value>
+        message: &Vec<Value>,
     ) -> Result<()> {
         for (id, s) in series.into_iter() {
             trace!("received v: {:?}, m: {:?}", s, message);
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let data: Vec<Vec<f64>> = ChartResponseData::deserialize(resp_data)?
-                        .series.into_iter()
+                        .series
+                        .into_iter()
                         .map(|point| point.value)
                         .collect();
                     // timestamp, open, high, low, close, volume
@@ -144,7 +143,8 @@ impl Publisher {
             if let Some(resp_data) = message[1].get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
                 let data: Vec<Vec<f64>> = StudyResponseData::deserialize(resp_data)?
-                    .studies.into_iter()
+                    .studies
+                    .into_iter()
                     .map(|point| point.value)
                     .collect();
                 warn!("study data extracted: {} - {:?}", k, data);

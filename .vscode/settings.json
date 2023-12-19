@@ -62,9 +62,5 @@
     "widgetdata",
     "XETR",
     "zoffset"
-  ],
-  "sonarlint.connectedMode.project": {
-    "connectionId": "https-sonarqube-bitbytelab-io-",
-    "projectKey": "tradingview-rs"
-  },
+  ]
 }

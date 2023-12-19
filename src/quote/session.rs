@@ -1,52 +1,53 @@
 use crate::{
+    feeder::Feeder,
     payload,
     quote::ALL_QUOTE_FIELDS,
-    socket::{ Socket, SocketMessageDe, SocketSession, TradingViewDataEvent },
+    socket::{Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     utils::gen_session_id,
     Result,
-    feeder::Publisher,
 };
 use async_trait::async_trait;
 use serde_json::Value;
 
 #[derive(Clone)]
 pub struct WebSocket {
-    publisher: Publisher,
+    feeder: Feeder,
     socket: SocketSession,
 }
 
 impl WebSocket {
-    pub fn new(publisher: Publisher, socket: SocketSession) -> Self {
-        Self {
-            publisher,
-            socket,
-        }
+    pub fn new(feeder: Feeder, socket: SocketSession) -> Self {
+        Self { feeder, socket }
     }
 
     pub async fn create_session(&mut self) -> Result<&mut Self> {
         let quote_session = gen_session_id("qs");
-        self.publisher.metadata.quote_session = quote_session.clone();
-        self.socket.send("quote_create_session", &payload!(quote_session)).await?;
+        self.feeder.metadata.quote_session = quote_session.clone();
+        self.socket
+            .send("quote_create_session", &payload!(quote_session))
+            .await?;
         Ok(self)
     }
 
     pub async fn delete_session(&mut self) -> Result<&mut Self> {
-        self.socket.send(
-            "quote_delete_session",
-            &payload!(self.publisher.metadata.quote_session.clone())
-        ).await?;
+        self.socket
+            .send(
+                "quote_delete_session",
+                &payload!(self.feeder.metadata.quote_session.clone()),
+            )
+            .await?;
         Ok(self)
     }
 
     pub async fn set_fields(&mut self) -> Result<&mut Self> {
-        let mut quote_fields = payload![self.publisher.metadata.quote_session.clone().to_string()];
+        let mut quote_fields = payload![self.feeder.metadata.quote_session.clone().to_string()];
         quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
         self.socket.send("quote_set_fields", &quote_fields).await?;
         Ok(self)
     }
 
     pub async fn add_symbols(&mut self, symbols: Vec<&str>) -> Result<&mut Self> {
-        let mut payloads = payload![self.publisher.metadata.quote_session.clone()];
+        let mut payloads = payload![self.feeder.metadata.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_add_symbols", &payloads).await?;
         Ok(self)
@@ -58,14 +59,14 @@ impl WebSocket {
     }
 
     pub async fn fast_symbols(&mut self, symbols: Vec<&str>) -> Result<&mut Self> {
-        let mut payloads = payload![self.publisher.metadata.quote_session.clone()];
+        let mut payloads = payload![self.feeder.metadata.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_fast_symbols", &payloads).await?;
         Ok(self)
     }
 
     pub async fn remove_symbols(&mut self, symbols: Vec<&str>) -> Result<&mut Self> {
-        let mut payloads = payload![self.publisher.metadata.quote_session.clone()];
+        let mut payloads = payload![self.feeder.metadata.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(self)
@@ -80,7 +81,7 @@ impl WebSocket {
 impl Socket for WebSocket {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
-        self.publisher.handle_events(event, &message.p).await;
+        self.feeder.handle_events(event, &message.p).await;
         Ok(())
     }
 }
