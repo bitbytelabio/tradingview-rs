@@ -1,17 +1,12 @@
-use dotenv::dotenv;
-use std::env;
-use tracing::info;
-use tradingview::user::User;
+use tradingview::user::UserCookies;
 
 #[tokio::main]
-async fn main() {
-    dotenv().ok();
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
+    let user = UserCookies::new()
+        .login("testuser", "testpassword", None)
+        .await?;
 
-    let session = env::var("TV_SESSION").unwrap();
-    let signature = env::var("TV_SIGNATURE").unwrap();
-
-    let user = User::build().session(&session, &signature).get().await.unwrap();
-
-    info!("User: {:?}", user.auth_token);
+    tracing::info!("User: {:?}", user);
+    Ok(())
 }

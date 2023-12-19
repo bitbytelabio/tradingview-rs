@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::{
     chart::study::{ IndicatorInput, InputValue },
-    client::mics::get_indicator_metadata,
+    client::misc::get_indicator_metadata,
     models::{ FinancialPeriod, UserCookies },
     Result,
 };

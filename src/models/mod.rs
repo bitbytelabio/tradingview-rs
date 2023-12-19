@@ -3,29 +3,6 @@ use std::collections::HashMap;
 use serde::{ Deserialize, Deserializer, Serialize };
 pub mod pine_indicator;
 
-#[derive(Debug, Clone, Serialize, Copy, PartialEq)]
-pub struct OHLCV {
-    pub timestamp: i64,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: f64,
-}
-
-impl OHLCV {
-    pub fn new(entry: (f64, f64, f64, f64, f64, f64)) -> Self {
-        OHLCV {
-            timestamp: (entry.0 * 1000.0) as i64,
-            open: entry.1,
-            high: entry.2,
-            low: entry.3,
-            close: entry.4,
-            volume: entry.5,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChartDrawing {
     pub success: bool,
@@ -60,7 +37,7 @@ pub struct ChartDrawingSourceStatePoint {
     price: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct UserCookies {
     pub id: u32,
     pub username: String,

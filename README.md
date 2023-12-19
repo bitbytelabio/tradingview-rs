@@ -2,7 +2,6 @@
 
 ![Tests](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/ci.yml/badge.svg)
 ![GitHub latest commit](https://img.shields.io/github/last-commit/bitbytelabio/tradingView-rs)
-[![Maintainability Rating](https://sonarqube.bitbytelab.io/api/project_badges/measure?project=tradingview-rs&metric=sqale_rating&token=sqb_7f1e20d249c16fd42e6fe2c63d1f155079f2780a)](https://sonarqube.bitbytelab.io/dashboard?id=tradingview-rs)
 
 ## Introduction
 
