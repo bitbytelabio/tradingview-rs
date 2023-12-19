@@ -54,6 +54,7 @@ impl Feeder {
     // }
 
     pub fn unsubscribe<T: Socket + Send>(&mut self, event_type: TradingViewDataEvent, listener: T) {
+        todo!()
     }
 
     pub fn notify(&self, event_type: TradingViewDataEvent) {}

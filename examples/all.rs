@@ -1,7 +1,6 @@
 use dotenv::dotenv;
 use std::env;
 
-use tracing::info;
 use tradingview::{
     chart,
     chart::ChartOptions,
