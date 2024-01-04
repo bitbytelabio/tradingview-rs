@@ -180,7 +180,9 @@ impl<T> Feeder<T> {
         Ok(())
     }
 
-    async fn handle_study_data(&self) {}
+    async fn handle_study_data(&self) {
+        todo!()
+    }
 
     async fn handle_quote_data(&mut self, message: &Vec<Value>) {
         let qsd = QuoteData::deserialize(&message[1]).unwrap();
@@ -193,9 +195,11 @@ impl<T> Feeder<T> {
 
             for (_, q) in &self.metadata.quotes {
                 debug!("quote data: {:?}", q);
+                // TODO: Notify function for quote data
             }
         } else {
             error!("quote data status error: {:?}", qsd);
+            // TODO: Notify function for quote data error
         }
     }
 }
