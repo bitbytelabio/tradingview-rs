@@ -1,8 +1,3 @@
-use serde::Deserialize;
-use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
-use tracing::{debug, error, info, trace, warn};
-
 use crate::{
     chart::{
         models::{ChartResponseData, SeriesCompletedMessage, StudyResponseData, SymbolInfo},
@@ -15,11 +10,28 @@ use crate::{
     socket::{Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     Error, Result,
 };
+use serde::Deserialize;
+use serde_json::Value;
+use std::future::Future;
+use std::pin::Pin;
+use std::{collections::HashMap, sync::Arc};
+use tracing::{debug, error, info, trace, warn};
 
-#[derive(Clone)]
-pub struct Feeder {
+#[derive(Clone, Default)]
+pub struct Feeder<T> {
     pub(crate) metadata: Metadata,
-    // publisher: Vec<Box<dyn Socket + Send + Sync>>,
+    callbacks: HashMap<
+        TradingViewDataEvent,
+        Arc<dyn Fn(&T) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> + Send + Sync>,
+    >,
+}
+
+pub struct FeederBuilder {}
+
+impl FeederBuilder {
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 
 #[derive(Default, Clone)]
@@ -32,7 +44,7 @@ pub struct Metadata {
     pub quote_session: String,
 }
 
-impl Feeder {
+impl<T> Feeder<T> {
     // pub async fn subscribe<T: Socket + Send + Sync>(
     //     &mut self,
     //     listener: &mut T,
@@ -44,20 +56,31 @@ impl Feeder {
     pub fn new() -> Self {
         Self {
             metadata: Metadata::default(),
+            callbacks: HashMap::new(),
             // publisher: Vec::new(),
         }
     }
+
+    // pub fn process_with_callback<T, F>(data: T, callback: F)
+    // where
+    //     T: serde::Serialize,
+    //     F: Fn(T),
+    // {
+    //     callback(data);
+    // }
 
     // pub fn add(mut self, publisher: Box<dyn Socket + Send + Sync>) -> Self {
     //     self.publisher.push(publisher);
     //     self
     // }
 
-    pub fn unsubscribe<T: Socket + Send>(&mut self, event_type: TradingViewDataEvent, listener: T) {
-        todo!()
-    }
+    // pub fn unsubscribe<T: Socket + Send>(&mut self, event_type: TradingViewDataEvent, listener: T) {
+    //     todo!()
+    // }
 
-    pub fn notify(&self, event_type: TradingViewDataEvent) {}
+    // pub fn notify<T: serde::Serialize>(&self, event_type: TradingViewDataEvent, data: T) {
+    //     todo!()
+    // }
 
     pub async fn handle_events(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
@@ -132,7 +155,7 @@ impl Feeder {
                         .collect();
                     // timestamp, open, high, low, close, volume
                     debug!("series data extracted: {:?}", data);
-
+                    // self.notify(TradingViewDataEvent::OnChartData, data)
                     // TODO: Notify function
                 }
                 None => {

@@ -11,8 +11,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 #[derive(Clone)]
-pub struct WebSocket {
-    feeder: Feeder,
+pub struct WebSocket<T> {
+    feeder: Feeder<T>,
     socket: SocketSession,
 }
 
@@ -22,8 +22,8 @@ pub struct SeriesInfo {
     pub options: ChartOptions,
 }
 
-impl WebSocket {
-    pub fn new(feeder: Feeder, socket: SocketSession) -> Self {
+impl<T> WebSocket<T> {
+    pub fn new(feeder: Feeder<T>, socket: SocketSession) -> Self {
         Self { feeder, socket }
     }
 
@@ -441,7 +441,7 @@ impl WebSocket {
 }
 
 #[async_trait]
-impl Socket for WebSocket {
+impl<T> Socket for WebSocket<T> {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
         self.feeder.handle_events(event, &message.p).await;

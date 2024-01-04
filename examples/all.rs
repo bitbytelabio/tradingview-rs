@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
 
     let socket = SocketSession::new(DataServer::ProData, auth_token).await?;
 
-    let publisher = Feeder::new();
+    let publisher: Feeder<String> = Feeder::new();
 
     let mut chart = chart::session::WebSocket::new(publisher.clone(), socket.clone());
     let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());
