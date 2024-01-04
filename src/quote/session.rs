@@ -8,14 +8,15 @@ use crate::{
 };
 use async_trait::async_trait;
 use serde_json::Value;
+use std::fmt::Debug;
 
 #[derive(Clone)]
-pub struct WebSocket<T> {
+pub struct WebSocket<T: Clone + Debug + Send + Sync> {
     feeder: Feeder<T>,
     socket: SocketSession,
 }
 
-impl<T> WebSocket<T> {
+impl<T: Clone + Debug + Send + Sync> WebSocket<T> {
     pub fn new(feeder: Feeder<T>, socket: SocketSession) -> Self {
         Self { feeder, socket }
     }
@@ -78,7 +79,7 @@ impl<T> WebSocket<T> {
 }
 
 #[async_trait]
-impl<T> Socket for WebSocket<T> {
+impl<T: Clone + Debug + Send + Sync> Socket for WebSocket<T> {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
         self.feeder.handle_events(event, &message.p).await;

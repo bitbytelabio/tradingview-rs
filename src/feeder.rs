@@ -12,13 +12,13 @@ use crate::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use std::future::Future;
 use std::pin::Pin;
 use std::{collections::HashMap, sync::Arc};
+use std::{fmt::Debug, future::Future};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Default)]
-pub struct Feeder<T> {
+pub struct Feeder<T: Clone + Debug + Send + Sync> {
     pub(crate) metadata: Metadata,
     callbacks: HashMap<
         TradingViewDataEvent,
@@ -44,7 +44,7 @@ pub struct Metadata {
     pub quote_session: String,
 }
 
-impl<T> Feeder<T> {
+impl<T: Clone + Debug + Send + Sync> Feeder<T> {
     // pub async fn subscribe<T: Socket + Send + Sync>(
     //     &mut self,
     //     listener: &mut T,
@@ -61,13 +61,13 @@ impl<T> Feeder<T> {
         }
     }
 
-    // pub fn process_with_callback<T, F>(data: T, callback: F)
-    // where
-    //     T: serde::Serialize,
-    //     F: Fn(T),
-    // {
-    //     callback(data);
-    // }
+    pub fn process_with_callback<F>(data: T, callback: F)
+    where
+        T: serde::Serialize,
+        F: Fn(T),
+    {
+        callback(data);
+    }
 
     // pub fn add(mut self, publisher: Box<dyn Socket + Send + Sync>) -> Self {
     //     self.publisher.push(publisher);
