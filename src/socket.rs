@@ -174,6 +174,29 @@ pub struct SocketSession {
 }
 
 impl SocketSession {
+    /// Establishes a WebSocket connection to a TradingView data server.
+    ///
+    /// # Arguments
+    ///
+    /// * `server` - A reference to the `DataServer` enum which represents the server to connect to.
+    /// * `auth_token` - A string slice that holds the authentication token.
+    ///
+    /// # Returns
+    ///
+    /// * A `Result` which is:
+    ///     * `Ok` - A tuple containing the split sink and stream of the WebSocket connection.
+    ///     * `Err` - An error that occurred while trying to establish the connection or send the authentication message.
+    ///
+    /// # Asynchronous
+    ///
+    /// This function is asynchronous, it returns a Future that should be awaited.
+    ///
+    /// This function first constructs the URL for the WebSocket connection based on the provided server.
+    /// It then creates a client request from the URL and adds necessary headers.
+    /// The `connect_async` function is used to establish the WebSocket connection.
+    /// The connection is then split into a write and read part.
+    /// An authentication message is sent using the write part of the connection.
+    /// Finally, it returns the write and read parts of the connection.
     async fn connect(
         server: &DataServer,
         auth_token: &str,
