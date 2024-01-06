@@ -35,7 +35,7 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TradingViewDataEvent {
     OnChartData,
     OnChartDataUpdate,

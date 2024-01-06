@@ -11,13 +11,13 @@ use serde_json::Value;
 use std::fmt::Debug;
 
 #[derive(Clone)]
-pub struct WebSocket<T: Clone + Debug + Send + Sync> {
-    feeder: Feeder<T>,
+pub struct WebSocket<'a> {
+    feeder: Feeder<'a>,
     socket: SocketSession,
 }
 
-impl<T: Clone + Debug + Send + Sync> WebSocket<T> {
-    pub fn new(feeder: Feeder<T>, socket: SocketSession) -> Self {
+impl<'a> WebSocket<'a> {
+    pub fn new(feeder: Feeder<'a>, socket: SocketSession) -> Self {
         Self { feeder, socket }
     }
 
@@ -79,7 +79,7 @@ impl<T: Clone + Debug + Send + Sync> WebSocket<T> {
 }
 
 #[async_trait]
-impl<T: Clone + Debug + Send + Sync> Socket for WebSocket<T> {
+impl<'a> Socket for WebSocket<'a> {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
         self.feeder.handle_events(event, &message.p).await;

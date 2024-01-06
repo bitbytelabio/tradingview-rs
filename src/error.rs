@@ -48,7 +48,7 @@ pub enum Error {
     TradingViewError(#[from] TradingViewError),
 }
 
-#[derive(Debug, Clone, Error, PartialEq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq, Hash)]
 pub enum TradingViewError {
     #[error("series_error")]
     SeriesError,

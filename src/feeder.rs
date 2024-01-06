@@ -10,7 +10,8 @@ use crate::{
     socket::{Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     Error, Result,
 };
-use serde::Deserialize;
+use futures_util::future::BoxFuture;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::pin::Pin;
 use std::{collections::HashMap, sync::Arc};
@@ -18,12 +19,43 @@ use std::{fmt::Debug, future::Future};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Default)]
-pub struct Feeder<T: Clone + Debug + Send + Sync> {
+pub struct Feeder<'a> {
     pub(crate) metadata: Metadata,
-    callbacks: HashMap<
-        TradingViewDataEvent,
-        Arc<dyn Fn(&T) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> + Send + Sync>,
-    >,
+    callbacks: Callbacks<'a>,
+}
+
+type AsyncCallback<'a, T> = Box<dyn (FnOnce(T) -> BoxFuture<'a, ()>) + Send + Sync + 'a>;
+
+#[derive(Clone)]
+pub struct Callbacks<'a> {
+    on_chart_data: Arc<AsyncCallback<'a, ChartResponseData>>,
+    on_quote_data: Arc<AsyncCallback<'a, QuoteData>>,
+    on_series_completed: Arc<AsyncCallback<'a, SeriesCompletedMessage>>,
+    on_study_completed: Arc<AsyncCallback<'a, StudyResponseData>>,
+    on_unknown_event: Arc<AsyncCallback<'a, Value>>,
+}
+
+impl Default for Callbacks<'_> {
+    fn default() -> Self {
+        Self {
+            on_chart_data: Arc::new(Box::new(|_| Box::pin(async {}))),
+            on_quote_data: Arc::new(Box::new(|_| Box::pin(async {}))),
+            on_series_completed: Arc::new(Box::new(|_| Box::pin(async {}))),
+            on_study_completed: Arc::new(Box::new(|_| Box::pin(async {}))),
+            on_unknown_event: Arc::new(Box::new(|_| Box::pin(async {}))),
+        }
+    }
+}
+
+impl<'a> Callbacks<'a> {
+    pub fn on_chart_data<Fut>(
+        &mut self,
+        f: impl FnOnce(ChartResponseData) -> Fut + Send + Sync + 'a,
+    ) where
+        Fut: Future<Output = ()> + Send + 'a,
+    {
+        self.on_chart_data = Arc::new(Box::new(|data| Box::pin(f(data))));
+    }
 }
 
 pub struct FeederBuilder {}
@@ -44,7 +76,7 @@ pub struct Metadata {
     pub quote_session: String,
 }
 
-impl<T: Clone + Debug + Send + Sync> Feeder<T> {
+impl<'a> Feeder<'a> {
     // pub async fn subscribe<T: Socket + Send + Sync>(
     //     &mut self,
     //     listener: &mut T,
@@ -56,17 +88,19 @@ impl<T: Clone + Debug + Send + Sync> Feeder<T> {
     pub fn new() -> Self {
         Self {
             metadata: Metadata::default(),
-            callbacks: HashMap::new(),
+            callbacks: Callbacks::default(),
             // publisher: Vec::new(),
         }
     }
 
-    pub fn process_with_callback<F>(data: T, callback: F)
-    where
-        T: serde::Serialize,
-        F: Fn(T),
-    {
-        callback(data);
+    pub fn process_with_callback(
+        &mut self,
+        event: TradingViewDataEvent,
+        callback: Box<AsyncCallback<'a, Box<dyn Send + Sync>>>,
+    ) -> &mut Self {
+        // let cb = Arc::new(callback);
+        // self.callbacks.insert(event, cb);
+        self
     }
 
     // pub fn add(mut self, publisher: Box<dyn Socket + Send + Sync>) -> Self {
@@ -82,7 +116,11 @@ impl<T: Clone + Debug + Send + Sync> Feeder<T> {
     //     todo!()
     // }
 
-    pub async fn handle_events(&mut self, event: TradingViewDataEvent, message: &Vec<Value>) {
+    pub(crate) async fn handle_events(
+        &mut self,
+        event: TradingViewDataEvent,
+        message: &Vec<Value>,
+    ) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
