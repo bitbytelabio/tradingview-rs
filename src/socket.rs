@@ -313,16 +313,8 @@ pub trait Socket {
         match &raw {
             Message::Text(text) => {
                 trace!("parsing message: {:?}", text);
-                match parse_packet(text) {
-                    Ok(parsed_messages) => {
-                        self.handle_parsed_messages(session, parsed_messages, &raw)
-                            .await;
-                    }
-                    Err(e) => {
-                        error!("error parsing message: {:?}", e);
-                        self.handle_error(e).await;
-                    }
-                }
+                self.handle_parsed_messages(session, parse_packet(text), &raw)
+                    .await;
             }
             Message::Close(msg) => {
                 warn!("connection closed with code: {:?}", msg);

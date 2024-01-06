@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [features]
 default = ["user"]
 user = ["dep:google-authenticator"]
+protobuf = ["dep:prost"]
 
 [dependencies]
 tokio = { version = "1", default-features = false }
@@ -41,12 +42,12 @@ iso_currency = { version = "0.4", features = ["with-serde"] }
 zip = "^0.6"
 base64 = "^0.21"
 google-authenticator = { version = "^0.4", optional = true }
+prost = { version = "0.12", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
-protobuf = "3"
 dotenv = "0.15.0"
 tracing-subscriber = "0.3"
 chrono = { version = "0.4.31", features = ["serde"] }
