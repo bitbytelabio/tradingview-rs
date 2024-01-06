@@ -1,7 +1,7 @@
 pub mod chart;
 pub mod client;
 pub mod error;
-pub mod feeder;
+pub mod data_loader;
 pub mod models;
 pub mod quote;
 pub mod socket;

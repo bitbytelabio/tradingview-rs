@@ -19,16 +19,16 @@ use std::{fmt::Debug, future::Future};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Default)]
-pub struct Feeder<'a> {
+pub struct DataLoader<'a> {
     pub(crate) metadata: Metadata,
     callbacks: Callbacks<'a>,
 }
 
-type AsyncCallback<'a, T> = Box<dyn (FnOnce(T) -> BoxFuture<'a, ()>) + Send + Sync + 'a>;
+type AsyncCallback<'a, T> = Box<dyn (Fn(T) -> BoxFuture<'a, ()>) + Send + Sync + 'a>;
 
 #[derive(Clone)]
 pub struct Callbacks<'a> {
-    on_chart_data: Arc<AsyncCallback<'a, ChartResponseData>>,
+    on_chart_data: Arc<AsyncCallback<'a, Vec<Vec<f64>>>>,
     on_quote_data: Arc<AsyncCallback<'a, QuoteData>>,
     on_series_completed: Arc<AsyncCallback<'a, SeriesCompletedMessage>>,
     on_study_completed: Arc<AsyncCallback<'a, StudyResponseData>>,
@@ -50,11 +50,57 @@ impl Default for Callbacks<'_> {
 impl<'a> Callbacks<'a> {
     pub fn on_chart_data<Fut>(
         &mut self,
-        f: impl FnOnce(ChartResponseData) -> Fut + Send + Sync + 'a,
-    ) where
+        f: impl Fn(Vec<Vec<f64>>) -> Fut + Send + Sync + 'a,
+    ) -> &mut Self
+    where
         Fut: Future<Output = ()> + Send + 'a,
     {
-        self.on_chart_data = Arc::new(Box::new(|data| Box::pin(f(data))));
+        self.on_chart_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        self
+    }
+
+    pub fn on_quote_data<Fut>(
+        &mut self,
+        f: impl Fn(QuoteData) -> Fut + Send + Sync + 'a,
+    ) -> &mut Self
+    where
+        Fut: Future<Output = ()> + Send + 'a,
+    {
+        self.on_quote_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        self
+    }
+
+    pub fn on_series_completed<Fut>(
+        &mut self,
+        f: impl Fn(SeriesCompletedMessage) -> Fut + Send + Sync + 'a,
+    ) -> &mut Self
+    where
+        Fut: Future<Output = ()> + Send + 'a,
+    {
+        self.on_series_completed = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        self
+    }
+
+    pub fn on_study_completed<Fut>(
+        &mut self,
+        f: impl Fn(StudyResponseData) -> Fut + Send + Sync + 'a,
+    ) -> &mut Self
+    where
+        Fut: Future<Output = ()> + Send + 'a,
+    {
+        self.on_study_completed = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        self
+    }
+
+    pub fn on_unknown_event<Fut>(
+        &mut self,
+        f: impl Fn(Value) -> Fut + Send + Sync + 'a,
+    ) -> &mut Self
+    where
+        Fut: Future<Output = ()> + Send + 'a,
+    {
+        self.on_unknown_event = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        self
     }
 }
 
@@ -76,7 +122,7 @@ pub struct Metadata {
     pub quote_session: String,
 }
 
-impl<'a> Feeder<'a> {
+impl<'a> DataLoader<'a> {
     // pub async fn subscribe<T: Socket + Send + Sync>(
     //     &mut self,
     //     listener: &mut T,
@@ -194,7 +240,9 @@ impl<'a> Feeder<'a> {
                     // timestamp, open, high, low, close, volume
                     debug!("series data extracted: {:?}", data);
                     // self.notify(TradingViewDataEvent::OnChartData, data)
+
                     // TODO: Notify function
+                    (self.callbacks.on_chart_data)(data).await;
                 }
                 None => {
                     debug!("receive empty data on series: {:?}", s);
@@ -231,7 +279,7 @@ impl<'a> Feeder<'a> {
                 self.metadata.quotes.insert(qsd.name, qsd.value);
             }
 
-            for (_, q) in &self.metadata.quotes {
+            for q in self.metadata.quotes.values() {
                 debug!("quote data: {:?}", q);
                 // TODO: Notify function for quote data
             }
