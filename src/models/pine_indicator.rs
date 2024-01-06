@@ -4,9 +4,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    chart::study::{ IndicatorInput, InputValue },
+    chart::study::{IndicatorInput, InputValue},
     client::misc::get_indicator_metadata,
-    models::{ FinancialPeriod, UserCookies },
+    models::{FinancialPeriod, UserCookies},
     Result,
 };
 
@@ -29,17 +29,26 @@ impl std::fmt::Display for BuiltinIndicators {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug))]
+// #[cfg_attr(feature = "protobuf", derive(prost::Message))]
 pub struct PineInfo {
+    // #[cfg_attr(feature = "protobuf", prost(int64, optional, tag = "1"))]
     pub user_id: i64,
+    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "2"))]
     pub script_name: String,
+    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "3"))]
     pub script_source: String,
+    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "4"))]
     #[serde(rename(deserialize = "scriptIdPart"))]
     pub script_id: String,
+    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "5"))]
     pub script_access: String,
+    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "6"))]
     #[serde(rename(deserialize = "version"))]
     pub script_version: String,
+    // #[cfg_attr(feature = "protobuf", prost(message, optional, tag = "7"))]
     pub extra: PineInfoExtra,
 }
 
@@ -226,7 +235,7 @@ impl PineIndicatorBuilder {
         &mut self,
         script_id: &str,
         script_version: &str,
-        script_type: ScriptType
+        script_type: ScriptType,
     ) -> Result<PineIndicator> {
         let metadata = match &self.user {
             Some(user) => get_indicator_metadata(Some(user), script_id, script_version).await?,
@@ -250,12 +259,15 @@ impl PineIndicator {
         let mut inputs: HashMap<String, IndicatorInput> = HashMap::new();
         inputs.insert(
             "text".to_string(),
-            IndicatorInput::String(self.metadata.il_template.clone())
+            IndicatorInput::String(self.metadata.il_template.clone()),
         );
-        inputs.insert("pineId".to_string(), IndicatorInput::String(self.script_id.clone()));
+        inputs.insert(
+            "pineId".to_string(),
+            IndicatorInput::String(self.script_id.clone()),
+        );
         inputs.insert(
             "pineVersion".to_string(),
-            IndicatorInput::String(self.script_version.clone())
+            IndicatorInput::String(self.script_version.clone()),
         );
         self.metadata.data.inputs.iter().for_each(|input| {
             if input.id == "text" || input.id == "pineId" || input.id == "pineVersion" {
@@ -267,7 +279,7 @@ impl PineIndicator {
                     v: input.defval.clone(),
                     f: Value::from(input.is_fake),
                     t: Value::from(input.input_type.clone()),
-                })
+                }),
             );
         });
 
