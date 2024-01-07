@@ -7,7 +7,6 @@ use crate::{
     utils::{gen_id, gen_session_id, symbol_init},
     Result,
 };
-use async_trait::async_trait;
 use serde_json::Value;
 use std::fmt::Debug;
 
@@ -447,7 +446,7 @@ impl<'a> WebSocket<'a> {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl<'a> Socket for WebSocket<'a> {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());

@@ -5,7 +5,6 @@ use crate::{
     utils::{format_packet, parse_packet},
     Result, UA,
 };
-use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
@@ -288,7 +287,7 @@ impl SocketSession {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 pub trait Socket {
     async fn event_loop(&mut self, session: &mut SocketSession) {
         let read = session.read.clone();
