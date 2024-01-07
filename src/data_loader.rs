@@ -1,21 +1,19 @@
 use crate::{
+    callback::Callbacks,
     chart::{
-        models::{ChartResponseData, SeriesCompletedMessage, StudyResponseData, SymbolInfo},
+        models::{ChartResponseData, StudyResponseData, SymbolInfo},
         session::SeriesInfo,
     },
     quote::{
         models::{QuoteData, QuoteValue},
         utils::merge_quotes,
     },
-    socket::{Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
-    Error, Result,
+    socket::TradingViewDataEvent,
+    Result,
 };
-use futures_util::future::BoxFuture;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
-use std::pin::Pin;
-use std::{collections::HashMap, sync::Arc};
-use std::{fmt::Debug, future::Future};
+use std::collections::HashMap;
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Default)]
@@ -24,89 +22,9 @@ pub struct DataLoader<'a> {
     callbacks: Callbacks<'a>,
 }
 
-type AsyncCallback<'a, T> = Box<dyn (Fn(T) -> BoxFuture<'a, ()>) + Send + Sync + 'a>;
+pub struct DataLoaderBuilder {}
 
-#[derive(Clone)]
-pub struct Callbacks<'a> {
-    on_chart_data: Arc<AsyncCallback<'a, Vec<Vec<f64>>>>,
-    on_quote_data: Arc<AsyncCallback<'a, QuoteData>>,
-    on_series_completed: Arc<AsyncCallback<'a, SeriesCompletedMessage>>,
-    on_study_completed: Arc<AsyncCallback<'a, StudyResponseData>>,
-    on_unknown_event: Arc<AsyncCallback<'a, Value>>,
-}
-
-impl Default for Callbacks<'_> {
-    fn default() -> Self {
-        Self {
-            on_chart_data: Arc::new(Box::new(|_| Box::pin(async {}))),
-            on_quote_data: Arc::new(Box::new(|_| Box::pin(async {}))),
-            on_series_completed: Arc::new(Box::new(|_| Box::pin(async {}))),
-            on_study_completed: Arc::new(Box::new(|_| Box::pin(async {}))),
-            on_unknown_event: Arc::new(Box::new(|_| Box::pin(async {}))),
-        }
-    }
-}
-
-impl<'a> Callbacks<'a> {
-    pub fn on_chart_data<Fut>(
-        &mut self,
-        f: impl Fn(Vec<Vec<f64>>) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_chart_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
-        self
-    }
-
-    pub fn on_quote_data<Fut>(
-        &mut self,
-        f: impl Fn(QuoteData) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_quote_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
-        self
-    }
-
-    pub fn on_series_completed<Fut>(
-        &mut self,
-        f: impl Fn(SeriesCompletedMessage) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_series_completed = Arc::new(Box::new(move |data| Box::pin(f(data))));
-        self
-    }
-
-    pub fn on_study_completed<Fut>(
-        &mut self,
-        f: impl Fn(StudyResponseData) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_study_completed = Arc::new(Box::new(move |data| Box::pin(f(data))));
-        self
-    }
-
-    pub fn on_unknown_event<Fut>(
-        &mut self,
-        f: impl Fn(Value) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_unknown_event = Arc::new(Box::new(move |data| Box::pin(f(data))));
-        self
-    }
-}
-
-pub struct FeederBuilder {}
-
-impl FeederBuilder {
+impl DataLoaderBuilder {
     pub fn new() -> Self {
         Self {}
     }
@@ -123,45 +41,6 @@ pub struct Metadata {
 }
 
 impl<'a> DataLoader<'a> {
-    // pub async fn subscribe<T: Socket + Send + Sync>(
-    //     &mut self,
-    //     listener: &mut T,
-    //     socket: &mut SocketSession
-    // ) {
-    //     listener.event_loop(&mut socket.clone()).await;
-    // }
-
-    pub fn new() -> Self {
-        Self {
-            metadata: Metadata::default(),
-            callbacks: Callbacks::default(),
-            // publisher: Vec::new(),
-        }
-    }
-
-    pub fn process_with_callback(
-        &mut self,
-        event: TradingViewDataEvent,
-        callback: Box<AsyncCallback<'a, Box<dyn Send + Sync>>>,
-    ) -> &mut Self {
-        // let cb = Arc::new(callback);
-        // self.callbacks.insert(event, cb);
-        self
-    }
-
-    // pub fn add(mut self, publisher: Box<dyn Socket + Send + Sync>) -> Self {
-    //     self.publisher.push(publisher);
-    //     self
-    // }
-
-    // pub fn unsubscribe<T: Socket + Send>(&mut self, event_type: TradingViewDataEvent, listener: T) {
-    //     todo!()
-    // }
-
-    // pub fn notify<T: serde::Serialize>(&self, event_type: TradingViewDataEvent, data: T) {
-    //     todo!()
-    // }
-
     pub(crate) async fn handle_events(
         &mut self,
         event: TradingViewDataEvent,
@@ -239,8 +118,6 @@ impl<'a> DataLoader<'a> {
                         .collect();
                     // timestamp, open, high, low, close, volume
                     debug!("series data extracted: {:?}", data);
-                    // self.notify(TradingViewDataEvent::OnChartData, data)
-
                     // TODO: Notify function
                     (self.callbacks.on_chart_data)(data).await;
                 }
@@ -249,25 +126,27 @@ impl<'a> DataLoader<'a> {
                 }
             }
         }
+
+        self.handle_study_data(studies, message).await?;
+
+        Ok(())
+    }
+
+    async fn handle_study_data(
+        &self,
+        studies: &HashMap<String, String>,
+        message: &Vec<Value>,
+    ) -> Result<()> {
         for (k, v) in studies.into_iter() {
             if let Some(resp_data) = message[1].get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
-                let data: Vec<Vec<f64>> = StudyResponseData::deserialize(resp_data)?
-                    .studies
-                    .into_iter()
-                    .map(|point| point.value)
-                    .collect();
+                let data = StudyResponseData::deserialize(resp_data)?;
                 warn!("study data extracted: {} - {:?}", k, data);
 
                 // TODO: Notify function
             }
         }
-
         Ok(())
-    }
-
-    async fn handle_study_data(&self) {
-        todo!()
     }
 
     async fn handle_quote_data(&mut self, message: &Vec<Value>) {

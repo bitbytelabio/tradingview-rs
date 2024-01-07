@@ -372,29 +372,5 @@ pub trait Socket {
 
     async fn handle_error(&mut self, error: Error) {
         error!("{}", error);
-        match error {
-            Error::Generic(_) => todo!(),
-            Error::RequestError(_) => todo!(),
-            Error::JsonParseError(_) => todo!(),
-            Error::TypeConversionError(_) => todo!(),
-            Error::HeaderValueError(_) => todo!(),
-            Error::LoginError(_) => todo!(),
-            Error::RegexError(_) => todo!(),
-            Error::WebSocketError(_) => todo!(),
-            Error::NoChartTokenFound => todo!(),
-            Error::NoScanDataFound => todo!(),
-            Error::SymbolsNotInSameExchange => todo!(),
-            Error::ExchangeNotSpecified => todo!(),
-            Error::InvalidExchange => todo!(),
-            Error::SymbolsNotSpecified => todo!(),
-            Error::NoSearchDataFound => todo!(),
-            Error::IndicatorDataNotFound(_) => todo!(),
-            Error::TokioJoinError(_) => todo!(),
-            Error::UrlParseError(_) => todo!(),
-            Error::Base64DecodeError(_) => todo!(),
-            Error::ZipError(_) => todo!(),
-            Error::IOError(_) => todo!(),
-            Error::TradingViewError(_) => todo!(),
-        }
     }
 }
