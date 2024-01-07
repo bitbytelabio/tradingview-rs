@@ -22,13 +22,8 @@ pub struct DataLoader<'a> {
     callbacks: Callbacks<'a>,
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct DataLoaderBuilder {}
-
-impl DataLoaderBuilder {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
 
 #[derive(Default, Clone)]
 pub struct Metadata {
@@ -107,7 +102,7 @@ impl<'a> DataLoader<'a> {
         studies: &HashMap<String, String>,
         message: &Vec<Value>,
     ) -> Result<()> {
-        for (id, s) in series.into_iter() {
+        for (id, s) in series.iter() {
             trace!("received v: {:?}, m: {:?}", s, message);
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
@@ -135,9 +130,9 @@ impl<'a> DataLoader<'a> {
     async fn handle_study_data(
         &self,
         studies: &HashMap<String, String>,
-        message: &Vec<Value>,
+        message: &[Value],
     ) -> Result<()> {
-        for (k, v) in studies.into_iter() {
+        for (k, v) in studies.iter() {
             if let Some(resp_data) = message[1].get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
                 let data = StudyResponseData::deserialize(resp_data)?;
@@ -149,7 +144,7 @@ impl<'a> DataLoader<'a> {
         Ok(())
     }
 
-    async fn handle_quote_data(&mut self, message: &Vec<Value>) {
+    async fn handle_quote_data(&mut self, message: &[Value]) {
         let qsd = QuoteData::deserialize(&message[1]).unwrap();
         if qsd.status == "ok" {
             if let Some(prev_quote) = self.metadata.quotes.get_mut(&qsd.name) {
