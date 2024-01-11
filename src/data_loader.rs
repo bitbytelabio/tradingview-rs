@@ -4,22 +4,23 @@ use crate::{
         models::{ChartResponseData, StudyResponseData, SymbolInfo},
         session::SeriesInfo,
     },
+    error::TradingViewError,
     quote::{
         models::{QuoteData, QuoteValue},
         utils::merge_quotes,
     },
     socket::TradingViewDataEvent,
-    Result,
+    Error, Result,
 };
 use serde::Deserialize;
-use serde_json::{error, Value};
-use std::{collections::HashMap, f32::consts::E};
+use serde_json::Value;
+use std::collections::HashMap;
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Default)]
 pub struct DataLoader<'a> {
     pub(crate) metadata: Metadata,
-    callbacks: Callbacks<'a>,
+    pub(crate) callbacks: Callbacks<'a>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -49,7 +50,9 @@ impl<'a> DataLoader<'a> {
                     .await
                 {
                     Ok(_) => (),
-                    Err(e) => error!("{}", e),
+                    Err(e) => {
+                        (self.callbacks.on_error)(e).await;
+                    }
                 };
             }
             TradingViewDataEvent::OnQuoteData => self.handle_quote_data(message).await,
@@ -111,24 +114,16 @@ impl<'a> DataLoader<'a> {
             trace!("received v: {:?}, m: {:?}", s, message);
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
-                    let data: Vec<Vec<f64>> = ChartResponseData::deserialize(resp_data)?
-                        .series
-                        .into_iter()
-                        .map(|point| point.value)
-                        .collect();
-                    // timestamp, open, high, low, close, volume
+                    let data = ChartResponseData::deserialize(resp_data)?.series;
                     debug!("series data extracted: {:?}", data);
-                    // TODO: Notify function
-                    (self.callbacks.on_chart_data)(data).await;
+                    (self.callbacks.on_chart_data)((s.options.clone(), data)).await;
                 }
                 None => {
                     debug!("receive empty data on series: {:?}", s);
                 }
             }
         }
-
         self.handle_study_data(studies, message).await?;
-
         Ok(())
     }
 
@@ -160,11 +155,14 @@ impl<'a> DataLoader<'a> {
 
             for q in self.metadata.quotes.values() {
                 debug!("quote data: {:?}", q);
-                // TODO: Notify function for quote data
+                (self.callbacks.on_quote_data)(q.to_owned()).await;
             }
         } else {
             error!("quote data status error: {:?}", qsd);
-            // TODO: Notify function for quote data error
+            (self.callbacks.on_error)(Error::TradingViewError(
+                TradingViewError::QuoteDataStatusError,
+            ))
+            .await;
         }
     }
 }

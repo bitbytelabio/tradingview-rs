@@ -4,13 +4,13 @@ use crate::{
     quote::ALL_QUOTE_FIELDS,
     socket::{Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     utils::gen_session_id,
-    Result,
+    Error, Result,
 };
 use serde_json::Value;
 
 #[derive(Clone)]
 pub struct WebSocket<'a> {
-    data_loader: DataLoader<'a>,
+    pub(crate) data_loader: DataLoader<'a>,
     socket: SocketSession,
 }
 
@@ -86,5 +86,9 @@ impl<'a> Socket for WebSocket<'a> {
         let event = TradingViewDataEvent::from(message.m.clone());
         self.data_loader.handle_events(event, &message.p).await;
         Ok(())
+    }
+
+    async fn handle_error(&mut self, error: Error) {
+        (self.data_loader.callbacks.on_error)(error).await;
     }
 }

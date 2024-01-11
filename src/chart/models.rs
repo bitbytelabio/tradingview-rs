@@ -1,4 +1,3 @@
-use crate::models::Interval;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -50,10 +49,14 @@ pub struct GraphicDataResponse {
     pub indexes: Value,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
+#[cfg_attr(feature = "protobuf", derive(prost::Message))]
+#[derive(Clone, Deserialize)]
 pub struct DataPoint {
+    #[cfg_attr(feature = "protobuf", prost(int64, tag = "1"))]
     #[serde(rename(deserialize = "i"))]
     pub index: i64,
+    #[cfg_attr(feature = "protobuf", prost(double, repeated, tag = "2"))]
     #[serde(rename(deserialize = "v"))]
     pub value: Vec<f64>,
 }
@@ -65,13 +68,6 @@ pub struct ChartDataChanges {
     pub index_diff: Vec<Value>,
     pub marks: Vec<Value>,
     pub zoffset: i64,
-}
-
-#[derive(Debug, Default, Clone, Serialize)]
-pub struct ChartSeriesData {
-    pub symbol: String,
-    pub interval: Interval,
-    pub data: Vec<Vec<f64>>,
 }
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
