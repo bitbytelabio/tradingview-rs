@@ -118,7 +118,7 @@ impl<'a> DataLoader<'a> {
     }
 
     async fn handle_quote_data(&mut self, message: &[Value]) {
-        let qsd = QuoteData::deserialize(&message[1]).unwrap();
+        let qsd = QuoteData::deserialize(&message[1]).unwrap_or_default();
         if qsd.status == "ok" {
             if let Some(prev_quote) = self.metadata.quotes.get_mut(&qsd.name) {
                 *prev_quote = merge_quotes(prev_quote, &qsd.value);
