@@ -1,8 +1,9 @@
 use crate::{
     callback::Callbacks,
     chart::{
-        models::{ChartResponseData, StudyResponseData, SymbolInfo},
+        models::{ChartResponseData, SeriesCompletedMessage, StudyResponseData, SymbolInfo},
         session::SeriesInfo,
+        StudyOptions,
     },
     error::TradingViewError,
     quote::{
@@ -15,7 +16,7 @@ use crate::{
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace};
 
 #[derive(Clone, Default)]
 pub struct DataLoader<'a> {
@@ -63,14 +64,13 @@ impl<'a> DataLoader<'a> {
                 trace!("series is loading: {:#?}", message);
             }
             TradingViewDataEvent::OnSeriesCompleted => {
-                // let message = SeriesCompletedMessage {
-                //     session: get_string_value(&message, 0),
-                //     id: get_string_value(&message, 1),
-                //     update_mode: get_string_value(&message, 2),
-                //     version: get_string_value(&message, 3),
-                // };
-
-                info!("series completed: {:#?}", message);
+                match SeriesCompletedMessage::deserialize(&message[1]) {
+                    Ok(s) => info!("series completed: {:#?}", s),
+                    Err(e) => {
+                        error!("{:?}", e);
+                        // return SymbolInfo::default();
+                    }
+                };
             }
             TradingViewDataEvent::OnSymbolResolved => {
                 match SymbolInfo::deserialize(&message[2]) {
@@ -122,13 +122,18 @@ impl<'a> DataLoader<'a> {
                     debug!("receive empty data on series: {:?}", s);
                 }
             }
+
+            if let Some(study_options) = &s.options.study_config {
+                self.handle_study_data(study_options, studies, message)
+                    .await?;
+            }
         }
-        self.handle_study_data(studies, message).await?;
         Ok(())
     }
 
     async fn handle_study_data(
         &self,
+        options: &StudyOptions,
         studies: &HashMap<String, String>,
         message: &[Value],
     ) -> Result<()> {
@@ -136,9 +141,7 @@ impl<'a> DataLoader<'a> {
             if let Some(resp_data) = message[1].get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
                 let data = StudyResponseData::deserialize(resp_data)?;
-                warn!("study data extracted: {} - {:?}", k, data);
-
-                // TODO: Notify function
+                (self.callbacks.on_study_data)((options.clone(), data)).await;
             }
         }
         Ok(())

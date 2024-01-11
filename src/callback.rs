@@ -18,7 +18,7 @@ pub struct Callbacks<'a> {
     pub(crate) on_chart_data: Arc<AsyncCallback<'a, (ChartOptions, Vec<DataPoint>)>>,
     pub(crate) on_quote_data: Arc<AsyncCallback<'a, QuoteValue>>,
     pub(crate) on_series_completed: Arc<AsyncCallback<'a, SeriesCompletedMessage>>,
-    pub(crate) on_study_completed: Arc<AsyncCallback<'a, (StudyOptions, StudyResponseData)>>,
+    pub(crate) on_study_data: Arc<AsyncCallback<'a, (StudyOptions, StudyResponseData)>>,
     pub(crate) on_unknown_event: Arc<AsyncCallback<'a, Value>>,
     pub(crate) on_error: Arc<AsyncCallback<'a, Error>>,
 }
@@ -29,7 +29,7 @@ impl Default for Callbacks<'_> {
             on_chart_data: Arc::new(Box::new(|_| Box::pin(async {}))),
             on_quote_data: Arc::new(Box::new(|_| Box::pin(async {}))),
             on_series_completed: Arc::new(Box::new(|_| Box::pin(async {}))),
-            on_study_completed: Arc::new(Box::new(|_| Box::pin(async {}))),
+            on_study_data: Arc::new(Box::new(|_| Box::pin(async {}))),
             on_unknown_event: Arc::new(Box::new(|_| Box::pin(async {}))),
             on_error: Arc::new(Box::new(|e| {
                 Box::pin(
@@ -74,14 +74,14 @@ impl<'a> Callbacks<'a> {
         self
     }
 
-    pub fn on_study_completed<Fut>(
+    pub fn on_study_data<Fut>(
         &mut self,
         f: impl Fn((StudyOptions, StudyResponseData)) -> Fut + Send + Sync + 'a,
     ) -> &mut Self
     where
         Fut: Future<Output = ()> + Send + 'a,
     {
-        self.on_study_completed = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        self.on_study_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
         self
     }
 

@@ -88,7 +88,7 @@ impl<'a> Socket for WebSocket<'a> {
         Ok(())
     }
 
-    async fn handle_error(&mut self, error: Error) {
+    async fn handle_error(&self, error: Error) {
         (self.data_loader.callbacks.on_error)(error).await;
     }
 }

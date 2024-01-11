@@ -72,7 +72,7 @@ pub struct ChartDataChanges {
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
 pub struct SeriesCompletedMessage {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     #[serde(default)]
@@ -90,7 +90,7 @@ pub struct SeriesCompletedMessage {
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct SymbolInfo {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
@@ -144,7 +144,7 @@ pub struct SymbolInfo {
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct Subsession {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]

@@ -24,7 +24,7 @@ pub struct ChartOptions {
     adjustment: Option<MarketAdjustment>,
     currency: Option<Currency>,
     session_type: Option<SessionType>,
-    study_config: Option<StudyOptions>,
+    pub study_config: Option<StudyOptions>,
 }
 
 #[derive(Default, Debug, Clone)]
