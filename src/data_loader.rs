@@ -24,9 +24,6 @@ pub struct DataLoader<'a> {
     pub(crate) callbacks: Callbacks<'a>,
 }
 
-#[derive(Default, Debug, Clone)]
-pub struct DataLoaderBuilder {}
-
 #[derive(Default, Clone)]
 pub struct Metadata {
     pub series_count: u16,
