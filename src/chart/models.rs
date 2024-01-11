@@ -1,7 +1,6 @@
-use serde::{ Serialize, Deserialize };
-use serde_json::Value;
-
 use crate::models::Interval;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub enum ChartType {
     HeikinAshi,
@@ -75,50 +74,92 @@ pub struct ChartSeriesData {
     pub data: Vec<Vec<f64>>,
 }
 
-#[derive(Debug, Default, Clone, Serialize)]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
+#[cfg_attr(feature = "protobuf", derive(prost::Message))]
+#[derive(Clone, Serialize)]
 pub struct SeriesCompletedMessage {
-    pub session: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
+    #[serde(default)]
     pub id: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
+    #[serde(default)]
+    pub session: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
+    #[serde(default)]
     pub update_mode: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
+    #[serde(default)]
     pub version: String,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
+#[cfg_attr(feature = "protobuf", derive(prost::Message))]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SymbolInfo {
-    #[serde(rename(deserialize = "pro_name"))]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
+    #[serde(rename(deserialize = "pro_name"), default)]
     pub id: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
+    #[serde(default)]
     pub name: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
+    #[serde(default)]
     pub description: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub exchange: String,
-    #[serde(rename = "listed_exchange")]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
+    #[serde(rename = "listed_exchange", default)]
     pub listed_exchange: String,
-    #[serde(rename = "provider_id")]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
+    #[serde(rename = "provider_id", default)]
     pub provider_id: String,
-    #[serde(rename = "base_currency")]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
+    #[serde(rename = "base_currency", default)]
     pub base_currency: String,
-    #[serde(rename = "base_currency_id")]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "8"))]
+    #[serde(rename = "base_currency_id", default)]
     pub base_currency_id: String,
-    #[serde(rename = "currency_id")]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "9"))]
+    #[serde(rename = "currency_id", default)]
     pub currency_id: String,
-    #[serde(rename = "currency_code")]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "10"))]
+    #[serde(rename = "currency_code", default)]
     pub currency_code: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "11"))]
+    #[serde(default)]
     pub session_holidays: String,
+    #[cfg_attr(feature = "protobuf", prost(message, repeated, tag = "12"))]
+    #[serde(default)]
     pub subsessions: Vec<Subsession>,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "13"))]
+    #[serde(default)]
     pub timezone: String,
-    #[serde(rename(deserialize = "type"))]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "14"))]
+    #[serde(rename(deserialize = "type"), default)]
     pub market_type: String,
+    #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "15"))]
+    #[serde(default)]
     pub typespecs: Vec<String>,
+    #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "16"))]
+    #[serde(default)]
     pub aliases: Vec<String>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
+#[cfg_attr(feature = "protobuf", derive(prost::Message))]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Subsession {
-    pub description: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     pub id: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
+    pub description: String,
+    #[cfg_attr(feature = "protobuf", prost(bool, tag = "3"))]
     pub private: bool,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub session: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(rename(deserialize = "session-display"))]
     pub session_display: String,
 }

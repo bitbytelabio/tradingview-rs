@@ -12,8 +12,8 @@ use crate::{
     Result,
 };
 use serde::Deserialize;
-use serde_json::Value;
-use std::collections::HashMap;
+use serde_json::{error, Value};
+use std::{collections::HashMap, f32::consts::E};
 use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Default)]
@@ -44,7 +44,6 @@ impl<'a> DataLoader<'a> {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received chart data: {:?}", message);
-
                 match self
                     .handle_chart_data(&self.metadata.series, &self.metadata.studies, message)
                     .await
@@ -71,11 +70,15 @@ impl<'a> DataLoader<'a> {
                 info!("series completed: {:#?}", message);
             }
             TradingViewDataEvent::OnSymbolResolved => {
-                let symbol_info = match SymbolInfo::deserialize(&message[2]) {
-                    Ok(s) => s,
-                    Err(_) => todo!(),
+                match SymbolInfo::deserialize(&message[2]) {
+                    Ok(s) => debug!("{:?}", s),
+                    Err(e) => {
+                        error!("{:?}", e);
+                        // return SymbolInfo::default();
+                    }
                 };
-                info!("{:?}", symbol_info)
+                // info!("symbol resolved: {:?}", &message[2]);
+                // debug!("{:?}", symbol_info)
                 // let symbol_info = serde_json::from_value::<SymbolInfo>(message[2].clone())?;
             }
             TradingViewDataEvent::OnReplayOk => {
@@ -84,14 +87,16 @@ impl<'a> DataLoader<'a> {
             TradingViewDataEvent::OnReplayPoint => {
                 info!("replay point: {:?}", message);
             }
-            TradingViewDataEvent::OnReplayInstanceId => todo!("7"),
+            TradingViewDataEvent::OnReplayInstanceId => {
+                info!("replay instance id: {:?}", message);
+            }
             TradingViewDataEvent::OnReplayResolutions => todo!("8"),
             TradingViewDataEvent::OnReplayDataEnd => todo!("9"),
             TradingViewDataEvent::OnStudyLoading => todo!("10"),
             TradingViewDataEvent::OnStudyCompleted => {
                 info!("study completed: {:?}", message);
             }
-            TradingViewDataEvent::OnError(_) => todo!("12"),
+            TradingViewDataEvent::OnError(e) => error!("error: {:?}", e),
             TradingViewDataEvent::UnknownEvent(_) => todo!("13"),
         }
     }
@@ -100,7 +105,7 @@ impl<'a> DataLoader<'a> {
         &self,
         series: &HashMap<String, SeriesInfo>,
         studies: &HashMap<String, String>,
-        message: &Vec<Value>,
+        message: &[Value],
     ) -> Result<()> {
         for (id, s) in series.iter() {
             trace!("received v: {:?}, m: {:?}", s, message);
