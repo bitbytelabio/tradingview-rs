@@ -3,17 +3,16 @@
 //     use dotenv::dotenv;
 //     use std::env;
 //     use tradingview::error::*;
-//     use tradingview::user::*;
 
 //     #[tokio::test]
 //     #[ignore]
 //     async fn test_login_empty_credentials() {
-//         let mut empty_user = User::default();
-//         empty_user.auth_token = "unauthorized_user_token".to_string();
+//         let mut empty_user = tradingview::models::UserCookies::default();
+//         // empty_user.auth_token = "unauthorized_user_token".to_string();
 
-//         let result = User::build().credentials("", "").get().await;
-//         assert!(result.is_ok());
-//         assert_eq!(result.unwrap(), empty_user);
+//         // let result = User::build().credentials("", "").get().await;
+//         // assert!(result.is_ok());
+//         // assert_eq!(result.unwrap(), empty_user);
 //     }
 
 //     #[tokio::test]
@@ -49,9 +48,10 @@
 
 //         assert!(result.is_err());
 //         let error = result.unwrap_err();
-//         assert!(
-//             matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidCredentials))
-//         );
+//         assert!(matches!(
+//             error,
+//             tradingview::error::Error::LoginError(LoginError::InvalidCredentials)
+//         ));
 //     }
 
 //     #[tokio::test]
@@ -65,7 +65,11 @@
 //         let password = env::var("TV_TOTP_PASSWORD").unwrap();
 //         let totp = env::var("TV_TOTP_SECRET").unwrap();
 
-//         let result = User::build().credentials(&username, &password).totp_secret(&totp).get().await;
+//         let result = User::build()
+//             .credentials(&username, &password)
+//             .totp_secret(&totp)
+//             .get()
+//             .await;
 
 //         assert!(result.is_ok());
 //         let user = result.unwrap();
@@ -109,12 +113,16 @@
 
 //         let result = User::build()
 //             .session("invalid_session", "invalid_session_signature")
-//             .get().await;
+//             .get()
+//             .await;
 
 //         assert!(result.is_err());
 //         let error = result.unwrap_err();
 
-//         assert!(matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidSession)));
+//         assert!(matches!(
+//             error,
+//             tradingview::error::Error::LoginError(LoginError::InvalidSession)
+//         ));
 //     }
 
 //     #[tokio::test]
@@ -130,12 +138,14 @@
 //         let result = User::build()
 //             .credentials(&username, &password)
 //             .totp_secret("ZTIXV4KTRISK4KK7")
-//             .get().await;
+//             .get()
+//             .await;
 
 //         assert!(result.is_err());
 //         let error = result.unwrap_err();
-//         assert!(
-//             matches!(error, tradingview::error::Error::LoginError(LoginError::InvalidOTPSecret))
-//         );
+//         assert!(matches!(
+//             error,
+//             tradingview::error::Error::LoginError(LoginError::InvalidOTPSecret)
+//         ));
 //     }
 // }

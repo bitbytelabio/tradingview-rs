@@ -28,7 +28,7 @@ example bin:
 	cargo run --package tradingview-rs --example {{bin}}
 
 lines-of-code:
-	@git ls-files | grep '\.rs' | xargs wc -l
+	@cloc $(git ls-files)
 
 creds-scan:
 	@ggshield secret scan repo ./

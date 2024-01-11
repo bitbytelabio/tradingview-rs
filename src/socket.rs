@@ -5,7 +5,6 @@ use crate::{
     utils::{format_packet, parse_packet},
     Result, UA,
 };
-use async_trait::async_trait;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
@@ -35,6 +34,7 @@ lazy_static::lazy_static! {
     };
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TradingViewDataEvent {
     OnChartData,
     OnChartDataUpdate,
@@ -173,6 +173,29 @@ pub struct SocketSession {
 }
 
 impl SocketSession {
+    /// Establishes a WebSocket connection to a TradingView data server.
+    ///
+    /// # Arguments
+    ///
+    /// * `server` - A reference to the `DataServer` enum which represents the server to connect to.
+    /// * `auth_token` - A string slice that holds the authentication token.
+    ///
+    /// # Returns
+    ///
+    /// * A `Result` which is:
+    ///     * `Ok` - A tuple containing the split sink and stream of the WebSocket connection.
+    ///     * `Err` - An error that occurred while trying to establish the connection or send the authentication message.
+    ///
+    /// # Asynchronous
+    ///
+    /// This function is asynchronous, it returns a Future that should be awaited.
+    ///
+    /// This function first constructs the URL for the WebSocket connection based on the provided server.
+    /// It then creates a client request from the URL and adds necessary headers.
+    /// The `connect_async` function is used to establish the WebSocket connection.
+    /// The connection is then split into a write and read part.
+    /// An authentication message is sent using the write part of the connection.
+    /// Finally, it returns the write and read parts of the connection.
     async fn connect(
         server: &DataServer,
         auth_token: &str,
@@ -264,7 +287,7 @@ impl SocketSession {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 pub trait Socket {
     async fn event_loop(&mut self, session: &mut SocketSession) {
         let read = session.read.clone();
@@ -289,16 +312,8 @@ pub trait Socket {
         match &raw {
             Message::Text(text) => {
                 trace!("parsing message: {:?}", text);
-                match parse_packet(text) {
-                    Ok(parsed_messages) => {
-                        self.handle_parsed_messages(session, parsed_messages, &raw)
-                            .await;
-                    }
-                    Err(e) => {
-                        error!("error parsing message: {:?}", e);
-                        self.handle_error(e).await;
-                    }
-                }
+                self.handle_parsed_messages(session, parse_packet(text), &raw)
+                    .await;
             }
             Message::Close(msg) => {
                 warn!("connection closed with code: {:?}", msg);
@@ -354,31 +369,5 @@ pub trait Socket {
 
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()>;
 
-    async fn handle_error(&mut self, error: Error) {
-        error!("{}", error);
-        match error {
-            Error::Generic(_) => todo!(),
-            Error::RequestError(_) => todo!(),
-            Error::JsonParseError(_) => todo!(),
-            Error::TypeConversionError(_) => todo!(),
-            Error::HeaderValueError(_) => todo!(),
-            Error::LoginError(_) => todo!(),
-            Error::RegexError(_) => todo!(),
-            Error::WebSocketError(_) => todo!(),
-            Error::NoChartTokenFound => todo!(),
-            Error::NoScanDataFound => todo!(),
-            Error::SymbolsNotInSameExchange => todo!(),
-            Error::ExchangeNotSpecified => todo!(),
-            Error::InvalidExchange => todo!(),
-            Error::SymbolsNotSpecified => todo!(),
-            Error::NoSearchDataFound => todo!(),
-            Error::IndicatorDataNotFound(_) => todo!(),
-            Error::TokioJoinError(_) => todo!(),
-            Error::UrlParseError(_) => todo!(),
-            Error::Base64DecodeError(_) => todo!(),
-            Error::ZipError(_) => todo!(),
-            Error::IOError(_) => todo!(),
-            Error::TradingViewError(_) => todo!(),
-        }
-    }
+    async fn handle_error(&self, error: Error);
 }

@@ -1,18 +1,18 @@
 use crate::{
     chart::{ChartOptions, StudyOptions},
-    feeder::Feeder,
+    data_loader::DataLoader,
     models::{pine_indicator::PineIndicator, Interval, Timezone},
     payload,
     socket::{Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     utils::{gen_id, gen_session_id, symbol_init},
-    Result,
+    Error, Result,
 };
-use async_trait::async_trait;
 use serde_json::Value;
+use std::fmt::Debug;
 
 #[derive(Clone)]
-pub struct WebSocket {
-    feeder: Feeder,
+pub struct WebSocket<'a> {
+    data_loader: DataLoader<'a>,
     socket: SocketSession,
 }
 
@@ -22,9 +22,12 @@ pub struct SeriesInfo {
     pub options: ChartOptions,
 }
 
-impl WebSocket {
-    pub fn new(feeder: Feeder, socket: SocketSession) -> Self {
-        Self { feeder, socket }
+impl<'a> WebSocket<'a> {
+    pub fn new(data_loader: DataLoader<'a>, socket: SocketSession) -> Self {
+        Self {
+            data_loader,
+            socket,
+        }
     }
 
     // Begin TradingView WebSocket methods
@@ -324,7 +327,7 @@ impl WebSocket {
     }
 
     pub async fn delete(&mut self) -> Result<&mut Self> {
-        for (_, s) in self.feeder.metadata.series.clone() {
+        for (_, s) in self.data_loader.metadata.series.clone() {
             self.delete_chart_session_id(&s.chart_session).await?;
         }
         self.socket.close().await?;
@@ -366,8 +369,8 @@ impl WebSocket {
         chart_session: &str,
         series_id: &str,
     ) -> Result<&mut Self> {
-        self.feeder.metadata.studies_count += 1;
-        let study_count = self.feeder.metadata.studies_count;
+        self.data_loader.metadata.studies_count += 1;
+        let study_count = self.data_loader.metadata.studies_count;
         let study_id = format!("st{}", study_count);
 
         let indicator = PineIndicator::build()
@@ -378,7 +381,7 @@ impl WebSocket {
             )
             .await?;
 
-        self.feeder
+        self.data_loader
             .metadata
             .studies
             .insert(indicator.metadata.data.id.clone(), study_id.clone());
@@ -389,8 +392,8 @@ impl WebSocket {
     }
 
     pub async fn set_market(&mut self, options: ChartOptions) -> Result<&mut Self> {
-        self.feeder.metadata.series_count += 1;
-        let series_count = self.feeder.metadata.series_count;
+        self.data_loader.metadata.series_count += 1;
+        let series_count = self.data_loader.metadata.series_count;
         let symbol_series_id = format!("sds_sym_{}", series_count);
         let series_id = format!("sds_{}", series_count);
         let series_version = format!("s{}", series_count);
@@ -430,7 +433,10 @@ impl WebSocket {
             options,
         };
 
-        self.feeder.metadata.series.insert(series_id, series_info);
+        self.data_loader
+            .metadata
+            .series
+            .insert(series_id, series_info);
 
         Ok(self)
     }
@@ -440,11 +446,15 @@ impl WebSocket {
     }
 }
 
-#[async_trait]
-impl Socket for WebSocket {
+#[async_trait::async_trait]
+impl<'a> Socket for WebSocket<'a> {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.clone());
-        self.feeder.handle_events(event, &message.p).await;
+        self.data_loader.handle_events(event, &message.p).await;
         Ok(())
+    }
+
+    async fn handle_error(&self, error: Error) {
+        (self.data_loader.callbacks.on_error)(error).await;
     }
 }

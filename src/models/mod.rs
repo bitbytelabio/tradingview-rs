@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use serde::{ Deserialize, Deserializer, Serialize };
+use serde::{Deserialize, Deserializer, Serialize};
 pub mod pine_indicator;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -37,17 +37,27 @@ pub struct ChartDrawingSourceStatePoint {
     price: f64,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
+#[cfg_attr(feature = "protobuf", derive(prost::Message))]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct UserCookies {
+    #[cfg_attr(feature = "protobuf", prost(uint32, tag = "1"))]
     pub id: u32,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     pub username: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
     pub private_channel: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub auth_token: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(default)]
     pub session: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
     #[serde(default)]
     pub session_signature: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
     pub session_hash: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "8"))]
     #[serde(default)]
     pub device_token: String,
 }
@@ -59,19 +69,28 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
+#[cfg_attr(feature = "protobuf", derive(prost::Message))]
+#[derive(Clone, Deserialize)]
 pub struct Symbol {
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     pub symbol: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     #[serde(default)]
     pub description: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
     #[serde(default)]
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub exchange: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(default)]
     pub currency_code: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
     #[serde(default, rename(deserialize = "provider_id"))]
     pub data_provider: String,
+    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
 }
@@ -323,29 +342,29 @@ impl std::fmt::Display for Timezone {
     }
 }
 
-#[derive(Default, Clone, Copy, Debug, PartialEq, Serialize, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Hash)]
 pub enum Interval {
-    OneSecond,
-    FiveSeconds,
-    TenSeconds,
-    FifteenSeconds,
-    ThirtySeconds,
-    OneMinute,
-    ThreeMinutes,
-    FiveMinutes,
-    FifteenMinutes,
-    ThirtyMinutes,
-    FortyFiveMinutes,
-    OneHour,
-    TwoHours,
-    FourHours,
+    OneSecond = 0,
+    FiveSeconds = 1,
+    TenSeconds = 2,
+    FifteenSeconds = 3,
+    ThirtySeconds = 4,
+    OneMinute = 5,
+    ThreeMinutes = 6,
+    FiveMinutes = 7,
+    FifteenMinutes = 8,
+    ThirtyMinutes = 9,
+    FortyFiveMinutes = 10,
+    OneHour = 11,
+    TwoHours = 12,
+    FourHours = 13,
     #[default]
-    Daily,
-    Weekly,
-    Monthly,
-    Quarterly,
-    SixMonths,
-    Yearly,
+    Daily = 14,
+    Weekly = 15,
+    Monthly = 16,
+    Quarterly = 17,
+    SixMonths = 18,
+    Yearly = 19,
 }
 
 impl std::fmt::Display for Interval {
@@ -451,16 +470,17 @@ impl std::fmt::Display for LanguageCode {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum FinancialPeriod {
-    FiscalYear, // FY
-    FiscalQuarter, // FQ
-    FiscalHalfYear, // FH
+    FiscalYear,           // FY
+    FiscalQuarter,        // FQ
+    FiscalHalfYear,       // FH
     TrailingTwelveMonths, // TTM
     UnknownPeriod(String),
 }
 
 impl<'de> Deserialize<'de> for FinancialPeriod {
     fn deserialize<D>(deserializer: D) -> Result<FinancialPeriod, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         let s: String = Deserialize::deserialize(deserializer)?;
         match s.as_str() {

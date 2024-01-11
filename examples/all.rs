@@ -1,11 +1,10 @@
 use dotenv::dotenv;
 use std::env;
 
-use tracing::info;
 use tradingview::{
     chart,
     chart::ChartOptions,
-    feeder::Feeder,
+    data_loader::DataLoader,
     models::{pine_indicator::ScriptType, Interval},
     quote,
     socket::{DataServer, SocketSession},
@@ -19,19 +18,19 @@ async fn main() -> anyhow::Result<()> {
 
     let socket = SocketSession::new(DataServer::ProData, auth_token).await?;
 
-    let publisher = Feeder::new();
+    let publisher: DataLoader = DataLoader::default();
 
     let mut chart = chart::session::WebSocket::new(publisher.clone(), socket.clone());
     let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());
 
-    // subscriber.subscribe(&mut chart, &mut socket);
-
     let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
-    let opts2 = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily).study_config(
-        "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby",
-        "33.0",
-        ScriptType::IntervalScript,
-    );
+    let opts2 = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily)
+        .bar_count(1)
+        .study_config(
+            "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby",
+            "33.0",
+            ScriptType::IntervalScript,
+        );
     let opts3 = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneHour)
         .replay_mode(true)
         .replay_from(1698624060);

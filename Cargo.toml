@@ -16,37 +16,36 @@ path = "src/lib.rs"
 [features]
 default = ["user"]
 user = ["dep:google-authenticator"]
+protobuf = ["dep:prost"]
 
 [dependencies]
+async-trait = "0.1" # Remove this when Rust 1.75 async trait is stable
 tokio = { version = "1", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 reqwest = { version = "0.11", features = ["rustls-tls", "json", "cookies"] }
-lazy_static = "^1.4"
-url = "^2"
-urlencoding = "^2"
+lazy_static = "1.4"
+url = "2"
+urlencoding = "2"
 rand = "^0.8"
-regex = "^1"
-tokio-tungstenite = { version = "^0.21", features = [
-    "rustls-tls-webpki-roots",
-] }
+regex = "1"
+tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 tracing = "0.1"
-thiserror = "^1.0"
+thiserror = "1"
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
-async-trait = "^0.1"
 iso_currency = { version = "0.4", features = ["with-serde"] }
-zip = "^0.6"
-base64 = "^0.21"
-google-authenticator = { version = "^0.4", optional = true }
+zip = "0.6"
+base64 = "0.21"
+google-authenticator = { version = "0.4", optional = true }
+prost = { version = "0.12", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
-protobuf = "3"
 dotenv = "0.15.0"
 tracing-subscriber = "0.3"
 chrono = { version = "0.4.31", features = ["serde"] }
