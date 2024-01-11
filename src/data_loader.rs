@@ -1,7 +1,7 @@
 use crate::{
     callback::Callbacks,
     chart::{
-        models::{ChartResponseData, SeriesCompletedMessage, StudyResponseData, SymbolInfo},
+        models::{ChartResponseData, StudyResponseData, SymbolInfo},
         session::SeriesInfo,
         StudyOptions,
     },
@@ -16,7 +16,7 @@ use crate::{
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, trace};
 
 #[derive(Clone, Default)]
 pub struct DataLoader<'a> {
@@ -52,55 +52,28 @@ impl<'a> DataLoader<'a> {
                 {
                     Ok(_) => (),
                     Err(e) => {
+                        error!("chart data parsing error: {:?}", e);
                         (self.callbacks.on_error)(e).await;
                     }
                 };
             }
             TradingViewDataEvent::OnQuoteData => self.handle_quote_data(message).await,
-            TradingViewDataEvent::OnQuoteCompleted => {
-                info!("quote completed: {:?}", message)
-            }
-            TradingViewDataEvent::OnSeriesLoading => {
-                trace!("series is loading: {:#?}", message);
-            }
-            TradingViewDataEvent::OnSeriesCompleted => {
-                match SeriesCompletedMessage::deserialize(&message[1]) {
-                    Ok(s) => info!("series completed: {:#?}", s),
-                    Err(e) => {
-                        error!("{:?}", e);
-                        // return SymbolInfo::default();
-                    }
-                };
-            }
             TradingViewDataEvent::OnSymbolResolved => {
                 match SymbolInfo::deserialize(&message[2]) {
-                    Ok(s) => debug!("{:?}", s),
+                    Ok(s) => {
+                        debug!("receive symbol info: {:?}", s);
+                        (self.callbacks.on_symbol_info)(s).await;
+                    }
                     Err(e) => {
-                        error!("{:?}", e);
-                        // return SymbolInfo::default();
+                        error!("symbol resolved parsing error: {:?}", e);
+                        (self.callbacks.on_error)(Error::JsonParseError(e)).await;
                     }
                 };
-                // info!("symbol resolved: {:?}", &message[2]);
-                // debug!("{:?}", symbol_info)
-                // let symbol_info = serde_json::from_value::<SymbolInfo>(message[2].clone())?;
             }
-            TradingViewDataEvent::OnReplayOk => {
-                info!("replay ok: {:?}", message);
+            _ => {
+                debug!("event: {:?}, message: {:?}", event, message);
+                (self.callbacks.on_other_event)((event, message.to_owned())).await;
             }
-            TradingViewDataEvent::OnReplayPoint => {
-                info!("replay point: {:?}", message);
-            }
-            TradingViewDataEvent::OnReplayInstanceId => {
-                info!("replay instance id: {:?}", message);
-            }
-            TradingViewDataEvent::OnReplayResolutions => todo!("8"),
-            TradingViewDataEvent::OnReplayDataEnd => todo!("9"),
-            TradingViewDataEvent::OnStudyLoading => todo!("10"),
-            TradingViewDataEvent::OnStudyCompleted => {
-                info!("study completed: {:?}", message);
-            }
-            TradingViewDataEvent::OnError(e) => error!("error: {:?}", e),
-            TradingViewDataEvent::UnknownEvent(_) => todo!("13"),
         }
     }
 

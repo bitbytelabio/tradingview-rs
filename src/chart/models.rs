@@ -72,20 +72,14 @@ pub struct ChartDataChanges {
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
+#[derive(Clone, PartialEq, Serialize, Hash)]
 pub struct SeriesCompletedMessage {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     #[serde(default)]
     pub id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     #[serde(default)]
-    pub session: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
-    #[serde(default)]
     pub update_mode: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
-    #[serde(default)]
-    pub version: String,
 }
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]

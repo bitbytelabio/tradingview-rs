@@ -21,11 +21,9 @@ async fn main() -> anyhow::Result<()> {
     let publisher: DataLoader = DataLoader::default();
 
     let mut chart = chart::session::WebSocket::new(publisher.clone(), socket.clone());
-    // let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());
+    let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());
 
-    // subscriber.subscribe(&mut chart, &mut socket);
-
-    // let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
+    let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
     let opts2 = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily)
         .bar_count(1)
         .study_config(
@@ -33,34 +31,34 @@ async fn main() -> anyhow::Result<()> {
             "33.0",
             ScriptType::IntervalScript,
         );
-    // let opts3 = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneHour);
-    // .replay_mode(true)
-    // .replay_from(1698624060);
+    let opts3 = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneHour)
+        .replay_mode(true)
+        .replay_from(1698624060);
 
     chart
-        // .set_market(opts)
-        // .await?
+        .set_market(opts)
+        .await?
         .set_market(opts2)
+        .await?
+        .set_market(opts3)
         .await?;
-    // .set_market(opts3)
-    // .await?;
 
-    // quote
-    // .create_session()
-    // .await?
-    // .set_fields()
-    // .await?
-    // .add_symbols(vec![
-    //     "SP:SPX",
-    //     "BINANCE:BTCUSDT",
-    //     "BINANCE:ETHUSDT",
-    //     "BITSTAMP:ETHUSD",
-    //     "NASDAQ:TSLA", // "BINANCE:B",
-    // ])
-    // .await?;
+    quote
+        .create_session()
+        .await?
+        .set_fields()
+        .await?
+        .add_symbols(vec![
+            "SP:SPX",
+            "BINANCE:BTCUSDT",
+            "BINANCE:ETHUSDT",
+            "BITSTAMP:ETHUSD",
+            "NASDAQ:TSLA", // "BINANCE:B",
+        ])
+        .await?;
 
     tokio::spawn(async move { chart.clone().subscribe().await });
-    // tokio::spawn(async move { quote.clone().subscribe().await });
+    tokio::spawn(async move { quote.clone().subscribe().await });
 
     loop {}
 }
