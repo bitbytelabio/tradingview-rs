@@ -1,3 +1,6 @@
+pub use crate::chart::models::*;
+pub use crate::quote::models::*;
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
