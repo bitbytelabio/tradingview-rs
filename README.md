@@ -10,16 +10,16 @@ This is a data source library for algorithmic trading written in Rust inspired b
 ## Features
 
 - [x] Multi-Threading for working with large amounts of data
-- [ ] Shared session between threads (Not overwhelming TradingView servers)
-- [ ] TradingView Premium features
-- [ ] Realtime data
+- [x] Shared session between threads (Not overwhelming TradingView servers)
+- [x] TradingView Premium features
+- [x] Realtime data
 - [ ] Fundamental data
 - [ ] Technical data
-- [ ] Get drawings you made on your chart
+- [x] Get drawings you made on your chart
 - [ ] Works with invite-only indicators
-- [ ] Unlimited simultaneous indicators
+- [x] Unlimited simultaneous indicators
 - [ ] Get TradingView's technical analysis
-- [ ] Replay mode
+- [x] Replay mode
 - [ ] Get values from a specific date range
 - [ ] Interact with public chats
 - [ ] Get Screener top values
