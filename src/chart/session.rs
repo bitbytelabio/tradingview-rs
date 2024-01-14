@@ -442,14 +442,14 @@ impl<'a> WebSocket<'a> {
     }
 
     pub async fn subscribe(&mut self) {
-        self.event_loop(&mut self.socket.clone()).await;
+        self.event_loop(&mut self.socket.to_owned()).await;
     }
 }
 
 #[async_trait::async_trait]
 impl<'a> Socket for WebSocket<'a> {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
-        let event = TradingViewDataEvent::from(message.m.clone());
+        let event = TradingViewDataEvent::from(message.m.to_owned());
         self.data_loader.handle_events(event, &message.p).await;
         Ok(())
     }
