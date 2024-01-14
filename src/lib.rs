@@ -1,7 +1,6 @@
 pub mod callback;
 pub mod chart;
 pub mod client;
-pub mod data_loader;
 pub mod error;
 pub mod models;
 pub mod quote;

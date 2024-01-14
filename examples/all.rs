@@ -4,7 +4,7 @@ use std::env;
 use tradingview::{
     chart,
     chart::ChartOptions,
-    data_loader::DataLoader,
+    client::websocket::WSClient,
     models::{pine_indicator::ScriptType, Interval},
     quote,
     socket::{DataServer, SocketSession},
@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
 
     let socket = SocketSession::new(DataServer::ProData, auth_token).await?;
 
-    let publisher: DataLoader = DataLoader::default();
+    let publisher: WSClient = WSClient::default();
 
     let mut chart = chart::session::WebSocket::new(publisher.clone(), socket.clone());
     let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());

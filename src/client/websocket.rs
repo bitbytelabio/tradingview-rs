@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use tracing::{debug, error, trace};
 
 #[derive(Clone, Default)]
-pub struct DataLoader<'a> {
+pub struct WSClient<'a> {
     pub(crate) metadata: Metadata,
     pub(crate) callbacks: Callbacks<'a>,
 }
@@ -34,7 +34,7 @@ pub struct Metadata {
     pub quote_session: String,
 }
 
-impl<'a> DataLoader<'a> {
+impl<'a> WSClient<'a> {
     pub(crate) async fn handle_events(
         &mut self,
         event: TradingViewDataEvent,
