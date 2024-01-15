@@ -138,4 +138,9 @@ impl<'a> WSClient<'a> {
             .await;
         }
     }
+
+    pub fn set_callbacks(mut self, callbacks: Callbacks<'a>) -> Self {
+        self.callbacks = callbacks;
+        self
+    }
 }
