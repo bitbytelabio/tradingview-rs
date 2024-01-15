@@ -42,7 +42,7 @@ impl<'a> WSClient<'a> {
     ) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
-                trace!("received chart data: {:?}", message);
+                trace!("received raw chart data: {:?}", message);
                 match self
                     .handle_chart_data(&self.metadata.series, &self.metadata.studies, message)
                     .await
@@ -118,6 +118,7 @@ impl<'a> WSClient<'a> {
     }
 
     async fn handle_quote_data(&mut self, message: &[Value]) {
+        debug!("received raw quote data: {:?}", message);
         let qsd = QuoteData::deserialize(&message[1]).unwrap_or_default();
         if qsd.status == "ok" {
             if let Some(prev_quote) = self.metadata.quotes.get_mut(&qsd.name) {

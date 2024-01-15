@@ -12,7 +12,7 @@ pub struct QuoteData {
 
 #[derive(Clone, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[cfg_attr(not(feature = "protobuf"), derive(Debug))]
+#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 pub struct QuoteValue {
     #[cfg_attr(feature = "protobuf", prost(double, optional, tag = "1"))]
     #[serde(default)]

@@ -92,7 +92,7 @@ pub async fn list_symbols(
     let market_type: Arc<SymbolMarketType> = Arc::new(market_type.unwrap_or_default());
     let exchange: Arc<String> = Arc::new(exchange.unwrap_or("".to_string()));
     let country = Arc::new(country.unwrap_or("".to_string()));
-    let domain = Arc::new(domain.unwrap_or("".to_string()));
+    let domain = Arc::new(domain.unwrap_or("production".to_string()));
 
     let search_symbol_reps =
         search_symbol("", &exchange, &market_type, 0, &country, &domain).await?;

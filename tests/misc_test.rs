@@ -5,7 +5,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_symbol() {
-        let res = search_symbol("", "", &SymbolMarketType::All, 0, "", "")
+        let res = search_symbol("", "", &SymbolMarketType::Crypto, 0, "", "")
             .await
             .unwrap();
 

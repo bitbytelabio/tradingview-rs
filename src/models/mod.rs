@@ -96,6 +96,9 @@ pub struct Symbol {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
+    #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "8"))]
+    #[serde(default, rename(deserialize = "typespecs"))]
+    pub type_specs: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
