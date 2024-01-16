@@ -72,7 +72,7 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
-#[derive(Clone, Deserialize, Debug, Default)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default)]
 pub struct Symbol {
     pub symbol: String,
     #[serde(default)]
@@ -93,7 +93,7 @@ pub struct Symbol {
     pub exchange_source: ExchangeSource,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Debug, Default)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default)]
 pub struct ExchangeSource {
     pub id: String,
     pub name: String,
