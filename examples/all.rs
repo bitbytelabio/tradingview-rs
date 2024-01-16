@@ -5,9 +5,10 @@ use tradingview::{
     chart,
     chart::ChartOptions,
     client::websocket::WSClient,
-    models::{pine_indicator::ScriptType, Interval},
+    pine_indicator::ScriptType,
     quote,
     socket::{DataServer, SocketSession},
+    Interval,
 };
 
 #[tokio::main]

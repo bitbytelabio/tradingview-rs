@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use tradingview::api::*;
-    use tradingview::models::*;
+    use tradingview::*;
 
     #[tokio::test]
     async fn test_search_symbol() {

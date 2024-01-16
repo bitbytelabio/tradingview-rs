@@ -72,33 +72,32 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug, Default)]
 pub struct Symbol {
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     pub symbol: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     #[serde(default)]
     pub description: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
     #[serde(default)]
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub exchange: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(default)]
     pub currency_code: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
     #[serde(default, rename(deserialize = "provider_id"))]
     pub data_provider: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
-    #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "8"))]
     #[serde(default, rename(deserialize = "typespecs"))]
     pub type_specs: Vec<String>,
+    #[serde(default, rename(deserialize = "source2"))]
+    pub exchange_source: ExchangeSource,
+}
+
+#[derive(Clone, PartialEq, Deserialize, Debug, Default)]
+pub struct ExchangeSource {
+    pub id: String,
+    pub name: String,
+    pub description: String,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
