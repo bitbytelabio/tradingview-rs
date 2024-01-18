@@ -4,9 +4,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_symbol() {
-        let res = search_symbol("", "", &SymbolMarketType::Crypto, 0, "", "")
-            .await
-            .unwrap();
+        let res = search_symbol(
+            "",
+            "",
+            &SymbolMarketType::Crypto(CryptoType::All),
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         println!("{:#?}", res);
         assert!(!res.symbols.is_empty());

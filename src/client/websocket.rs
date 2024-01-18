@@ -81,7 +81,7 @@ impl<'a> WSClient<'a> {
         message: &[Value],
     ) -> Result<()> {
         for (id, s) in series.iter() {
-            trace!("received v: {:?}, m: {:?}", s, message);
+            debug!("received raw message - v: {:?}, m: {:?}", s, message);
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let data = ChartResponseData::deserialize(resp_data)?.series;

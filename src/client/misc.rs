@@ -7,12 +7,15 @@ use crate::{
         ChartDrawing, Symbol, SymbolMarketType, SymbolSearchResponse, UserCookies,
     },
     utils::build_request,
-    Result,
+    CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType, Result,
+    StockSector,
 };
 use reqwest::Response;
 use serde_json::Value;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::debug;
+
+static SEARCH_BASE_URL: &str = "https://symbol-search.tradingview.com/symbol_search/v3/";
 
 /// Sends an HTTP GET request to the specified URL using the provided client and returns the response.
 ///
@@ -57,16 +60,70 @@ pub async fn search_symbol(
     exchange: &str,
     market_type: &SymbolMarketType,
     start: u64,
-    country: &str,
-    domain: &str,
+    country: Option<&str>,
+    domain: Option<&str>,
+    futures_type: Option<&FuturesProductType>, // For Futures Only
+    stock_sector: Option<&StockSector>,        // For Stock Only
+    crypto_centralization: Option<&CryptoCentralization>, // For Crypto Only
+    economic_source: Option<&EconomicSource>,  // For Economy Only
+    economic_category: Option<&EconomicCategory>, // For Economy Only
 ) -> Result<SymbolSearchResponse> {
+    let mut params: Vec<(String, String)> = Vec::new();
+    let domain = domain.unwrap_or("production");
+    params.push(("text".to_string(), search.to_string()));
+    params.push(("exchange".to_string(), exchange.to_string()));
+    params.push(("search_type".to_string(), market_type.to_string()));
+    params.push(("domain".to_string(), domain.to_string()));
+    if let Some(country) = country {
+        params.push(("country".to_string(), country.to_string()));
+        params.push(("sort_by_country".to_string(), country.to_string()));
+    }
+    match market_type {
+        SymbolMarketType::Futures => {
+            if let Some(futures_type) = futures_type {
+                params.push(("product".to_string(), futures_type.to_string()));
+            }
+        }
+        SymbolMarketType::Stocks(_) => {
+            if let Some(stock_sector) = stock_sector {
+                params.push(("sector".to_string(), stock_sector.to_string()));
+            }
+        }
+        SymbolMarketType::Crypto(_) => {
+            if let Some(crypto_centralization) = crypto_centralization {
+                params.push((
+                    "centralization".to_string(),
+                    crypto_centralization.to_string(),
+                ));
+            }
+        }
+        SymbolMarketType::Economy => {
+            if let Some(economic_source) = economic_source {
+                params.push(("source_id".to_string(), economic_source.to_string()));
+            }
+            if let Some(economic_category) = economic_category {
+                params.push((
+                    "economic_category".to_string(),
+                    economic_category.to_string(),
+                ));
+            }
+        }
+        _ => {}
+    };
+
+    let params_str = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<String>>()
+        .join("&");
+
     let search_data: SymbolSearchResponse = get(
         None,
-        &format!(
-            "https://symbol-search.tradingview.com/symbol_search/v3/?text={search}&country={country}&hl=0&exchange={exchange}&lang=en&search_type={market_type}&start={start}&domain={domain}&sort_by_country={country}",
-            domain = if domain.is_empty() { "production" } else { domain }
-        )
-    ).await?.json().await?;
+        &format!("{SEARCH_BASE_URL}?{params_str}&hl=0&lang=en&start={start}"),
+    )
+    .await?
+    .json()
+    .await?;
     Ok(search_data)
 }
 
@@ -94,8 +151,20 @@ pub async fn list_symbols(
     let country = Arc::new(country.unwrap_or("".to_string()));
     let domain = Arc::new(domain.unwrap_or("production".to_string()));
 
-    let search_symbol_reps =
-        search_symbol("", &exchange, &market_type, 0, &country, &domain).await?;
+    let search_symbol_reps = search_symbol(
+        "",
+        &exchange,
+        &market_type,
+        0,
+        Some(&country),
+        Some(&domain),
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await?;
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
@@ -113,9 +182,21 @@ pub async fn list_symbols(
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            search_symbol("", &exchange, &market_type, i, &country, &domain)
-                .await
-                .map(|resp| resp.symbols)
+            search_symbol(
+                "",
+                &exchange,
+                &market_type,
+                i,
+                Some(&country),
+                Some(&domain),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .map(|resp| resp.symbols)
         });
 
         tasks.push(task);
