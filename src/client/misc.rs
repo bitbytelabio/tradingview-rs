@@ -2,13 +2,10 @@ use std::sync::Arc;
 
 use crate::{
     error::Error,
-    models::{
-        pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
-        ChartDrawing, Symbol, SymbolMarketType, SymbolSearchResponse, UserCookies,
-    },
+    pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
     utils::build_request,
-    CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType, Result,
-    StockSector,
+    ChartDrawing, CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType,
+    Result, StockSector, Symbol, SymbolMarketType, SymbolSearchResponse, UserCookies,
 };
 use reqwest::Response;
 use serde_json::Value;
@@ -362,7 +359,7 @@ pub async fn get_builtin_indicators(indicator_type: BuiltinIndicators) -> Result
 /// # Example
 ///
 /// ```rust
-/// use tradingview::api::search_indicator;
+/// use tradingview::search_indicator;
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -404,7 +401,7 @@ pub async fn search_indicator(
 /// # Examples
 ///
 /// ```rust
-/// use tradingview::api::get_indicator_metadata;
+/// use tradingview::get_indicator_metadata;
 ///
 /// async fn run() -> Result<(), Box<dyn std::error::Error>> {
 ///     let client = None;

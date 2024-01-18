@@ -8,7 +8,7 @@
 This is a data source library for algorithmic trading written in Rust inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API). It is currently in **alpha** stage and not ready for production use.
 
 ## Features
-
+- [x] Async support
 - [x] Multi-Threading for working with large amounts of data
 - [x] Shared session between threads (Not overwhelming TradingView servers)
 - [x] TradingView Premium features
@@ -24,10 +24,12 @@ This is a data source library for algorithmic trading written in Rust inspired b
 - [ ] Interact with public chats
 - [ ] Get Screener top values
 - [ ] Get Calendar
+- [ ] Get News
+- [ ] Convert to Vectorized Data
 
 ## Use cases
 
-- [Fenrir Data](https://github.com/bitbytelabio/fenrir-data) - A data engine that applies an event-driven architecture with RedPanda (Kafka), SurrealDB, DragonflyDB (Redis).
+- [Fenrir Data](https://github.com/bitbytelabio/fenrir-data) - A data engine that applies an event-driven architecture with RedPanda (Kafka), PostgreSQL with TimeScaleDB, PGVector, DragonflyDB (Redis).
 
 ## Getting Started
 

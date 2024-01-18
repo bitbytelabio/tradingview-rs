@@ -17,6 +17,7 @@ path = "src/lib.rs"
 default = ["user"]
 user = ["dep:google-authenticator"]
 protobuf = ["dep:prost"]
+sqlx = []
 
 [dependencies]
 async-trait = "0.1" # Remove this when Rust 1.75 async trait is stable

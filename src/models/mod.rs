@@ -6,6 +6,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod pine_indicator;
+pub mod news;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChartDrawing {
