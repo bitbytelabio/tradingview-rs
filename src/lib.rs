@@ -14,8 +14,9 @@ static UA: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36";
 
 pub use crate::client::misc::{
-    get_builtin_indicators, get_chart_token, get_drawing, get_indicator_metadata,
-    get_private_indicators, get_quote_token, list_symbols, search_indicator, search_symbol,
+    advanced_search_symbol, get_builtin_indicators, get_chart_token, get_drawing,
+    get_indicator_metadata, get_private_indicators, get_quote_token, list_symbols,
+    search_indicator,
 };
 
 pub use crate::models::*;

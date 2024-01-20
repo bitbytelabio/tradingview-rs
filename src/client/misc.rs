@@ -37,6 +37,30 @@ async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
     Ok(build_request(None)?.get(url).send().await?)
 }
 
+pub async fn search_one_symbol(search: &str, exchange: &str) -> Result<Symbol> {
+    let search_data = advanced_search_symbol(
+        search,
+        exchange,
+        &SymbolMarketType::All,
+        0,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    let symbol = match search_data.symbols.first() {
+        Some(symbol) => symbol,
+        None => {
+            return Err(Error::Generic("No symbol found".to_string()));
+        }
+    };
+    Ok(symbol.to_owned())
+}
+
 /// Searches for a symbol using the specified search parameters.
 ///
 /// # Arguments
@@ -52,7 +76,7 @@ async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
 ///
 /// A `Result` containing a `SymbolSearchResponse` struct representing the search results, or an error if the search failed.
 #[tracing::instrument]
-pub async fn search_symbol(
+pub async fn advanced_search_symbol(
     search: &str,
     exchange: &str,
     market_type: &SymbolMarketType,
@@ -148,7 +172,7 @@ pub async fn list_symbols(
     let country = Arc::new(country.unwrap_or("".to_string()));
     let domain = Arc::new(domain.unwrap_or("production".to_string()));
 
-    let search_symbol_reps = search_symbol(
+    let search_symbol_reps = advanced_search_symbol(
         "",
         &exchange,
         &market_type,
@@ -165,7 +189,7 @@ pub async fn list_symbols(
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
-    let max_concurrent_tasks = 50;
+    let max_concurrent_tasks = 30;
     let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
 
     let mut tasks = Vec::new();
@@ -179,7 +203,7 @@ pub async fn list_symbols(
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            search_symbol(
+            advanced_search_symbol(
                 "",
                 &exchange,
                 &market_type,

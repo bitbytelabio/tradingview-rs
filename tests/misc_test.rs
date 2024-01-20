@@ -4,7 +4,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_symbol() {
-        let res = search_symbol(
+        let res = advanced_search_symbol(
             "",
             "",
             &SymbolMarketType::Crypto(CryptoType::All),

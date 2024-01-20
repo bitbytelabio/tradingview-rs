@@ -9,16 +9,15 @@ use rand::Rng;
 use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER},
-    RequestBuilder, Response,
+    Response,
 };
 use serde::Serialize;
 use serde_json::Value;
 use std::{
     collections::HashMap,
-    fmt::{Debug, Display},
     io::{prelude::*, Cursor},
 };
-use tokio_tungstenite::tungstenite::{client, http::request, protocol::Message};
+use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};
 use zip::ZipArchive;
 
