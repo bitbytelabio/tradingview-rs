@@ -23,18 +23,18 @@ use tracing::{debug, error, trace};
 
 #[derive(Clone, Default)]
 pub struct WebSocketClient<'a> {
-    pub(crate) metadata: Metadata,
-    pub(crate) callbacks: Callbacks<'a>,
+    metadata: Metadata,
+    callbacks: Callbacks<'a>,
 }
 
 #[derive(Default, Clone)]
-pub struct Metadata {
-    pub series_count: u16,
-    pub series: HashMap<String, SeriesInfo>,
-    pub studies_count: u16,
-    pub studies: HashMap<String, String>,
-    pub quotes: HashMap<String, QuoteValue>,
-    pub quote_session: String,
+struct Metadata {
+    series_count: u16,
+    series: HashMap<String, SeriesInfo>,
+    studies_count: u16,
+    studies: HashMap<String, String>,
+    quotes: HashMap<String, QuoteValue>,
+    quote_session: String,
 }
 
 #[derive(Clone)]
@@ -43,11 +43,11 @@ pub struct WebSocket<'a> {
     socket: SocketSession,
 }
 
+#[derive(Default)]
 pub struct WebSocketBuilder<'a> {
-    _client: WebSocketClient<'a>,
-    _socket: SocketSession,
-    _auth_token: String,
-    _server: DataServer,
+    client: Option<WebSocketClient<'a>>,
+    auth_token: Option<String>,
+    server: Option<DataServer>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -56,7 +56,39 @@ pub struct SeriesInfo {
     pub options: ChartOptions,
 }
 
+impl<'a> WebSocketBuilder<'a> {
+    pub fn client(mut self, client: WebSocketClient<'a>) -> Self {
+        self.client = Some(client);
+        self
+    }
+
+    pub fn auth_token(mut self, auth_token: &str) -> Self {
+        self.auth_token = Some(auth_token.to_string());
+        self
+    }
+
+    pub fn server(mut self, server: DataServer) -> Self {
+        self.server = Some(server);
+        self
+    }
+
+    pub async fn build(self) -> Result<WebSocket<'a>> {
+        let auth_token = self
+            .auth_token
+            .unwrap_or("unauthorized_user_token".to_string());
+        let server = self.server.unwrap_or_default();
+
+        let socket = SocketSession::new(server, auth_token).await?;
+        let client = self.client.unwrap_or_default();
+        Ok(WebSocket::new_with_session(client, socket))
+    }
+}
+
 impl<'a> WebSocket<'a> {
+    pub fn new() -> WebSocketBuilder<'a> {
+        WebSocketBuilder::default()
+    }
+
     pub fn new_with_session(client: WebSocketClient<'a>, socket: SocketSession) -> Self {
         Self { client, socket }
     }

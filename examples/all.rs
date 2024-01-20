@@ -5,7 +5,7 @@ use tradingview::{
     callback::Callbacks,
     chart::ChartOptions,
     pine_indicator::ScriptType,
-    socket::{DataServer, SocketSession},
+    socket::DataServer,
     websocket::{WebSocket, WebSocketClient},
     Interval, QuoteValue,
 };
@@ -16,8 +16,6 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
 
-    let socket = SocketSession::new(DataServer::ProData, auth_token).await?;
-
     let quote_callback = |data: QuoteValue| async move {
         println!("{:#?}", data);
     };
@@ -26,7 +24,13 @@ async fn main() -> anyhow::Result<()> {
 
     let client = WebSocketClient::default().set_callbacks(callbacks);
 
-    let mut websocket = WebSocket::new_with_session(client, socket);
+    let mut websocket = WebSocket::new()
+        .server(DataServer::ProData)
+        .auth_token(&auth_token)
+        .client(client)
+        .build()
+        .await
+        .unwrap();
 
     let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
     let opts2 = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily)
