@@ -2,12 +2,10 @@ use dotenv::dotenv;
 use std::env;
 
 use tradingview::{
-    chart,
     chart::ChartOptions,
-    client::websocket::WSClient,
     pine_indicator::ScriptType,
-    quote,
     socket::{DataServer, SocketSession},
+    websocket::{WSClient, WebSocket},
     Interval,
 };
 
@@ -21,8 +19,7 @@ async fn main() -> anyhow::Result<()> {
 
     let publisher: WSClient = WSClient::default();
 
-    let mut chart = chart::session::WebSocket::new(publisher.clone(), socket.clone());
-    let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());
+    let mut connector = WebSocket::new_with_session(publisher.clone(), socket.clone());
 
     let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
     let opts2 = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily)
@@ -36,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
         .replay_mode(true)
         .replay_from(1698624060);
 
-    chart
+    connector
         .set_market(opts)
         .await?
         .set_market(opts2)
@@ -44,8 +41,8 @@ async fn main() -> anyhow::Result<()> {
         .set_market(opts3)
         .await?;
 
-    quote
-        .create_session()
+    connector
+        .create_quote_session()
         .await?
         .set_fields()
         .await?
@@ -58,8 +55,7 @@ async fn main() -> anyhow::Result<()> {
         ])
         .await?;
 
-    tokio::spawn(async move { chart.clone().subscribe().await });
-    tokio::spawn(async move { quote.clone().subscribe().await });
+    tokio::spawn(async move { connector.clone().subscribe().await });
 
     loop {}
 }
