@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use tracing::{debug, error, trace};
 
 #[derive(Clone, Default)]
-pub struct WSClient<'a> {
+pub struct WebSocketClient<'a> {
     pub(crate) metadata: Metadata,
     pub(crate) callbacks: Callbacks<'a>,
 }
@@ -39,12 +39,12 @@ pub struct Metadata {
 
 #[derive(Clone)]
 pub struct WebSocket<'a> {
-    client: WSClient<'a>,
+    client: WebSocketClient<'a>,
     socket: SocketSession,
 }
 
 pub struct WebSocketBuilder<'a> {
-    _client: WSClient<'a>,
+    _client: WebSocketClient<'a>,
     _socket: SocketSession,
     _auth_token: String,
     _server: DataServer,
@@ -57,7 +57,7 @@ pub struct SeriesInfo {
 }
 
 impl<'a> WebSocket<'a> {
-    pub fn new_with_session(client: WSClient<'a>, socket: SocketSession) -> Self {
+    pub fn new_with_session(client: WebSocketClient<'a>, socket: SocketSession) -> Self {
         Self { client, socket }
     }
 
@@ -535,7 +535,7 @@ impl<'a> Socket for WebSocket<'a> {
     }
 }
 
-impl<'a> WSClient<'a> {
+impl<'a> WebSocketClient<'a> {
     pub(crate) async fn handle_events(
         &mut self,
         event: TradingViewDataEvent,

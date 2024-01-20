@@ -2,11 +2,12 @@ use dotenv::dotenv;
 use std::env;
 
 use tradingview::{
+    callback::Callbacks,
     chart::ChartOptions,
     pine_indicator::ScriptType,
     socket::{DataServer, SocketSession},
-    websocket::{WSClient, WebSocket},
-    Interval,
+    websocket::{WebSocket, WebSocketClient},
+    Interval, QuoteValue,
 };
 
 #[tokio::main]
@@ -17,9 +18,15 @@ async fn main() -> anyhow::Result<()> {
 
     let socket = SocketSession::new(DataServer::ProData, auth_token).await?;
 
-    let publisher: WSClient = WSClient::default();
+    let quote_callback = |data: QuoteValue| async move {
+        println!("{:#?}", data);
+    };
 
-    let mut connector = WebSocket::new_with_session(publisher.clone(), socket.clone());
+    let callbacks = Callbacks::default().on_quote_data(quote_callback);
+
+    let client = WebSocketClient::default().set_callbacks(callbacks);
+
+    let mut websocket = WebSocket::new_with_session(client, socket);
 
     let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
     let opts2 = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily)
@@ -33,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
         .replay_mode(true)
         .replay_from(1698624060);
 
-    connector
+    websocket
         .set_market(opts)
         .await?
         .set_market(opts2)
@@ -41,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         .set_market(opts3)
         .await?;
 
-    connector
+    websocket
         .create_quote_session()
         .await?
         .set_fields()
@@ -55,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
         ])
         .await?;
 
-    tokio::spawn(async move { connector.clone().subscribe().await });
+    tokio::spawn(async move { websocket.clone().subscribe().await });
 
     loop {}
 }
