@@ -1,20 +1,24 @@
 use crate::{
     models::{MarketAdjustment, SessionType},
     socket::{SocketMessage, SocketMessageDe},
-    Result,
+    Result, UserCookies,
 };
 use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
 use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER},
+    RequestBuilder, Response,
+};
 use serde::Serialize;
 use serde_json::Value;
 use std::{
     collections::HashMap,
+    fmt::{Debug, Display},
     io::{prelude::*, Cursor},
 };
-use tokio_tungstenite::tungstenite::protocol::Message;
+use tokio_tungstenite::tungstenite::{client, http::request, protocol::Message};
 use tracing::{debug, error};
 use zip::ZipArchive;
 
@@ -136,6 +140,31 @@ pub fn _parse_compressed(data: &str) -> Result<Value> {
     file.read_to_string(&mut contents)?;
     let parsed_data: Value = serde_json::from_str(&contents)?;
     Ok(parsed_data)
+}
+
+pub async fn get<T: Serialize + ?Sized>(
+    client: Option<&UserCookies>,
+    url: &str,
+    queries: Option<&T>,
+) -> Result<Response> {
+    let c = match client {
+        Some(client) => {
+            let cookie = format!(
+                "sessionid={}; sessionid_sign={}; device_t={};",
+                client.session, client.session_signature, client.device_token
+            );
+            build_request(Some(&cookie))?
+        }
+        None => build_request(None)?,
+    };
+
+    let request = match queries {
+        Some(queries) => c.get(url).query(queries),
+        None => c.get(url),
+    };
+
+    let response = request.send().await?;
+    Ok(response)
 }
 
 #[cfg(test)]

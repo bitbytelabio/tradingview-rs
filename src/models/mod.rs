@@ -1,3 +1,4 @@
+pub use self::news::*;
 pub use self::SymbolMarketType::*;
 pub use crate::chart::models::*;
 pub use crate::quote::models::*;
@@ -5,8 +6,8 @@ pub use crate::quote::models::*;
 use std::{collections::HashMap, fmt::Display};
 
 use serde::{Deserialize, Deserializer, Serialize};
-pub mod pine_indicator;
 pub mod news;
+pub mod pine_indicator;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChartDrawing {
