@@ -1,5 +1,6 @@
 use crate::{
-    utils::get, MarketType, News, NewsArea, NewsHeadlines, NewsSection, Result, UserCookies,
+    utils::get, MarketType, News, NewsArea, NewsContent, NewsHeadlines, NewsSection, Result,
+    UserCookies,
 };
 
 static BASE_NEWS_URL: &str = "https://news-headlines.tradingview.com/v2";
@@ -71,9 +72,41 @@ pub async fn list_news(
     Ok(res)
 }
 
+async fn fetch_news(id: &str) -> Result<NewsContent> {
+    // let id_url_encoded = urlencoding::encode(id);
+    let res = get(
+        None,
+        &format!("{BASE_NEWS_URL}/story"),
+        &[("id", id), ("lang", "en")],
+    )
+    .await?
+    .json::<NewsContent>()
+    .await?;
+
+    Ok(res)
+}
+
 impl News {
     pub fn get_url(&self) -> String {
         format!("https://www.tradingview.com{}", self.story_path)
+    }
+
+    pub fn get_source_url(&self) -> String {
+        if let Some(url) = &self.link {
+            return url.to_string();
+        }
+        self.get_url()
+    }
+
+    pub fn get_related_symbols(&self) -> Vec<String> {
+        self.related_symbols
+            .iter()
+            .map(|s| s.symbol.to_owned())
+            .collect()
+    }
+
+    pub async fn get_content(&self) -> Result<NewsContent> {
+        fetch_news(&self.id).await
     }
 }
 
@@ -87,5 +120,25 @@ async fn test_list_news() -> Result<()> {
     )
     .await?;
     println!("{:#?}", res);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_fetch_news() -> Result<()> {
+    let _ = fetch_news("tag:reuters.com,2024:newsml_L4N3E9476:0").await?;
+
+    // let res = list_news(
+    //     None,
+    //     &MarketType::All,
+    //     None,
+    //     Some(&NewsSection::AnalysisAll),
+    // )
+    // .await?;
+
+    // for item in res.items.iter() {
+    //     let content = item.get_content().await.unwrap();
+    //     println!("{:#?}", content);
+    // }
+
     Ok(())
 }
