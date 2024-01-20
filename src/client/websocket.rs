@@ -85,6 +85,7 @@ impl<'a> WebSocketBuilder<'a> {
 }
 
 impl<'a> WebSocket<'a> {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> WebSocketBuilder<'a> {
         WebSocketBuilder::default()
     }

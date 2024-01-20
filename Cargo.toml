@@ -21,7 +21,7 @@ sqlx = []
 
 [dependencies]
 async-trait = "0.1" # Remove this when Rust 1.75 async trait is stable
-tokio = { version = "1", default-features = false }
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 reqwest = { version = "0.11", features = ["rustls-tls", "json", "cookies"] }

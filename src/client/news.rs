@@ -5,7 +5,7 @@ use crate::{
 
 static BASE_NEWS_URL: &str = "https://news-headlines.tradingview.com/v2";
 
-fn get_news_category<'a>(market_type: &'a MarketType) -> &'a str {
+fn get_news_category(market_type: &MarketType) -> &str {
     match market_type {
         MarketType::All => "base",
         MarketType::Stocks(_) => "stock",
@@ -19,7 +19,7 @@ fn get_news_category<'a>(market_type: &'a MarketType) -> &'a str {
     }
 }
 
-fn get_news_area<'a>(area: &'a NewsArea) -> &'a str {
+fn get_news_area(area: &NewsArea) -> &str {
     match area {
         NewsArea::World => "WLD",
         NewsArea::Americas => "AME",
@@ -30,7 +30,7 @@ fn get_news_area<'a>(area: &'a NewsArea) -> &'a str {
     }
 }
 
-fn get_news_section<'a>(section: &'a NewsSection) -> &'a str {
+fn get_news_section(section: &NewsSection) -> &str {
     match section {
         NewsSection::PressRelease => "press_release",
         NewsSection::FinancialStatement => "financial_statement",

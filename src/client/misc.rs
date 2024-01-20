@@ -93,7 +93,7 @@ pub async fn search_symbols(search: &str, exchange: &str) -> Result<Vec<Symbol>>
 /// # Returns
 ///
 /// A `Result` containing a `SymbolSearchResponse` struct representing the search results, or an error if the search failed.
-#[tracing::instrument]
+#[allow(clippy::too_many_arguments)]
 pub async fn advanced_search_symbol(
     search: &str,
     exchange: &str,
