@@ -5,7 +5,7 @@ use crate::{
     pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
     utils::build_request,
     ChartDrawing, CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType,
-    Result, StockSector, Symbol, SymbolMarketType, SymbolSearchResponse, UserCookies,
+    MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
 };
 use reqwest::Response;
 use serde_json::Value;
@@ -41,7 +41,7 @@ pub async fn search_one_symbol(search: &str, exchange: &str) -> Result<Symbol> {
     let search_data = advanced_search_symbol(
         search,
         exchange,
-        &SymbolMarketType::All,
+        &MarketType::All,
         0,
         None,
         None,
@@ -59,6 +59,24 @@ pub async fn search_one_symbol(search: &str, exchange: &str) -> Result<Symbol> {
         }
     };
     Ok(symbol.to_owned())
+}
+
+pub async fn search_symbols(search: &str, exchange: &str) -> Result<Vec<Symbol>> {
+    let search_data = advanced_search_symbol(
+        search,
+        exchange,
+        &MarketType::All,
+        0,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await?;
+    Ok(search_data.symbols)
 }
 
 /// Searches for a symbol using the specified search parameters.
@@ -79,7 +97,7 @@ pub async fn search_one_symbol(search: &str, exchange: &str) -> Result<Symbol> {
 pub async fn advanced_search_symbol(
     search: &str,
     exchange: &str,
-    market_type: &SymbolMarketType,
+    market_type: &MarketType,
     start: u64,
     country: Option<&str>,
     domain: Option<&str>,
@@ -100,17 +118,17 @@ pub async fn advanced_search_symbol(
         params.push(("sort_by_country".to_string(), country.to_string()));
     }
     match market_type {
-        SymbolMarketType::Futures => {
+        MarketType::Futures => {
             if let Some(futures_type) = futures_type {
                 params.push(("product".to_string(), futures_type.to_string()));
             }
         }
-        SymbolMarketType::Stocks(_) => {
+        MarketType::Stocks(_) => {
             if let Some(stock_sector) = stock_sector {
                 params.push(("sector".to_string(), stock_sector.to_string()));
             }
         }
-        SymbolMarketType::Crypto(_) => {
+        MarketType::Crypto(_) => {
             if let Some(crypto_centralization) = crypto_centralization {
                 params.push((
                     "centralization".to_string(),
@@ -118,7 +136,7 @@ pub async fn advanced_search_symbol(
                 ));
             }
         }
-        SymbolMarketType::Economy => {
+        MarketType::Economy => {
             if let Some(economic_source) = economic_source {
                 params.push(("source_id".to_string(), economic_source.to_string()));
             }
@@ -163,11 +181,11 @@ pub async fn advanced_search_symbol(
 #[tracing::instrument]
 pub async fn list_symbols(
     exchange: Option<String>,
-    market_type: Option<SymbolMarketType>,
+    market_type: Option<MarketType>,
     country: Option<String>,
     domain: Option<String>,
 ) -> Result<Vec<Symbol>> {
-    let market_type: Arc<SymbolMarketType> = Arc::new(market_type.unwrap_or_default());
+    let market_type: Arc<MarketType> = Arc::new(market_type.unwrap_or_default());
     let exchange: Arc<String> = Arc::new(exchange.unwrap_or("".to_string()));
     let country = Arc::new(country.unwrap_or("".to_string()));
     let domain = Arc::new(domain.unwrap_or("production".to_string()));

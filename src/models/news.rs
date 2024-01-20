@@ -1,6 +1,28 @@
 use serde::Deserialize;
 use serde::Serialize;
 
+pub enum NewsArea {
+    World,
+    Americas,
+    Europe,
+    Asia,
+    Oceania,
+    Africa,
+}
+
+pub enum NewsSection {
+    AnalysisAll,
+    AnalysisRecommendations,
+    EstimatesAndForecasts,
+    MarketToday,
+    Surveys,
+    PressRelease,
+    FinancialStatement,
+    InsiderTrading,
+    ESG,
+    CorpActivitiesAll,
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NewsHeadlines {
     #[serde(rename = "items")]

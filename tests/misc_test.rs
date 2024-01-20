@@ -7,7 +7,7 @@ mod tests {
         let res = advanced_search_symbol(
             "",
             "",
-            &SymbolMarketType::Crypto(CryptoType::All),
+            &MarketType::Crypto(CryptoType::All),
             0,
             None,
             None,

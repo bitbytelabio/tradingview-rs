@@ -141,10 +141,10 @@ pub fn _parse_compressed(data: &str) -> Result<Value> {
     Ok(parsed_data)
 }
 
-pub async fn get<T: Serialize + ?Sized>(
+pub async fn get(
     client: Option<&UserCookies>,
     url: &str,
-    queries: Option<&T>,
+    queries: &[(&str, &str)],
 ) -> Result<Response> {
     let c = match client {
         Some(client) => {
@@ -157,12 +157,7 @@ pub async fn get<T: Serialize + ?Sized>(
         None => build_request(None)?,
     };
 
-    let request = match queries {
-        Some(queries) => c.get(url).query(queries),
-        None => c.get(url),
-    };
-
-    let response = request.send().await?;
+    let response = c.get(url).query(queries).send().await?;
     Ok(response)
 }
 

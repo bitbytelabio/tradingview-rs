@@ -1,5 +1,5 @@
 pub use self::news::*;
-pub use self::SymbolMarketType::*;
+pub use self::MarketType::*;
 pub use crate::chart::models::*;
 pub use crate::quote::models::*;
 
@@ -565,7 +565,7 @@ impl Display for SymbolType {
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
-pub enum SymbolMarketType {
+pub enum MarketType {
     #[default]
     All,
     Stocks(StocksType),
@@ -615,27 +615,27 @@ pub enum CryptoCentralization {
     DEX,
 }
 
-impl Display for SymbolMarketType {
+impl Display for MarketType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            SymbolMarketType::All => write!(f, "undefined"),
-            SymbolMarketType::Stocks(t) => match t {
+            MarketType::All => write!(f, "undefined"),
+            MarketType::Stocks(t) => match t {
                 StocksType::All => write!(f, "stocks"),
                 StocksType::Common => write!(f, "common_stock"),
                 StocksType::Preferred => write!(f, "preferred_stock"),
                 StocksType::DepositoryReceipt => write!(f, "depository_receipt"),
                 StocksType::Warrant => write!(f, "warrant"),
             },
-            SymbolMarketType::Funds(t) => match t {
+            MarketType::Funds(t) => match t {
                 FundsType::All => write!(f, "funds"),
                 FundsType::ETF => write!(f, "etf"),
                 FundsType::MutualFund => write!(f, "mutual_fund"),
                 FundsType::Trust => write!(f, "trust_fund"),
                 FundsType::REIT => write!(f, "reit"),
             },
-            SymbolMarketType::Futures => write!(f, "futures"),
-            SymbolMarketType::Forex => write!(f, "forex"),
-            SymbolMarketType::Crypto(t) => match t {
+            MarketType::Futures => write!(f, "futures"),
+            MarketType::Forex => write!(f, "forex"),
+            MarketType::Crypto(t) => match t {
                 CryptoType::All => write!(f, "crypto"),
                 CryptoType::Spot => write!(f, "crypto_spot"),
                 CryptoType::Futures => write!(f, "crypto_futures"),
@@ -643,9 +643,9 @@ impl Display for SymbolMarketType {
                 CryptoType::Index => write!(f, "crypto_index"),
                 CryptoType::Fundamental => write!(f, "crypto_fundamental"),
             },
-            SymbolMarketType::Indices => write!(f, "index"),
-            SymbolMarketType::Bonds => write!(f, "bond"),
-            SymbolMarketType::Economy => write!(f, "economic"),
+            MarketType::Indices => write!(f, "index"),
+            MarketType::Bonds => write!(f, "bond"),
+            MarketType::Economy => write!(f, "economic"),
         }
     }
 }
