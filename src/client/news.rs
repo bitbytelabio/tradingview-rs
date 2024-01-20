@@ -73,7 +73,6 @@ pub async fn list_news(
 }
 
 async fn fetch_news(id: &str) -> Result<NewsContent> {
-    // let id_url_encoded = urlencoding::encode(id);
     let res = get(
         None,
         &format!("{BASE_NEWS_URL}/story"),
@@ -108,6 +107,11 @@ impl News {
     pub async fn get_content(&self) -> Result<NewsContent> {
         fetch_news(&self.id).await
     }
+
+    pub async fn get_source_html(&self) -> Result<String> {
+        let res = get(None, &self.get_source_url(), &[]).await?.text().await?;
+        Ok(res)
+    }
 }
 
 #[tokio::test]
@@ -127,18 +131,36 @@ async fn test_list_news() -> Result<()> {
 async fn test_fetch_news() -> Result<()> {
     let _ = fetch_news("tag:reuters.com,2024:newsml_L4N3E9476:0").await?;
 
-    // let res = list_news(
-    //     None,
-    //     &MarketType::All,
-    //     None,
-    //     Some(&NewsSection::AnalysisAll),
-    // )
-    // .await?;
+    let res = list_news(
+        None,
+        &MarketType::All,
+        None,
+        Some(&NewsSection::AnalysisAll),
+    )
+    .await?;
 
-    // for item in res.items.iter() {
-    //     let content = item.get_content().await.unwrap();
-    //     println!("{:#?}", content);
-    // }
+    for item in res.items[0..2].iter() {
+        let content = item.get_content().await.unwrap();
+        println!("{:#?}", content);
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_get_source_html() -> Result<()> {
+    let res = list_news(
+        None,
+        &MarketType::All,
+        None,
+        Some(&NewsSection::AnalysisAll),
+    )
+    .await?;
+
+    for item in res.items[0..1].iter() {
+        let html = item.get_source_html().await.unwrap();
+        println!("{:#?}", html);
+    }
 
     Ok(())
 }
