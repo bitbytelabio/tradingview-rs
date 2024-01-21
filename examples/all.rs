@@ -2,26 +2,35 @@ use dotenv::dotenv;
 use std::env;
 
 use tradingview::{
-    chart,
+    callback::Callbacks,
     chart::ChartOptions,
-    data_loader::DataLoader,
-    models::{pine_indicator::ScriptType, Interval},
-    quote,
-    socket::{DataServer, SocketSession},
+    pine_indicator::ScriptType,
+    socket::DataServer,
+    websocket::{WebSocket, WebSocketClient},
+    Interval, QuoteValue,
 };
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     tracing_subscriber::fmt::init();
-    let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
+    let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    let socket = SocketSession::new(DataServer::ProData, auth_token).await?;
+    let quote_callback = |data: QuoteValue| async move {
+        println!("{:#?}", data);
+    };
 
-    let publisher: DataLoader = DataLoader::default();
+    let callbacks = Callbacks::default().on_quote_data(quote_callback);
 
-    let mut chart = chart::session::WebSocket::new(publisher.clone(), socket.clone());
-    let mut quote = quote::session::WebSocket::new(publisher.clone(), socket.clone());
+    let client = WebSocketClient::default().set_callbacks(callbacks);
+
+    let mut websocket = WebSocket::new()
+        .server(DataServer::ProData)
+        .auth_token(&auth_token)
+        .client(client)
+        .build()
+        .await
+        .unwrap();
 
     let opts = ChartOptions::new("BINANCE:BTCUSDT", Interval::OneMinute).bar_count(100);
     let opts2 = ChartOptions::new("BINANCE:BTCUSDT", Interval::Daily)
@@ -35,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         .replay_mode(true)
         .replay_from(1698624060);
 
-    chart
+    websocket
         .set_market(opts)
         .await?
         .set_market(opts2)
@@ -43,8 +52,8 @@ async fn main() -> anyhow::Result<()> {
         .set_market(opts3)
         .await?;
 
-    quote
-        .create_session()
+    websocket
+        .create_quote_session()
         .await?
         .set_fields()
         .await?
@@ -57,8 +66,7 @@ async fn main() -> anyhow::Result<()> {
         ])
         .await?;
 
-    tokio::spawn(async move { chart.clone().subscribe().await });
-    tokio::spawn(async move { quote.clone().subscribe().await });
+    tokio::spawn(async move { websocket.subscribe().await });
 
     loop {}
 }

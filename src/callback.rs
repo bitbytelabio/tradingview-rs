@@ -52,9 +52,9 @@ impl Default for Callbacks<'_> {
 
 impl<'a> Callbacks<'a> {
     pub fn on_chart_data<Fut>(
-        &mut self,
+        mut self,
         f: impl Fn((ChartOptions, Vec<DataPoint>)) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
+    ) -> Self
     where
         Fut: Future<Output = ()> + Send + 'a,
     {
@@ -62,10 +62,7 @@ impl<'a> Callbacks<'a> {
         self
     }
 
-    pub fn on_quote_data<Fut>(
-        &mut self,
-        f: impl Fn(QuoteValue) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
+    pub fn on_quote_data<Fut>(mut self, f: impl Fn(QuoteValue) -> Fut + Send + Sync + 'a) -> Self
     where
         Fut: Future<Output = ()> + Send + 'a,
     {
@@ -74,9 +71,9 @@ impl<'a> Callbacks<'a> {
     }
 
     pub fn on_study_data<Fut>(
-        &mut self,
+        mut self,
         f: impl Fn((StudyOptions, StudyResponseData)) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
+    ) -> Self
     where
         Fut: Future<Output = ()> + Send + 'a,
     {
@@ -84,7 +81,7 @@ impl<'a> Callbacks<'a> {
         self
     }
 
-    pub fn on_error<Fut>(&mut self, f: impl Fn(Error) -> Fut + Send + Sync + 'a) -> &mut Self
+    pub fn on_error<Fut>(mut self, f: impl Fn(Error) -> Fut + Send + Sync + 'a) -> Self
     where
         Fut: Future<Output = ()> + Send + 'a,
     {
@@ -92,10 +89,7 @@ impl<'a> Callbacks<'a> {
         self
     }
 
-    pub fn on_symbol_info<Fut>(
-        &mut self,
-        f: impl Fn(SymbolInfo) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
+    pub fn on_symbol_info<Fut>(mut self, f: impl Fn(SymbolInfo) -> Fut + Send + Sync + 'a) -> Self
     where
         Fut: Future<Output = ()> + Send + 'a,
     {
@@ -104,9 +98,9 @@ impl<'a> Callbacks<'a> {
     }
 
     pub fn on_other_event<Fut>(
-        &mut self,
+        mut self,
         f: impl Fn((TradingViewDataEvent, Vec<Value>)) -> Fut + Send + Sync + 'a,
-    ) -> &mut Self
+    ) -> Self
     where
         Fut: Future<Output = ()> + Send + 'a,
     {

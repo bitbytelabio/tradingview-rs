@@ -4,7 +4,6 @@ use crate::models::{pine_indicator::ScriptType, Interval, MarketAdjustment, Sess
 
 pub mod models;
 pub(crate) mod options;
-pub mod session;
 pub mod study;
 pub(crate) mod utils;
 
@@ -13,17 +12,17 @@ pub struct ChartOptions {
     // Required
     pub symbol: String,
     pub interval: Interval,
-    bar_count: u64,
+    pub(crate) bar_count: u64,
 
-    range: Option<String>,
-    from: Option<u64>,
-    to: Option<u64>,
-    replay_mode: bool,
-    replay_from: i64,
-    replay_session: Option<String>,
-    adjustment: Option<MarketAdjustment>,
-    currency: Option<Currency>,
-    session_type: Option<SessionType>,
+    pub(crate) range: Option<String>,
+    pub(crate) from: Option<u64>,
+    pub(crate) to: Option<u64>,
+    pub(crate) replay_mode: bool,
+    pub(crate) replay_from: i64,
+    pub(crate) replay_session: Option<String>,
+    pub(crate) adjustment: Option<MarketAdjustment>,
+    pub(crate) currency: Option<Currency>,
+    pub(crate) session_type: Option<SessionType>,
     pub study_config: Option<StudyOptions>,
 }
 

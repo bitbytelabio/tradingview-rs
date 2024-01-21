@@ -1,13 +1,16 @@
 use crate::{
     models::{MarketAdjustment, SessionType},
     socket::{SocketMessage, SocketMessageDe},
-    Result,
+    Result, UserCookies,
 };
 use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
 use iso_currency::Currency;
 use rand::Rng;
 use regex::Regex;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER},
+    Response,
+};
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -136,6 +139,26 @@ pub fn _parse_compressed(data: &str) -> Result<Value> {
     file.read_to_string(&mut contents)?;
     let parsed_data: Value = serde_json::from_str(&contents)?;
     Ok(parsed_data)
+}
+
+pub async fn get(
+    client: Option<&UserCookies>,
+    url: &str,
+    queries: &[(&str, &str)],
+) -> Result<Response> {
+    let c = match client {
+        Some(client) => {
+            let cookie = format!(
+                "sessionid={}; sessionid_sign={}; device_t={};",
+                client.session, client.session_signature, client.device_token
+            );
+            build_request(Some(&cookie))?
+        }
+        None => build_request(None)?,
+    };
+
+    let response = c.get(url).query(queries).send().await?;
+    Ok(response)
 }
 
 #[cfg(test)]

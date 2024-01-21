@@ -1,4 +1,3 @@
-pub mod session;
 pub mod models;
 pub(crate) mod utils;
 
