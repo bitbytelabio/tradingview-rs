@@ -14,7 +14,7 @@ use tradingview::{
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     tracing_subscriber::fmt::init();
-    let auth_token = env::var("TV_AUTH_TOKEN").unwrap();
+    let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
     let quote_callback = |data: QuoteValue| async move {
         println!("{:#?}", data);
@@ -66,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
         ])
         .await?;
 
-    tokio::spawn(async move { websocket.clone().subscribe().await });
+    tokio::spawn(async move { websocket.subscribe().await });
 
     loop {}
 }

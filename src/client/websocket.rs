@@ -80,6 +80,7 @@ impl<'a> WebSocketBuilder<'a> {
 
         let socket = SocketSession::new(server, auth_token).await?;
         let client = self.client.unwrap_or_default();
+
         Ok(WebSocket::new_with_session(client, socket))
     }
 }
@@ -149,9 +150,10 @@ impl<'a> WebSocket<'a> {
     // End TradingView WebSocket Quote methods
 
     // Begin TradingView WebSocket Chart methods
-    pub async fn set_locale(&mut self) -> Result<&mut Self> {
+    /// Example: local = ("en", "US")
+    pub async fn set_locale(&mut self, local: (&str, &str)) -> Result<&mut Self> {
         self.socket
-            .send("set_locale", &payload!("en", "US"))
+            .send("set_locale", &payload!(local.0, local.1))
             .await?;
         Ok(self)
     }
