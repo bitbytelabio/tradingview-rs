@@ -29,26 +29,17 @@ impl std::fmt::Display for BuiltinIndicators {
     }
 }
 
-#[derive(Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(not(feature = "protobuf"), derive(Debug))]
-// #[cfg_attr(feature = "protobuf", derive(prost::Message))]
 pub struct PineInfo {
-    // #[cfg_attr(feature = "protobuf", prost(int64, optional, tag = "1"))]
     pub user_id: i64,
-    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "2"))]
     pub script_name: String,
-    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "3"))]
     pub script_source: String,
-    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "4"))]
     #[serde(rename(deserialize = "scriptIdPart"))]
     pub script_id: String,
-    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "5"))]
     pub script_access: String,
-    // #[cfg_attr(feature = "protobuf", prost(string, optional, tag = "6"))]
     #[serde(rename(deserialize = "version"))]
     pub script_version: String,
-    // #[cfg_attr(feature = "protobuf", prost(message, optional, tag = "7"))]
     pub extra: PineInfoExtra,
 }
 
@@ -211,6 +202,12 @@ impl std::fmt::Display for ScriptType {
             }
             ScriptType::VisibleVolumeByPrice => write!(f, "VbPVisible@tv-volumebyprice-53"),
         }
+    }
+}
+
+impl From<String> for ScriptType {
+    fn from(_value: String) -> Self {
+        todo!()
     }
 }
 

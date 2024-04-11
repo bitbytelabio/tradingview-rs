@@ -1,6 +1,12 @@
-use std::collections::HashMap;
+pub use self::news::*;
+pub use self::MarketType::*;
+pub use crate::chart::models::*;
+pub use crate::quote::models::*;
+
+use std::{collections::HashMap, fmt::Display};
 
 use serde::{Deserialize, Deserializer, Serialize};
+pub mod news;
 pub mod pine_indicator;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -69,30 +75,32 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default)]
 pub struct Symbol {
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     pub symbol: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     #[serde(default)]
     pub description: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
     #[serde(default)]
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub exchange: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(default)]
     pub currency_code: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
     #[serde(default, rename(deserialize = "provider_id"))]
     pub data_provider: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
+    #[serde(default, rename(deserialize = "typespecs"))]
+    pub type_specs: Vec<String>,
+    #[serde(default, rename(deserialize = "source2"))]
+    pub exchange_source: ExchangeSource,
+}
+
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default)]
+pub struct ExchangeSource {
+    pub id: String,
+    pub name: String,
+    pub description: String,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -104,7 +112,7 @@ pub enum SessionType {
     PostMarket,
 }
 
-impl std::fmt::Display for SessionType {
+impl Display for SessionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SessionType::Regular => write!(f, "regular"),
@@ -122,7 +130,7 @@ pub enum MarketAdjustment {
     Dividends,
 }
 
-impl std::fmt::Display for MarketAdjustment {
+impl Display for MarketAdjustment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MarketAdjustment::Splits => write!(f, "splits"),
@@ -140,7 +148,7 @@ pub enum MarketStatus {
     Pre,
 }
 
-impl std::fmt::Display for MarketStatus {
+impl Display for MarketStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MarketStatus::Holiday => write!(f, "holiday"),
@@ -246,7 +254,7 @@ pub enum Timezone {
     EtcUTC,
 }
 
-impl std::fmt::Display for Timezone {
+impl Display for Timezone {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Timezone::AfricaCairo => write!(f, "Africa/Cairo"),
@@ -367,7 +375,7 @@ pub enum Interval {
     Yearly = 19,
 }
 
-impl std::fmt::Display for Interval {
+impl Display for Interval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let time_interval = match self {
             Interval::OneSecond => "1S",
@@ -429,7 +437,7 @@ pub enum LanguageCode {
     TraditionalChinese,
 }
 
-impl std::fmt::Display for LanguageCode {
+impl Display for LanguageCode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             LanguageCode::Arabic => write!(f, "ar"),
@@ -493,7 +501,7 @@ impl<'de> Deserialize<'de> for FinancialPeriod {
     }
 }
 
-impl std::fmt::Display for FinancialPeriod {
+impl Display for FinancialPeriod {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             FinancialPeriod::FiscalYear => write!(f, "FY"),
@@ -504,7 +512,6 @@ impl std::fmt::Display for FinancialPeriod {
         }
     }
 }
-
 pub enum SymbolType {
     Stock,
     Index,
@@ -529,7 +536,7 @@ pub enum SymbolType {
     Spot,
 }
 
-impl std::fmt::Display for SymbolType {
+impl Display for SymbolType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             SymbolType::Stock => write!(f, "stock"),
@@ -557,32 +564,261 @@ impl std::fmt::Display for SymbolType {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, Serialize)]
-pub enum SymbolMarketType {
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+pub enum MarketType {
     #[default]
     All,
-    Stocks,
-    Funds,
+    Stocks(StocksType),
+    Funds(FundsType),
     Futures,
     Forex,
-    Crypto,
+    Crypto(CryptoType),
     Indices,
     Bonds,
     Economy,
 }
 
-impl std::fmt::Display for SymbolMarketType {
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+pub enum StocksType {
+    #[default]
+    All,
+    Common,
+    Preferred,
+    DepositoryReceipt,
+    Warrant,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+pub enum CryptoType {
+    #[default]
+    All,
+    Spot,
+    Futures,
+    Swap,
+    Index,
+    Fundamental,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+pub enum FundsType {
+    #[default]
+    All,
+    ETF,
+    MutualFund,
+    Trust,
+    REIT,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+pub enum CryptoCentralization {
+    CEX,
+    DEX,
+}
+
+impl Display for MarketType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            SymbolMarketType::All => write!(f, "undefined"),
-            SymbolMarketType::Stocks => write!(f, "stocks"),
-            SymbolMarketType::Funds => write!(f, "funds"),
-            SymbolMarketType::Futures => write!(f, "futures"),
-            SymbolMarketType::Forex => write!(f, "forex"),
-            SymbolMarketType::Crypto => write!(f, "crypto"),
-            SymbolMarketType::Indices => write!(f, "index"),
-            SymbolMarketType::Bonds => write!(f, "bond"),
-            SymbolMarketType::Economy => write!(f, "economic"),
+            MarketType::All => write!(f, "undefined"),
+            MarketType::Stocks(t) => match t {
+                StocksType::All => write!(f, "stocks"),
+                StocksType::Common => write!(f, "common_stock"),
+                StocksType::Preferred => write!(f, "preferred_stock"),
+                StocksType::DepositoryReceipt => write!(f, "depository_receipt"),
+                StocksType::Warrant => write!(f, "warrant"),
+            },
+            MarketType::Funds(t) => match t {
+                FundsType::All => write!(f, "funds"),
+                FundsType::ETF => write!(f, "etf"),
+                FundsType::MutualFund => write!(f, "mutual_fund"),
+                FundsType::Trust => write!(f, "trust_fund"),
+                FundsType::REIT => write!(f, "reit"),
+            },
+            MarketType::Futures => write!(f, "futures"),
+            MarketType::Forex => write!(f, "forex"),
+            MarketType::Crypto(t) => match t {
+                CryptoType::All => write!(f, "crypto"),
+                CryptoType::Spot => write!(f, "crypto_spot"),
+                CryptoType::Futures => write!(f, "crypto_futures"),
+                CryptoType::Swap => write!(f, "crypto_swap"),
+                CryptoType::Index => write!(f, "crypto_index"),
+                CryptoType::Fundamental => write!(f, "crypto_fundamental"),
+            },
+            MarketType::Indices => write!(f, "index"),
+            MarketType::Bonds => write!(f, "bond"),
+            MarketType::Economy => write!(f, "economic"),
+        }
+    }
+}
+
+impl Display for CryptoCentralization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            CryptoCentralization::CEX => write!(f, "cex"),
+            CryptoCentralization::DEX => write!(f, "dex"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum FuturesProductType {
+    SingleStock,
+    WorldIndices,
+    Currencies,
+    InterestRates,
+    Energy,
+    Agriculture,
+    Metals,
+    Weather,
+}
+
+impl Display for FuturesProductType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            FuturesProductType::SingleStock => write!(f, "Financial%2FEquity"),
+            FuturesProductType::WorldIndices => write!(f, "Financial%2FIndex"),
+            FuturesProductType::Currencies => write!(f, "Financial%2FCurrency"),
+            FuturesProductType::InterestRates => write!(f, "=Financial%2FInterestRate"),
+            FuturesProductType::Energy => write!(f, "Financial%2FEnergy"),
+            FuturesProductType::Agriculture => write!(f, "Financial%2FAgriculture"),
+            FuturesProductType::Metals => write!(f, "Financial%2FMetals"),
+            FuturesProductType::Weather => write!(f, "Financial%2FWeather"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum StockSector {
+    CommercialServices,
+    Communications,
+    ConsumerDurables,
+    ConsumerNonDurables,
+    ConsumerServices,
+    DistributionServices,
+    ElectronicTechnology,
+    EnergyMinerals,
+    Finance,
+    Government,
+    HealthServices,
+    HealthTechnology,
+    IndustrialServices,
+    Miscellaneous,
+    NonEnergyMinerals,
+    ProcessIndustries,
+    ProducerManufacturing,
+    RetailTrade,
+    TechnologyServices,
+    Transportation,
+    Utilities,
+}
+
+impl Display for StockSector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            StockSector::CommercialServices => write!(f, "Commercial+Services"),
+            StockSector::Communications => write!(f, "Communications"),
+            StockSector::ConsumerDurables => write!(f, "Consumer+Durables"),
+            StockSector::ConsumerNonDurables => write!(f, "Consumer+Non-Durables"),
+            StockSector::ConsumerServices => write!(f, "Consumer+Services"),
+            StockSector::DistributionServices => write!(f, "Distribution+Services"),
+            StockSector::ElectronicTechnology => write!(f, "Electronic+Technology"),
+            StockSector::EnergyMinerals => write!(f, "Energy+Minerals"),
+            StockSector::Finance => write!(f, "Finance"),
+            StockSector::Government => write!(f, "Government"),
+            StockSector::HealthServices => write!(f, "Health+Services"),
+            StockSector::HealthTechnology => write!(f, "Health+Technology"),
+            StockSector::IndustrialServices => write!(f, "Industrial+Services"),
+            StockSector::Miscellaneous => write!(f, "Miscellaneous"),
+            StockSector::NonEnergyMinerals => write!(f, "Non-Energy+Minerals"),
+            StockSector::ProcessIndustries => write!(f, "Process+Industries"),
+            StockSector::ProducerManufacturing => write!(f, "Producer+Manufacturing"),
+            StockSector::RetailTrade => write!(f, "Retail+Trade"),
+            StockSector::TechnologyServices => write!(f, "Technology+Services"),
+            StockSector::Transportation => write!(f, "Transportation"),
+            StockSector::Utilities => write!(f, "Utilities"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+pub enum EconomicSource {
+    WorldBank,
+    EUROSTAT,
+    AKAMAI,
+    TransparencyInternational,
+    OrganizationForEconomicCooperationAndDevelopment,
+    WorldEconomicForum,
+    WageIndicatorFoundation,
+    BureauOfLaborStatistics,
+    FederalReserve,
+    StockholmInternationalPeaceResearchInstitute,
+    InstituteForEconomicsAndPeace,
+    BureauOfEconomicAnalysis,
+    WorldGoldCouncil,
+    CensusBureau,
+    CentralBankOfWestAfricanStates,
+    InternationalMonetaryFund,
+    USEnergyInformationAdministration,
+    StatisticCanada,
+    OfficeForNationalStatistics,
+    StatisticsNorway,
+}
+
+impl Display for EconomicSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            EconomicSource::WorldBank => write!(f, "__WB"),
+            EconomicSource::EUROSTAT => write!(f, "__EUROSTAT"),
+            EconomicSource::AKAMAI => write!(f, "__AKAMAI"),
+            EconomicSource::TransparencyInternational => write!(f, "__TI"),
+            EconomicSource::OrganizationForEconomicCooperationAndDevelopment => write!(f, "__OECD"),
+            EconomicSource::WorldEconomicForum => write!(f, "__WEF"),
+            EconomicSource::WageIndicatorFoundation => write!(f, "__WIF"),
+            EconomicSource::BureauOfLaborStatistics => write!(f, "USBLS"),
+            EconomicSource::FederalReserve => write!(f, "USFR"),
+            EconomicSource::StockholmInternationalPeaceResearchInstitute => write!(f, "__SIPRI"),
+            EconomicSource::InstituteForEconomicsAndPeace => write!(f, "__IEP"),
+            EconomicSource::BureauOfEconomicAnalysis => write!(f, "USBEA"),
+            EconomicSource::WorldGoldCouncil => write!(f, "__WGC"),
+            EconomicSource::CensusBureau => write!(f, "USCB"),
+            EconomicSource::CentralBankOfWestAfricanStates => write!(f, "__BCEAO"),
+            EconomicSource::InternationalMonetaryFund => write!(f, "__IMF"),
+            EconomicSource::USEnergyInformationAdministration => write!(f, "__UEIA"),
+            EconomicSource::StatisticCanada => write!(f, "CASC"),
+            EconomicSource::OfficeForNationalStatistics => write!(f, "GBONS"),
+            EconomicSource::StatisticsNorway => write!(f, "NOSN"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+pub enum EconomicCategory {
+    GDP,
+    Labor,
+    Prices,
+    Health,
+    Money,
+    Trade,
+    Government,
+    Business,
+    Consumer,
+    Housing,
+    Taxes,
+}
+
+impl Display for EconomicCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            EconomicCategory::GDP => write!(f, "gdp"),
+            EconomicCategory::Labor => write!(f, "lbr"),
+            EconomicCategory::Prices => write!(f, "prce"),
+            EconomicCategory::Health => write!(f, "hlth"),
+            EconomicCategory::Money => write!(f, "mny"),
+            EconomicCategory::Trade => write!(f, "trd"),
+            EconomicCategory::Government => write!(f, "gov"),
+            EconomicCategory::Business => write!(f, "bsnss"),
+            EconomicCategory::Consumer => write!(f, "cnsm"),
+            EconomicCategory::Housing => write!(f, "hse"),
+            EconomicCategory::Taxes => write!(f, "txs"),
         }
     }
 }

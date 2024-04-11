@@ -1,5 +1,5 @@
 #![cfg(feature = "user")]
-use tradingview::user::UserCookies;
+use tradingview::UserCookies;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
