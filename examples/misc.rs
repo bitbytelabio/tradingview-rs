@@ -1,5 +1,5 @@
 use tracing::info;
-use tradingview::models::pine_indicator::*;
+use tradingview::pine_indicator::*;
 
 #[tokio::main]
 async fn main() {
@@ -13,7 +13,8 @@ async fn main() {
     // info!("{:#?}", info);
 
     let pine = PineIndicator::build()
-        .fetch("STD;Fund_total_revenue_fq", "62.0", ScriptType::Script).await
+        .fetch("STD;Fund_total_revenue_fq", "62.0", ScriptType::Script)
+        .await
         .unwrap();
 
     let test = pine.to_study_inputs().unwrap();
