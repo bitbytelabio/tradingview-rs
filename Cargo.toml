@@ -17,13 +17,14 @@ path = "src/lib.rs"
 default = ["user"]
 user = ["dep:google-authenticator"]
 protobuf = ["dep:prost"]
+sqlx = []
 
 [dependencies]
 async-trait = "0.1" # Remove this when Rust 1.75 async trait is stable
-tokio = { version = "1", default-features = false }
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-reqwest = { version = "0.11", features = ["rustls-tls", "json", "cookies"] }
+reqwest = { version = "0.12", features = ["rustls-tls", "json", "cookies"] }
 lazy_static = "1.4"
 url = "2"
 urlencoding = "2"
@@ -38,7 +39,7 @@ futures-util = { version = "0.3", default-features = false, features = [
 ] }
 iso_currency = { version = "0.4", features = ["with-serde"] }
 zip = "0.6"
-base64 = "0.21"
+base64 = "0.22"
 google-authenticator = { version = "0.4", optional = true }
 prost = { version = "0.12", optional = true }
 

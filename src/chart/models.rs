@@ -51,7 +51,7 @@ pub struct GraphicDataResponse {
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, PartialEq)]
 pub struct DataPoint {
     #[cfg_attr(feature = "protobuf", prost(int64, tag = "1"))]
     #[serde(rename(deserialize = "i"))]
