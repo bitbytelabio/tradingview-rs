@@ -35,7 +35,7 @@ tokio-tungstenite = { version = "0.24", features = [
     "url",
 ] }
 tracing = "0.1"
-thiserror = "1"
+thiserror = "2"
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
