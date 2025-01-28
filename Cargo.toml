@@ -28,7 +28,7 @@ reqwest = { version = "0.12", default-features = false ,features = ["rustls-tls"
 lazy_static = "1.4"
 url = "2"
 urlencoding = "2"
-rand = "^0.8"
+rand = "^0.9"
 regex = "1"
 tokio-tungstenite = { version = "0.24", features = [
     "rustls-tls-webpki-roots",
