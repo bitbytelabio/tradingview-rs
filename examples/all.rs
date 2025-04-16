@@ -2,12 +2,12 @@ use dotenv::dotenv;
 use std::env;
 
 use tradingview::{
+    Interval, QuoteValue,
     callback::Callbacks,
     chart::ChartOptions,
     pine_indicator::ScriptType,
     socket::DataServer,
     websocket::{WebSocket, WebSocketClient},
-    Interval, QuoteValue,
 };
 
 #[tokio::main]

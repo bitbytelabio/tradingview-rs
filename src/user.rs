@@ -1,14 +1,11 @@
 pub use crate::models::UserCookies;
 use crate::{
+    Result,
     error::{Error, LoginError},
     utils::build_request,
-    Result, UA,
 };
-use google_authenticator::{get_code, GA_AUTH};
-use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, COOKIE, ORIGIN, REFERER},
-    Client, Response,
-};
+use google_authenticator::{GA_AUTH, get_code};
+use reqwest::{Response, header::CONTENT_TYPE};
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};

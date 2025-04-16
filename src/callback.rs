@@ -1,13 +1,13 @@
 use crate::{
+    Error,
     chart::{
-        models::{DataPoint, StudyResponseData, SymbolInfo},
         ChartOptions, StudyOptions,
+        models::{DataPoint, StudyResponseData, SymbolInfo},
     },
     quote::models::QuoteValue,
     socket::TradingViewDataEvent,
-    Error,
 };
-use futures_util::{future::BoxFuture, Future};
+use futures_util::{Future, future::BoxFuture};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{error, info};
