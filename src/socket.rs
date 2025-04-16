@@ -1,26 +1,25 @@
 use crate::{
+    Result, UA,
     error::Error,
     error::TradingViewError,
     payload,
     utils::{format_packet, parse_packet},
-    Result, UA,
 };
 use futures_util::{
-    stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
-    connect_async,
+    MaybeTlsStream, WebSocketStream, connect_async,
     tungstenite::{
         client::IntoClientRequest,
         http::{HeaderMap, HeaderValue},
         protocol::Message,
     },
-    MaybeTlsStream, WebSocketStream,
 };
 use tracing::{debug, error, info, trace, warn};
 use url::Url;

@@ -1,5 +1,9 @@
 pub use crate::models::UserCookies;
-use crate::{error::Error, error::LoginError, Result, UA};
+use crate::{
+    error::{Error, LoginError},
+    utils::build_request,
+    Result, UA,
+};
 use google_authenticator::{get_code, GA_AUTH};
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE, COOKIE, ORIGIN, REFERER},
@@ -29,31 +33,10 @@ impl UserCookies {
         password: &str,
         totp_secret: Option<&str>,
     ) -> Result<Self> {
-        let mut headers = HeaderMap::new();
-
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-        headers.insert(
-            ORIGIN,
-            HeaderValue::from_static("https://www.tradingview.com"),
-        );
-        headers.insert(
-            REFERER,
-            HeaderValue::from_static("https://www.tradingview.com/"),
-        );
-        headers.insert(
-            CONTENT_TYPE,
-            HeaderValue::from_static("application/x-www-form-urlencoded"),
-        );
-
-        let client = Client::builder()
-            .use_rustls_tls()
-            .default_headers(headers)
-            .https_only(true)
-            .user_agent(UA)
-            .build()?;
-
+        let client = build_request(None)?;
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(format!(
                 "username={}&password={}&remember=true",
                 username, password
@@ -173,35 +156,13 @@ impl UserCookies {
             return Err(Error::LoginError(LoginError::OTPSecretNotFound));
         }
 
-        let mut headers = HeaderMap::new();
-
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-        headers.insert(
-            ORIGIN,
-            HeaderValue::from_static("https://www.tradingview.com"),
-        );
-        headers.insert(
-            REFERER,
-            HeaderValue::from_static("https://www.tradingview.com/"),
-        );
-        headers.insert(
-            CONTENT_TYPE,
-            HeaderValue::from_static("application/x-www-form-urlencoded"),
-        );
-        headers.insert(
-            COOKIE,
-            HeaderValue::from_str(&format!("sessionid={session}; sessionid_sign={signature};"))?,
-        );
-
-        let client = Client::builder()
-            .use_rustls_tls()
-            .default_headers(headers)
-            .https_only(true)
-            .user_agent(UA)
-            .build()?;
+        let client = build_request(Some(&format!(
+            "sessionid={session}; sessionid_sign={signature};"
+        )))?;
 
         let response = client
             .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(format!(
                 "code={}",
                 match get_code!(totp_secret) {

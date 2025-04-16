@@ -1,20 +1,20 @@
 use crate::{
+    Error, Interval, Result, Timezone,
     callback::Callbacks,
     chart::{
-        models::{ChartResponseData, StudyResponseData, SymbolInfo},
         ChartOptions, StudyOptions,
+        models::{ChartResponseData, StudyResponseData, SymbolInfo},
     },
     error::TradingViewError,
     payload,
     pine_indicator::PineIndicator,
     quote::{
+        ALL_QUOTE_FIELDS,
         models::{QuoteData, QuoteValue},
         utils::merge_quotes,
-        ALL_QUOTE_FIELDS,
     },
     socket::{DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     utils::{gen_id, gen_session_id, symbol_init},
-    Error, Interval, Result, Timezone,
 };
 use serde::Deserialize;
 use serde_json::Value;

@@ -5,7 +5,7 @@ use crate::{
 };
 use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
 use iso_currency::Currency;
-use rand::Rng;
+use rand::{distr::Alphanumeric, Rng};
 use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER},
@@ -51,12 +51,19 @@ pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {
         headers.insert(COOKIE, HeaderValue::from_str(cookie)?);
     }
 
-    let client = reqwest::Client::builder()
-        .use_rustls_tls()
+    let mut client = reqwest::Client::builder()
         .default_headers(headers)
         .https_only(true)
-        .user_agent(crate::UA)
-        .build()?;
+        .user_agent(crate::UA);
+    #[cfg(feature = "rustls-tls")]
+    {
+        client = client.use_rustls_tls();
+    }
+    #[cfg(feature = "native-tls")]
+    {
+        client = client.use_native_tls();
+    }
+    let client = client.build()?;
     Ok(client)
 }
 
@@ -65,9 +72,9 @@ pub fn gen_session_id(session_type: &str) -> String {
 }
 
 pub fn gen_id() -> String {
-    let rng = rand::thread_rng();
+    let rng = rand::rng();
     let result: String = rng
-        .sample_iter(&rand::distributions::Alphanumeric)
+        .sample_iter(&Alphanumeric)
         .take(12)
         .map(char::from)
         .collect();
@@ -103,7 +110,7 @@ pub fn format_packet<T: Serialize>(packet: T) -> Result<Message> {
     let json_string = serde_json::to_string(&packet)?;
     let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
     debug!("Formatted packet: {}", formatted_message);
-    Ok(Message::Text(formatted_message))
+    Ok(Message::Text(formatted_message.into()))
 }
 
 pub fn symbol_init(
