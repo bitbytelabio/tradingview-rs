@@ -319,6 +319,7 @@ pub trait Socket {
             }
             Message::Binary(msg) => {
                 debug!("received binary message: {:?}", msg);
+                // TODO: handle binary messages
             }
             Message::Ping(msg) => {
                 trace!("received ping message: {:?}", msg);
