@@ -1,5 +1,5 @@
-pub use self::news::*;
 pub use self::MarketType::*;
+pub use self::news::*;
 pub use crate::chart::models::*;
 pub use crate::quote::models::*;
 
