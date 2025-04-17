@@ -1,18 +1,19 @@
 use crate::{
+    Error,
     chart::{
-        models::{DataPoint, StudyResponseData, SymbolInfo},
         ChartOptions, StudyOptions,
+        models::{DataPoint, StudyResponseData, SymbolInfo},
     },
     quote::models::QuoteValue,
     socket::TradingViewDataEvent,
-    Error,
 };
-use futures_util::{future::BoxFuture, Future};
 use serde_json::Value;
-use std::sync::Arc;
+use std::future::Future;
+use std::{pin::Pin, sync::Arc};
 use tracing::{error, info};
 
-pub type AsyncCallback<'a, T> = Box<dyn (Fn(T) -> BoxFuture<'a, ()>) + Send + Sync + 'a>;
+pub type AsyncCallback<'a, T> =
+    Box<dyn (Fn(T) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>) + Send + Sync + 'a>;
 
 #[derive(Clone)]
 pub struct Callbacks<'a> {

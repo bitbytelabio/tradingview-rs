@@ -2,12 +2,12 @@ use dotenv::dotenv;
 use std::env;
 
 use tradingview::{
+    Interval, QuoteValue,
     callback::Callbacks,
     chart::ChartOptions,
     pine_indicator::ScriptType,
     socket::DataServer,
     websocket::{WebSocket, WebSocketClient},
-    Interval, QuoteValue,
 };
 
 #[tokio::main]
@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    let quote_callback = |data: QuoteValue| async move {
+    let quote_callback = async |data: QuoteValue| {
         println!("{:#?}", data);
     };
 
