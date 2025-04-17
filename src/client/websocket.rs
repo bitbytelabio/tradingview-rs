@@ -558,7 +558,7 @@ impl<'a> WebSocket<'a> {
 }
 
 #[async_trait::async_trait]
-impl<'a> Socket for WebSocket<'a> {
+impl Socket for WebSocket<'_> {
     async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.to_owned());
         self.client.handle_events(event, &message.p).await;
