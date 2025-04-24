@@ -12,16 +12,7 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 
 mod models;
 
-/// Fetch full historical series and return it without relying on global/static
-/// state.  
-///
-/// • `cookies` – user auth cookies  
-/// • `symbol`  – market symbol (e.g. "BTCUSD")  
-/// • `exchange`– exchange identifier (e.g. "BINANCE")  
-/// • `interval`– chart interval (e.g. `Interval::Minute`)  
-///
-/// The function spawns a WebSocket, streams bars until the server sends the
-/// `OnSeriesCompleted` event, then closes the socket and returns the data.
+/// Fetch historical chart data from TradingView
 pub async fn fetch_chart_historical(
     auth_token: &str,
     symbol: &str,
@@ -112,7 +103,7 @@ pub async fn fetch_chart_historical(
     // Abort the subscription task and close the websocket
     subscription_handle.abort();
     let mut ws = websocket.lock().await;
-    let _ = ws.close().await;
+    let _ = ws.close().await.ok();
 
     Ok(result)
 }
@@ -123,9 +114,20 @@ mod tests {
 
     use super::*;
 
+    use std::sync::Once;
+
+    fn init() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_max_level(tracing::Level::DEBUG)
+                .init();
+        });
+    }
+
     #[tokio::test]
     async fn test_fetch_chart_historical() -> anyhow::Result<()> {
-        tracing_subscriber::fmt::init();
+        init();
         dotenv::dotenv().ok();
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
         let symbol = "FPT";

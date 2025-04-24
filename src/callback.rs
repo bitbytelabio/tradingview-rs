@@ -29,23 +29,23 @@ impl Default for Callbacks<'_> {
     fn default() -> Self {
         Self {
             on_chart_data: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("default callback logging && handling: {:?}", data) })
+                Box::pin(async move { info!("callback trigger on chart data: {:?}", data) })
             })),
             on_quote_data: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("default callback logging && handling: {:?}", data) })
+                Box::pin(async move { info!("callback trigger on quote data: {:?}", data) })
             })),
             on_study_data: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("default callback logging && handling: {:?}", data) })
+                Box::pin(async move { info!("callback trigger on study data: {:?}", data) })
             })),
 
             on_error: Arc::new(Box::new(|e| {
-                Box::pin(async move { error!("default callback logging && handling: {e}") })
+                Box::pin(async move { error!("callback trigger on error: {e}") })
             })),
             on_symbol_info: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("default callback logging && handling: {:?}", data) })
+                Box::pin(async move { info!("callback trigger on symbol info: {:?}", data) })
             })),
             on_other_event: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("default callback logging && handling: {:?}", data) })
+                Box::pin(async move { info!("callback trigger on other event: {:?}", data) })
             })),
         }
     }
