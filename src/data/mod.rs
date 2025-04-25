@@ -19,7 +19,24 @@ pub async fn fetch_chart_historical(
     exchange: &str,
     interval: Interval,
     server: Option<DataServer>,
+    optons: Option<ChartOptions>,
 ) -> Result<ChartHistoricalData> {
+    let mut bar_count = 500_000;
+    if let Some(opts) = &optons {
+        bar_count = opts.bar_count;
+    }
+
+    // Configure chart options
+    let mut chart_opts = ChartOptions::new(symbol, interval).bar_count(bar_count);
+
+    if let Some(range) = optons.as_ref().and_then(|opts| opts.range.clone()) {
+        chart_opts = chart_opts.range(&range);
+    }
+
+    if let Some(from) = &optons.and_then(|opts| opts.from) {
+        chart_opts = chart_opts.from(*from);
+    }
+
     // Channel to receive incremental bar batches
     let (bar_tx, mut bar_rx) = mpsc::unbounded_channel::<Vec<DataPoint>>();
 
@@ -71,8 +88,6 @@ pub async fn fetch_chart_historical(
     // Create an Arc to safely share the WebSocket between tasks
     let websocket = Arc::new(Mutex::new(websocket));
     let websocket_for_loop = Arc::clone(&websocket);
-    // Configure chart options
-    let chart_opts = ChartOptions::new(symbol, interval).bar_count(500_000);
 
     // Set the market before spawning the task
     {
@@ -134,7 +149,8 @@ mod tests {
         let exchange = "HOSE";
         let interval = Interval::Daily;
         let server = Some(DataServer::ProData);
-        let data = fetch_chart_historical(&auth_token, symbol, exchange, interval, server).await?;
+        let data =
+            fetch_chart_historical(&auth_token, symbol, exchange, interval, server, None).await?;
         println!("Fetched data: {:?}", data);
 
         Ok(())
