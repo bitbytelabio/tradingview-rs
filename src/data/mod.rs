@@ -94,7 +94,6 @@ pub async fn fetch_chart_historical(
         } => {
             // Data collection completed
             tracing::debug!("Data collection completed");
-
         }
         _ = done_rx => {
             // Completion signal received

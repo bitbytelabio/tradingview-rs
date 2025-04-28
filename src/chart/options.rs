@@ -1,28 +1,28 @@
 use iso_currency::Currency;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType};
 
-#[derive(Default, Debug, Clone, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct ChartOptions {
     // Required
     pub symbol: String,
     pub interval: Interval,
-    pub(crate) bar_count: u64,
-
-    pub(crate) range: Option<String>,
-    pub(crate) from: Option<u64>,
-    pub(crate) to: Option<u64>,
-    pub(crate) replay_mode: bool,
-    pub(crate) replay_from: i64,
-    pub(crate) replay_session: Option<String>,
-    pub(crate) adjustment: Option<MarketAdjustment>,
-    pub(crate) currency: Option<Currency>,
-    pub(crate) session_type: Option<SessionType>,
+    // Optional
+    pub bar_count: u64,
+    pub range: Option<String>,
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+    pub replay_mode: bool,
+    pub replay_from: i64,
+    pub replay_session: Option<String>,
+    pub adjustment: Option<MarketAdjustment>,
+    pub currency: Option<Currency>,
+    pub session_type: Option<SessionType>,
     pub study_config: Option<StudyOptions>,
 }
 
-#[derive(Default, Debug, Clone, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct StudyOptions {
     pub script_id: String,
     pub script_version: String,
@@ -34,9 +34,19 @@ impl ChartOptions {
         Self {
             symbol: symbol.to_string(),
             interval,
-            bar_count: 50_000,
+            bar_count: 500_000,
             ..Default::default()
         }
+    }
+
+    pub fn symbol(mut self, symbol: &str) -> Self {
+        self.symbol = symbol.to_string();
+        self
+    }
+
+    pub fn interval(mut self, interval: Interval) -> Self {
+        self.interval = interval;
+        self
     }
 
     pub fn bar_count(mut self, bar_count: u64) -> Self {
