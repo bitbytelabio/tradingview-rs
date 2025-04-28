@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
         println!("{:#?}", data);
     };
 
-    let callbacks = Callbacks::default().on_quote_data(quote_callback);
+    let callbacks: Callbacks<'_> = Callbacks::default().on_quote_data(quote_callback);
 
     let client = WebSocketClient::default().set_callbacks(callbacks);
 

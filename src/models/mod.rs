@@ -103,7 +103,7 @@ pub struct ExchangeSource {
     pub description: String,
 }
 
-#[derive(Debug, Default, Clone, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub enum SessionType {
     #[default]
     Regular,
@@ -123,7 +123,7 @@ impl Display for SessionType {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub enum MarketAdjustment {
     #[default]
     Splits,
@@ -350,7 +350,7 @@ impl Display for Timezone {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize, Serialize, Hash)]
 pub enum Interval {
     OneSecond = 0,
     FiveSeconds = 1,

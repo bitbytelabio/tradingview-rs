@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
+    ChartDrawing, CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType,
+    MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
     error::Error,
     pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
     utils::build_request,
-    ChartDrawing, CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType,
-    MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
 };
 use reqwest::Response;
 use serde_json::Value;
@@ -37,9 +37,9 @@ async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
     Ok(build_request(None)?.get(url).send().await?)
 }
 
-pub async fn search_one_symbol(search: &str, exchange: &str) -> Result<Symbol> {
+pub async fn get_symbol(symbol: &str, exchange: &str) -> Option<Symbol> {
     let search_data = advanced_search_symbol(
-        search,
+        symbol,
         exchange,
         &MarketType::All,
         0,
@@ -51,14 +51,17 @@ pub async fn search_one_symbol(search: &str, exchange: &str) -> Result<Symbol> {
         None,
         None,
     )
-    .await?;
+    .await
+    .ok()?;
+
     let symbol = match search_data.symbols.first() {
         Some(symbol) => symbol,
         None => {
-            return Err(Error::Generic("No symbol found".to_string()));
+            return None;
         }
     };
-    Ok(symbol.to_owned())
+
+    Some(symbol.to_owned())
 }
 
 pub async fn search_symbols(search: &str, exchange: &str) -> Result<Vec<Symbol>> {

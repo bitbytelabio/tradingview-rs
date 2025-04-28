@@ -448,6 +448,11 @@ impl<'a> WebSocket<'a> {
         Ok(self)
     }
 
+    pub async fn close(&mut self) -> Result<()> {
+        self.socket.close().await?;
+        Ok(())
+    }
+
     // End TradingView WebSocket methods
 
     pub async fn set_replay(
