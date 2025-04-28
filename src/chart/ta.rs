@@ -38,7 +38,6 @@ pub fn ema_weighted_linear(close: &[f64], period: u8) -> Result<f64> {
     if close.is_empty() {
         return Ok(NAN);
     }
-
     todo!("Implement weighted linear EMA");
 }
 
@@ -65,9 +64,8 @@ mod tests {
         init();
         dotenv::dotenv().ok();
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
-        let symbol = "HOSE:FPT";
         let interval = Interval::Daily;
-        let option = ChartOptions::new(symbol, interval).bar_count(40);
+        let option = ChartOptions::new("FPT", "HOSE", interval).bar_count(30);
         let server = Some(DataServer::ProData);
         let data = fetch_chart_historical(&auth_token, option, server).await?;
 
@@ -79,25 +77,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_ema() -> anyhow::Result<()> {
-        // init();
-        // dotenv::dotenv().ok();
-        // let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
-        // let symbol = "HOSE:FPT";
-        // let interval = Interval::Daily;
-        // let option = ChartOptions::new(symbol, interval).bar_count(10);
-        // let server = Some(DataServer::ProData);
-        // let data = fetch_chart_historical(&auth_token, option, server).await?;
-        // println!("Fetched data: {:?}", data.data.len());
-        // let close_prices: Vec<f64> = data.data.iter().map(|x| x.close()).collect();
-        // println!("Close Prices: {:?}", close_prices);
-
-        let result = ema_recursive(
-            &[
-                116000.0, 107900.0, 109400.0, 111600.0, 111700.0, 110400.0, 110400.0, 112000.0,
-                112400.0, 109500.0,
-            ],
-            14,
-        )?;
+        init();
+        dotenv::dotenv().ok();
+        let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
+        let interval = Interval::Daily;
+        let option = ChartOptions::new("FPT", "HOSE", interval).bar_count(20);
+        let server = Some(DataServer::ProData);
+        let data = fetch_chart_historical(&auth_token, option, server).await?;
+        println!("Fetched data: {:?}", data.data.len());
+        let close_prices: Vec<f64> = data.data.iter().map(|x| x.close()).collect();
+        println!("Close Prices: {:?}", close_prices);
+        let result = ema_recursive(&close_prices, 14)?;
         println!("EMA: {:?}", result);
         Ok(())
     }

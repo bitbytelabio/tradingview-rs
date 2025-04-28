@@ -26,14 +26,14 @@ async fn main() -> anyhow::Result<()> {
 
     let client = WebSocketClient::default().set_callbacks(callbacks);
 
-    let mut websocket = WebSocket::new()
+    let websocket = WebSocket::new()
         .server(DataServer::ProData)
         .auth_token(&auth_token)
         .client(client)
         .build()
         .await?;
 
-    let opts = ChartOptions::new("UPCOM:ACV", Interval::Daily)
+    let opts = ChartOptions::new("ACV", "UPCOM", Interval::Daily)
         .bar_count(1)
         .study_config(
             &buildins[0].script_id,

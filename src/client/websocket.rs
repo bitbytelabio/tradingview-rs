@@ -521,21 +521,15 @@ impl<'a> WebSocket<'a> {
         let series_id = format!("sds_{}", series_count);
         let series_version = format!("s{}", series_count);
         let chart_session = gen_session_id("cs");
-
+        let symbol = format!("{}:{}", options.exchange, options.symbol);
         self.create_chart_session(&chart_session).await?;
 
         if options.replay_mode {
-            self.set_replay(&options.symbol, &options, &chart_session, &symbol_series_id)
+            self.set_replay(&symbol, &options, &chart_session, &symbol_series_id)
                 .await?;
         } else {
-            self.resolve_symbol(
-                &chart_session,
-                &symbol_series_id,
-                &options.symbol,
-                &options,
-                None,
-            )
-            .await?;
+            self.resolve_symbol(&chart_session, &symbol_series_id, &symbol, &options, None)
+                .await?;
         }
 
         self.create_series(
