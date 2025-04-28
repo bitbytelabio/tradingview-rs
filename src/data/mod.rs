@@ -1,5 +1,5 @@
 use crate::{
-    DataPoint, Interval, Result,
+    DataPoint, Result,
     callback::Callbacks,
     chart::ChartOptions,
     socket::{DataServer, TradingViewDataEvent},
@@ -15,28 +15,9 @@ mod models;
 /// Fetch historical chart data from TradingView
 pub async fn fetch_chart_historical(
     auth_token: &str,
-    symbol: &str,
-    exchange: &str,
-    interval: Interval,
+    options: ChartOptions,
     server: Option<DataServer>,
-    optons: Option<ChartOptions>,
 ) -> Result<ChartHistoricalData> {
-    let mut bar_count = 500_000;
-    if let Some(opts) = &optons {
-        bar_count = opts.bar_count;
-    }
-
-    // Configure chart options
-    let mut chart_opts = ChartOptions::new(symbol, interval).bar_count(bar_count);
-
-    if let Some(range) = optons.as_ref().and_then(|opts| opts.range.clone()) {
-        chart_opts = chart_opts.range(&range);
-    }
-
-    if let Some(from) = &optons.and_then(|opts| opts.from) {
-        chart_opts = chart_opts.from(*from);
-    }
-
     // Channel to receive incremental bar batches
     let (bar_tx, mut bar_rx) = mpsc::unbounded_channel::<Vec<DataPoint>>();
 
@@ -92,7 +73,7 @@ pub async fn fetch_chart_historical(
     // Set the market before spawning the task
     {
         let mut ws = websocket.lock().await;
-        ws.set_market(chart_opts).await?;
+        ws.set_market(options.clone()).await?;
     }
 
     // Spawn WebSocket subscription loop in background
@@ -102,23 +83,27 @@ pub async fn fetch_chart_historical(
     });
 
     // --------------------------------- Accumulate -------------------------------- //
-    let mut result = ChartHistoricalData::new(symbol, exchange, interval);
+    let mut result = ChartHistoricalData::new(&options);
     // Collect data until we receive the completion signal
     tokio::select! {
         _ = async {
             while let Some(points) = bar_rx.recv().await {
-                result.add_points(points);
+                tracing::debug!("Received data points: {:?}", points);
+                result.data.extend(points);
             }
-        } => {}
+        } => {
+            // Data collection completed
+            tracing::debug!("Data collection completed");
+
+        }
         _ = done_rx => {
-            // Series completed signal received
+            // Completion signal received
+            tracing::debug!("Received completion signal");
+            subscription_handle.abort();
+            let mut ws = websocket.lock().await;
+            let _ = ws.close().await.ok();
         }
     }
-
-    // Abort the subscription task and close the websocket
-    subscription_handle.abort();
-    let mut ws = websocket.lock().await;
-    let _ = ws.close().await.ok();
 
     Ok(result)
 }
@@ -126,6 +111,8 @@ pub async fn fetch_chart_historical(
 #[cfg(test)]
 mod tests {
     use anyhow::Ok;
+
+    use crate::Interval;
 
     use super::*;
 
@@ -145,14 +132,17 @@ mod tests {
         init();
         dotenv::dotenv().ok();
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
-        let symbol = "FPT";
-        let exchange = "HOSE";
+        let symbol = "HOSE:FPT";
         let interval = Interval::Daily;
+        let option = ChartOptions::new(symbol, interval).bar_count(10);
         let server = Some(DataServer::ProData);
-        let data =
-            fetch_chart_historical(&auth_token, symbol, exchange, interval, server, None).await?;
-        println!("Fetched data: {:?}", data);
-
+        let data = fetch_chart_historical(&auth_token, option, server).await?;
+        // println!("Fetched data: {:?}", data.data.len());
+        // println!("First data point: {:?}", data);
+        assert!(!data.data.is_empty(), "Data should not be empty");
+        assert_eq!(data.data.len(), 10, "Data length should be 10");
+        assert_eq!(data.options.symbol, symbol, "Symbol should match");
+        assert_eq!(data.options.interval, interval, "Interval should match");
         Ok(())
     }
 }

@@ -1,8 +1,9 @@
 use iso_currency::Currency;
+use serde::Serialize;
 
 use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType};
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize)]
 pub struct ChartOptions {
     // Required
     pub symbol: String,
@@ -21,7 +22,7 @@ pub struct ChartOptions {
     pub study_config: Option<StudyOptions>,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize)]
 pub struct StudyOptions {
     pub script_id: String,
     pub script_version: String,

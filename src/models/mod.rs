@@ -123,7 +123,7 @@ impl Display for SessionType {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub enum MarketAdjustment {
     #[default]
     Splits,
