@@ -46,6 +46,9 @@ pub enum Error {
     IOError(#[from] std::io::Error),
     #[error("TradingView error")]
     TradingViewError(#[from] TradingViewError),
+    #[cfg(feature = "technical-analysis")]
+    #[error("TA error")]
+    TechnicalAnalysisError(#[from] yata::prelude::Error),
 }
 
 #[derive(Debug, Clone, Error, PartialEq, Eq, Hash)]
