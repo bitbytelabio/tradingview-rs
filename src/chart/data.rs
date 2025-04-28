@@ -1,16 +1,13 @@
 use crate::{
-    DataPoint, Result,
+    ChartHistoricalData, DataPoint, Result,
     callback::Callbacks,
     chart::ChartOptions,
     socket::{DataServer, TradingViewDataEvent},
     websocket::{WebSocket, WebSocketClient},
 };
-pub use models::*;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock, mpsc, oneshot};
-
-mod models;
 
 /// Fetch historical chart data from TradingView
 pub async fn fetch_chart_historical(
@@ -61,7 +58,7 @@ pub async fn fetch_chart_historical(
 
     let websocket = WebSocket::new()
         .server(server.unwrap_or(DataServer::ProData))
-        .auth_token(&auth_token)
+        .auth_token(auth_token)
         .client(client)
         .build()
         .await?;

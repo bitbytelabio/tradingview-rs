@@ -1,3 +1,4 @@
+use super::ChartOptions;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -24,6 +25,21 @@ impl std::fmt::Display for ChartType {
             ChartType::Range => "BarSetRange@tv-basicstudies-72!",
         };
         write!(f, "{}", chart_type)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ChartHistoricalData {
+    pub options: ChartOptions,
+    pub data: Vec<DataPoint>,
+}
+
+impl ChartHistoricalData {
+    pub fn new(opt: &ChartOptions) -> Self {
+        Self {
+            options: opt.clone(),
+            data: Vec::new(),
+        }
     }
 }
 
