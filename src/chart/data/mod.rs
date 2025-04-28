@@ -101,11 +101,10 @@ pub async fn fetch_chart_historical(
 
             let ws = websocket.read().await;
             let _ = ws.delete().await.ok();
-            subscription_handle.abort();
-
         }
     }
 
+    subscription_handle.abort();
     Ok(result)
 }
 

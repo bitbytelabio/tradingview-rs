@@ -67,7 +67,7 @@ mod tests {
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
         let symbol = "HOSE:FPT";
         let interval = Interval::Daily;
-        let option = ChartOptions::new(symbol, interval).bar_count(10_000);
+        let option = ChartOptions::new(symbol, interval).bar_count(40);
         let server = Some(DataServer::ProData);
         let data = fetch_chart_historical(&auth_token, option, server).await?;
 
