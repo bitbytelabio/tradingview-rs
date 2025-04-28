@@ -64,6 +64,8 @@ pub struct DataPoint {
     pub value: Vec<f64>,
 }
 
+impl DataPoint {}
+
 #[cfg(feature = "technical-analysis")]
 impl OHLCV for DataPoint {
     fn open(&self) -> f64 {

@@ -8,7 +8,7 @@ use crate::{
 pub use models::*;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::sync::{Mutex, RwLock, mpsc, oneshot};
 
 mod models;
 
@@ -67,18 +67,18 @@ pub async fn fetch_chart_historical(
         .await?;
 
     // Create an Arc to safely share the WebSocket between tasks
-    let websocket = Arc::new(Mutex::new(websocket));
+    let websocket = Arc::new(RwLock::new(websocket));
     let websocket_for_loop = Arc::clone(&websocket);
 
     // Set the market before spawning the task
     {
-        let mut ws = websocket.lock().await;
+        let ws = websocket.read().await;
         ws.set_market(options.clone()).await?;
     }
 
     // Spawn WebSocket subscription loop in background
     let subscription_handle = tokio::spawn(async move {
-        let mut ws = websocket_for_loop.lock().await;
+        let ws = websocket_for_loop.read().await;
         ws.subscribe().await;
     });
 
@@ -98,9 +98,11 @@ pub async fn fetch_chart_historical(
         _ = done_rx => {
             // Completion signal received
             tracing::debug!("Received completion signal");
+
+            let ws = websocket.read().await;
+            let _ = ws.delete().await.ok();
             subscription_handle.abort();
-            let mut ws = websocket.lock().await;
-            let _ = ws.close().await.ok();
+
         }
     }
 

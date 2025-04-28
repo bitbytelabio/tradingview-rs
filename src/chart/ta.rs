@@ -1,3 +1,5 @@
+use std::f64::NAN;
+
 use crate::{DataPoint, Result};
 use yata::core::IndicatorResult;
 use yata::indicators::RelativeStrengthIndex as RSI;
@@ -20,19 +22,24 @@ pub fn rsi(ohlcv: &[DataPoint]) -> Result<Vec<IndicatorResult>> {
     Ok(rsi_values)
 }
 
-pub fn ema(ohlcv: &[DataPoint], period: u8) -> Result<Vec<f64>> {
-    if ohlcv.is_empty() {
-        return Ok(Vec::new());
+pub fn ema_recursive(close: &[f64], period: u8) -> Result<f64> {
+    if close.is_empty() {
+        return Ok(NAN);
+    }
+    let mut ema = EMA::new(period, &close[0])?;
+    for price in close.iter().skip(1) {
+        let value = ema.next(&price);
+        return Ok(value);
+    }
+    Ok(NAN)
+}
+
+pub fn ema_weighted_linear(close: &[f64], period: u8) -> Result<f64> {
+    if close.is_empty() {
+        return Ok(NAN);
     }
 
-    let mut ema = EMA::new(period, &ohlcv[0].close())?;
-    let mut ema_values = Vec::with_capacity(ohlcv.len());
-    for price in ohlcv.iter().skip(1) {
-        let value = ema.next(&price.close());
-        ema_values.push(value);
-    }
-
-    Ok(ema_values)
+    todo!("Implement weighted linear EMA");
 }
 
 #[cfg(test)]
@@ -40,7 +47,7 @@ mod tests {
     use super::*;
     use crate::Interval;
     use crate::chart::ChartOptions;
-    use crate::data::fetch_chart_historical;
+    use crate::chart::data::fetch_chart_historical;
     use crate::socket::DataServer;
     use anyhow::Ok;
     use std::sync::Once;
@@ -72,17 +79,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_ema() -> anyhow::Result<()> {
-        init();
-        dotenv::dotenv().ok();
-        let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
-        let symbol = "HOSE:FPT";
-        let interval = Interval::Daily;
-        let option = ChartOptions::new(symbol, interval).bar_count(10_000);
-        let server = Some(DataServer::ProData);
-        let data = fetch_chart_historical(&auth_token, option, server).await?;
+        // init();
+        // dotenv::dotenv().ok();
+        // let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
+        // let symbol = "HOSE:FPT";
+        // let interval = Interval::Daily;
+        // let option = ChartOptions::new(symbol, interval).bar_count(10);
+        // let server = Some(DataServer::ProData);
+        // let data = fetch_chart_historical(&auth_token, option, server).await?;
+        // println!("Fetched data: {:?}", data.data.len());
+        // let close_prices: Vec<f64> = data.data.iter().map(|x| x.close()).collect();
+        // println!("Close Prices: {:?}", close_prices);
 
-        println!("Fetched data: {:?}", data.data.len());
-        let result = ema(&data.data, 14)?;
+        let result = ema_recursive(
+            &[
+                116000.0, 107900.0, 109400.0, 111600.0, 111700.0, 110400.0, 110400.0, 112000.0,
+                112400.0, 109500.0,
+            ],
+            14,
+        )?;
         println!("EMA: {:?}", result);
         Ok(())
     }
