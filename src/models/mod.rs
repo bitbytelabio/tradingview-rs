@@ -375,6 +375,34 @@ pub enum Interval {
     Yearly = 19,
 }
 
+impl From<&str> for Interval {
+    fn from(value: &str) -> Self {
+        match value {
+            "1s" => Interval::OneSecond,
+            "5s" => Interval::FiveSeconds,
+            "10s" => Interval::TenSeconds,
+            "15s" => Interval::FifteenSeconds,
+            "30s" => Interval::ThirtySeconds,
+            "1m" => Interval::OneMinute,
+            "3m" => Interval::ThreeMinutes,
+            "5m" => Interval::FiveMinutes,
+            "15m" => Interval::FifteenMinutes,
+            "30m" => Interval::ThirtyMinutes,
+            "45m" => Interval::FortyFiveMinutes,
+            "1h" => Interval::OneHour,
+            "2h" => Interval::TwoHours,
+            "4h" => Interval::FourHours,
+            "1d" => Interval::Daily,
+            "7d" => Interval::Weekly,
+            "30d" => Interval::Monthly,
+            "120d" => Interval::Quarterly,
+            "180d" => Interval::SixMonths,
+            "1y" => Interval::Yearly,
+            _ => panic!("Invalid interval: {}", value),
+        }
+    }
+}
+
 impl Display for Interval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let time_interval = match self {
