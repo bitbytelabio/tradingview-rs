@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
+    Result,
     chart::study::{IndicatorInput, InputValue},
     client::misc::get_indicator_metadata,
     models::{FinancialPeriod, UserCookies},
-    Result,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -169,7 +169,7 @@ pub struct PineInput {
     pub input_type: String,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 pub enum ScriptType {
     #[default]
     Script,

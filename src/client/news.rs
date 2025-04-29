@@ -1,6 +1,6 @@
 use crate::{
-    utils::get, MarketType, News, NewsArea, NewsContent, NewsHeadlines, NewsSection, Result,
-    UserCookies,
+    MarketType, News, NewsArea, NewsContent, NewsHeadlines, NewsSection, Result, UserCookies,
+    utils::get,
 };
 
 static BASE_NEWS_URL: &str = "https://news-headlines.tradingview.com/v2";

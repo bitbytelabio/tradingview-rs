@@ -12,7 +12,7 @@ use futures_util::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::{net::TcpStream, sync::Mutex};
+use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
     tungstenite::{
@@ -167,8 +167,8 @@ impl std::fmt::Display for DataServer {
 pub struct SocketSession {
     server: Arc<DataServer>,
     auth_token: Arc<String>,
-    read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
-    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
 }
 
 impl SocketSession {
@@ -229,8 +229,8 @@ impl SocketSession {
             self.auth_token.clone().as_ref(),
         )
         .await?;
-        self.write = Arc::from(Mutex::new(write));
-        self.read = Arc::from(Mutex::new(read));
+        self.write = Arc::from(RwLock::new(write));
+        self.read = Arc::from(RwLock::new(read));
         Ok(())
     }
 
@@ -243,8 +243,8 @@ impl SocketSession {
     pub async fn new(server: DataServer, auth_token: String) -> Result<SocketSession> {
         let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
 
-        let write = Arc::from(Mutex::new(write_stream));
-        let read = Arc::from(Mutex::new(read_stream));
+        let write = Arc::from(RwLock::new(write_stream));
+        let read = Arc::from(RwLock::new(read_stream));
         let server = Arc::new(server);
         let auth_token = Arc::new(auth_token);
 
@@ -256,29 +256,29 @@ impl SocketSession {
         })
     }
 
-    pub async fn send(&mut self, m: &str, p: &[Value]) -> Result<()> {
+    pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
         self.write
-            .lock()
+            .write()
             .await
             .send(SocketMessageSer::new(m, p).to_message()?)
             .await?;
         Ok(())
     }
 
-    pub async fn ping(&mut self, ping: &Message) -> Result<()> {
-        self.write.lock().await.send(ping.clone()).await?;
+    pub async fn ping(&self, ping: &Message) -> Result<()> {
+        self.write.write().await.send(ping.clone()).await?;
         trace!("sent ping message {}", ping);
         Ok(())
     }
 
-    pub async fn close(&mut self) -> Result<()> {
-        self.write.lock().await.close().await?;
+    pub async fn close(&self) -> Result<()> {
+        self.write.write().await.close().await?;
         Ok(())
     }
 
-    pub async fn update_token(&mut self, auth_token: &str) -> Result<()> {
+    pub async fn update_token(&self, auth_token: &str) -> Result<()> {
         self.write
-            .lock()
+            .write()
             .await
             .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
             .await?;
@@ -288,9 +288,9 @@ impl SocketSession {
 
 #[async_trait::async_trait]
 pub trait Socket {
-    async fn event_loop(&mut self, session: &mut SocketSession) {
+    async fn event_loop(&self, session: &SocketSession) {
         let read = session.read.clone();
-        let mut read_guard = read.lock().await;
+        let mut read_guard = read.write().await;
         loop {
             trace!("waiting for next message");
             match read_guard.next().await {
@@ -307,7 +307,7 @@ pub trait Socket {
         }
     }
 
-    async fn handle_raw_messages(&mut self, session: &mut SocketSession, raw: Message) {
+    async fn handle_raw_messages(&self, session: &SocketSession, raw: Message) {
         match &raw {
             Message::Text(text) => {
                 trace!("parsing message: {:?}", text);
@@ -334,8 +334,8 @@ pub trait Socket {
     }
 
     async fn handle_parsed_messages(
-        &mut self,
-        session: &mut SocketSession,
+        &self,
+        session: &SocketSession,
         messages: Vec<SocketMessage<SocketMessageDe>>,
         raw: &Message,
     ) {
@@ -367,7 +367,7 @@ pub trait Socket {
         }
     }
 
-    async fn handle_message_data(&mut self, message: SocketMessageDe) -> Result<()>;
+    async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()>;
 
     async fn handle_error(&self, error: Error);
 }

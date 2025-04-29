@@ -1,5 +1,9 @@
+use super::ChartOptions;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+#[cfg(feature = "technical-analysis")]
+use yata::prelude::OHLCV;
 
 pub enum ChartType {
     HeikinAshi,
@@ -21,6 +25,21 @@ impl std::fmt::Display for ChartType {
             ChartType::Range => "BarSetRange@tv-basicstudies-72!",
         };
         write!(f, "{}", chart_type)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ChartHistoricalData {
+    pub options: ChartOptions,
+    pub data: Vec<DataPoint>,
+}
+
+impl ChartHistoricalData {
+    pub fn new(opt: &ChartOptions) -> Self {
+        Self {
+            options: opt.clone(),
+            data: Vec::new(),
+        }
     }
 }
 
@@ -59,6 +78,46 @@ pub struct DataPoint {
     #[cfg_attr(feature = "protobuf", prost(double, repeated, tag = "2"))]
     #[serde(rename(deserialize = "v"))]
     pub value: Vec<f64>,
+}
+
+impl DataPoint {}
+
+#[cfg(feature = "technical-analysis")]
+impl OHLCV for DataPoint {
+    fn open(&self) -> f64 {
+        if self.value.len() < 6 {
+            return f64::NAN;
+        }
+        self.value[1]
+    }
+
+    fn high(&self) -> f64 {
+        if self.value.len() < 6 {
+            return f64::NAN;
+        }
+        self.value[2]
+    }
+
+    fn low(&self) -> f64 {
+        if self.value.len() < 6 {
+            return f64::NAN;
+        }
+        self.value[3]
+    }
+
+    fn close(&self) -> f64 {
+        if self.value.len() < 6 {
+            return f64::NAN;
+        }
+        self.value[4]
+    }
+
+    fn volume(&self) -> f64 {
+        if self.value.len() < 6 {
+            return f64::NAN;
+        }
+        self.value[5]
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
