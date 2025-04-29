@@ -34,9 +34,9 @@ struct Metadata {
     series: HashMap<String, SeriesInfo>,
     studies_count: u16,
     studies: HashMap<String, String>,
-    quotes: HashMap<String, QuoteValue>,
+    quotes: Arc<RwLock<HashMap<String, QuoteValue>>>,
     quote_session: String,
-    chart_data_cache: Arc<RwLock<Option<Vec<DataPoint>>>>,
+    chart: Arc<RwLock<Option<Vec<DataPoint>>>>,
 }
 
 #[derive(Clone)]
@@ -635,19 +635,19 @@ impl WebSocketClient {
             }
             TradingViewDataEvent::OnReplayPoint => {
                 debug!("replay point: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_point)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayInstanceId => {
                 debug!("replay instance id: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_instance_id)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayResolutions => {
                 debug!("replay resolutions: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_resolutions)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayDataEnd => {
                 debug!("replay data end: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_data_end)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyLoading => {
                 debug!("study loading: {:?}", message);
@@ -682,19 +682,14 @@ impl WebSocketClient {
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let data = ChartResponseData::deserialize(resp_data)?.series;
-                    self.metadata.chart_data_cache.write().await.replace(data);
+                    self.metadata.chart.write().await.replace(data);
                     debug!(
                         "series data extracted: {:?}",
-                        self.metadata.chart_data_cache.read().await
+                        self.metadata.chart.read().await
                     );
                     (self.callbacks.on_chart_data)((
                         s.options.clone(),
-                        self.metadata
-                            .chart_data_cache
-                            .read()
-                            .await
-                            .clone()
-                            .unwrap_or_default(),
+                        self.metadata.chart.read().await.clone().unwrap_or_default(),
                     ));
                 }
                 None => {
@@ -726,17 +721,21 @@ impl WebSocketClient {
         Ok(())
     }
 
-    async fn handle_quote_data(&mut self, message: &[Value]) {
+    async fn handle_quote_data(&self, message: &[Value]) {
         debug!("received raw quote data: {:?}", message);
         let qsd = QuoteData::deserialize(&message[1]).unwrap_or_default();
         if qsd.status == "ok" {
-            if let Some(prev_quote) = self.metadata.quotes.get_mut(&qsd.name) {
+            if let Some(prev_quote) = self.metadata.quotes.write().await.get_mut(&qsd.name) {
                 *prev_quote = merge_quotes(prev_quote, &qsd.value);
             } else {
-                self.metadata.quotes.insert(qsd.name, qsd.value);
+                self.metadata
+                    .quotes
+                    .write()
+                    .await
+                    .insert(qsd.name, qsd.value);
             }
 
-            for q in self.metadata.quotes.values() {
+            for q in self.metadata.quotes.read().await.values() {
                 debug!("quote data: {:?}", q);
                 (self.callbacks.on_quote_data)(q.to_owned());
             }
