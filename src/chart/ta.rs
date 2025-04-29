@@ -34,7 +34,7 @@ pub fn ema_recursive(close: &[f64], period: u8) -> Result<f64> {
     Ok(NAN)
 }
 
-pub fn ema_weighted_linear(close: &[f64], period: u8) -> Result<f64> {
+pub fn ema_weighted_linear(close: &[f64], _period: u8) -> Result<f64> {
     if close.is_empty() {
         return Ok(NAN);
     }

@@ -19,10 +19,10 @@ async fn main() -> anyhow::Result<()> {
 
     let buildins = get_builtin_indicators(BuiltinIndicators::Fundamental).await?;
     println!("{:#?}", buildins[0]);
-    let study_callback = async |data| {
+    let study_callback = |data| {
         println!("{:#?}", data);
     };
-    let callbacks: Callbacks<'_> = Callbacks::default().on_study_data(study_callback);
+    let callbacks: Callbacks = Callbacks::default().on_study_data(study_callback);
 
     let client = WebSocketClient::default().set_callbacks(callbacks);
 

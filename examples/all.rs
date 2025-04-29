@@ -16,11 +16,11 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    let quote_callback = async |data: QuoteValue| {
+    let quote_callback = |data: QuoteValue| {
         println!("{:#?}", data);
     };
 
-    let callbacks: Callbacks<'_> = Callbacks::default().on_quote_data(quote_callback);
+    let callbacks: Callbacks = Callbacks::default().on_quote_data(quote_callback);
 
     let client = WebSocketClient::default().set_callbacks(callbacks);
 

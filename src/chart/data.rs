@@ -7,10 +7,7 @@ use crate::{
 };
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::{
-    sync::{Mutex, mpsc, oneshot},
-    time::sleep,
-};
+use tokio::sync::{Mutex, mpsc, oneshot};
 
 /// Fetch historical chart data from TradingView
 pub async fn fetch_chart_historical(
@@ -18,26 +15,32 @@ pub async fn fetch_chart_historical(
     options: ChartOptions,
     server: Option<DataServer>,
 ) -> Result<ChartHistoricalData> {
-    // Channel to receive incremental bar batches
-    let (bar_tx, mut bar_rx) = mpsc::unbounded_channel::<Vec<DataPoint>>();
+    // Use a bounded channel with sufficient capacity to provide backpressure if needed
+    let (bar_tx, mut bar_rx) = mpsc::channel::<Vec<DataPoint>>(100);
 
     // One-shot channel for series completion signal
     let (done_tx, done_rx) = oneshot::channel::<()>();
 
-    // Create callback functions using Arc to ensure they live long enough
-    let bar_tx = Arc::new(bar_tx);
-    // Wrap the oneshot sender in an Arc<Mutex> since it's not Clone
+    // Create callback functions using Arc<Mutex> to ensure thread-safe access
+    let bar_tx = Arc::new(Mutex::new(bar_tx));
     let done_tx = Arc::new(Mutex::new(Some(done_tx)));
-
     // Clone for callbacks to move into closures
     let bar_tx_clone = Arc::clone(&bar_tx);
 
     let callbacks = Callbacks::default()
         .on_chart_data(move |(_, data_points): (ChartOptions, Vec<DataPoint>)| {
+            tracing::debug!("Received data batch with {} points", data_points.len());
             let sender = bar_tx_clone.clone();
-            async move {
-                let _ = sender.send(data_points);
-            }
+            let points = data_points.to_vec();
+
+            // Spawn the async work and return ()
+            tokio::spawn(async move {
+                // Acquire mutex lock to send data points
+                let tx = sender.lock().await;
+                if let Err(e) = tx.send(points).await {
+                    tracing::error!("Failed to send data points: {}", e);
+                }
+            });
         })
         .on_other_event({
             // Create a clone for the closure
@@ -45,14 +48,18 @@ pub async fn fetch_chart_historical(
 
             move |(event, _): (TradingViewDataEvent, Vec<Value>)| {
                 let done_sender = Arc::clone(&done_sender);
-                async move {
+
+                tokio::spawn(async move {
                     if matches!(event, TradingViewDataEvent::OnSeriesCompleted) {
+                        // Wait a small amount of time to ensure all data is processed
+                        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
                         // Take the sender out of the Option and send the signal
                         if let Some(sender) = done_sender.lock().await.take() {
                             let _ = sender.send(());
                         }
                     }
-                }
+                });
             }
         });
 
@@ -79,25 +86,43 @@ pub async fn fetch_chart_historical(
 
     // --------------------------------- Accumulate -------------------------------- //
     let mut result = ChartHistoricalData::new(&options);
-    // Collect data until we receive the completion signal
-    tokio::select! {
-        _ = async {
-            while let Some(points) = bar_rx.recv().await {
-                tracing::debug!("Received data points: {:?}", points);
+
+    // Create a future that completes when done_rx receives a value
+    let mut completion_future = Box::pin(done_rx);
+
+    // Use a loop with tokio::select! that doesn't consume the completion future
+    loop {
+        tokio::select! {
+            Some(points) = bar_rx.recv() => {
+                tracing::debug!("Processing batch of {} data points", points.len());
                 result.data.extend(points);
             }
-        } => {
-            // Data collection completed
-            tracing::debug!("Data collection completed");
-        }
-        _ = done_rx => {
-            // Completion signal received
-            tracing::debug!("Received completion signal");
-            sleep(std::time::Duration::from_secs(2)).await;
-            let _ = websocket.delete().await.ok();
+            _ = &mut completion_future => {
+                tracing::debug!("Completion signal received");
+                // Process any remaining data points
+                while let Ok(Some(points)) = tokio::time::timeout(
+                    tokio::time::Duration::from_millis(100),
+                    bar_rx.recv()
+                ).await {
+                    tracing::debug!("Processing final batch of {} data points", points.len());
+                    result.data.extend(points);
+                }
+                break;
+            }
         }
     }
+
+    // Ensure the WebSocket is properly closed
+    let _ = websocket.delete().await;
     subscription_handle.abort();
+
+    // Give a little extra time for any final cleanup
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    tracing::debug!(
+        "Data collection completed with {} points",
+        result.data.len()
+    );
     Ok(result)
 }
 
