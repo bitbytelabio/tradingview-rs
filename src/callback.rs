@@ -5,107 +5,209 @@ use crate::{
         models::{DataPoint, StudyResponseData, SymbolInfo},
     },
     quote::models::QuoteValue,
-    socket::TradingViewDataEvent,
 };
 use serde_json::Value;
-use std::future::Future;
-use std::{pin::Pin, sync::Arc};
-use tracing::{error, info};
+use std::sync::Arc;
+use tracing::info;
 
-pub type AsyncCallback<'a, T> =
-    Box<dyn (Fn(T) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>) + Send + Sync + 'a>;
+pub type Callback<T> = Box<dyn (Fn(T) -> ()) + Send + Sync>;
 
 #[derive(Clone)]
-pub struct Callbacks<'a> {
-    pub(crate) on_chart_data: Arc<AsyncCallback<'a, (ChartOptions, Vec<DataPoint>)>>,
-    pub(crate) on_quote_data: Arc<AsyncCallback<'a, QuoteValue>>,
-    pub(crate) on_study_data: Arc<AsyncCallback<'a, (StudyOptions, StudyResponseData)>>,
-    pub(crate) on_error: Arc<AsyncCallback<'a, Error>>,
-    pub(crate) on_symbol_info: Arc<AsyncCallback<'a, SymbolInfo>>,
-    pub(crate) on_other_event: Arc<AsyncCallback<'a, (TradingViewDataEvent, Vec<Value>)>>,
+pub struct Callbacks {
+    pub on_symbol_info: Arc<Callback<SymbolInfo>>,
+
+    pub on_series_loading: Arc<Callback<Vec<Value>>>,
+    pub on_chart_data: Arc<Callback<(ChartOptions, Vec<DataPoint>)>>,
+    pub on_series_completed: Arc<Callback<Vec<Value>>>,
+
+    pub on_study_loading: Arc<Callback<Vec<Value>>>,
+    pub on_study_data: Arc<Callback<(StudyOptions, StudyResponseData)>>,
+    pub on_study_completed: Arc<Callback<Vec<Value>>>,
+
+    pub on_quote_data: Arc<Callback<QuoteValue>>,
+    pub on_quote_completed: Arc<Callback<Vec<Value>>>,
+
+    pub on_replay_ok: Arc<Callback<Vec<Value>>>,
+    pub on_replay_point: Arc<Callback<Vec<Value>>>,
+    pub on_replay_instance_id: Arc<Callback<Vec<Value>>>,
+    pub on_replay_resolutions: Arc<Callback<Vec<Value>>>,
+    pub on_replay_data_end: Arc<Callback<Vec<Value>>>,
+
+    pub on_error: Arc<Callback<(Error, Vec<Value>)>>,
+    pub on_unknown_event: Arc<Callback<(String, Vec<Value>)>>,
 }
 
-impl Default for Callbacks<'_> {
+impl Default for Callbacks {
     fn default() -> Self {
         Self {
             on_chart_data: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("callback trigger on chart data: {:?}", data) })
+                info!("callback trigger on chart data: {:?}", data);
             })),
             on_quote_data: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("callback trigger on quote data: {:?}", data) })
+                info!("callback trigger on quote data: {:?}", data);
             })),
             on_study_data: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("callback trigger on study data: {:?}", data) })
+                info!("callback trigger on study data: {:?}", data);
             })),
 
-            on_error: Arc::new(Box::new(|e| {
-                Box::pin(async move { error!("callback trigger on error: {e}") })
+            on_error: Arc::new(Box::new(|data| {
+                info!("callback trigger on error: {:?}", data);
             })),
             on_symbol_info: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("callback trigger on symbol info: {:?}", data) })
+                info!("callback trigger on symbol info: {:?}", data);
             })),
-            on_other_event: Arc::new(Box::new(|data| {
-                Box::pin(async move { info!("callback trigger on other event: {:?}", data) })
+
+            on_series_completed: Arc::new(Box::new(|data| {
+                info!("callback trigger on series completed: {:?}", data);
+            })),
+            on_series_loading: Arc::new(Box::new(|data| {
+                info!("callback trigger on series loading: {:?}", data);
+            })),
+            on_quote_completed: Arc::new(Box::new(|data| {
+                info!("callback trigger on quote completed: {:?}", data);
+            })),
+            on_replay_ok: Arc::new(Box::new(|data| {
+                info!("callback trigger on replay ok: {:?}", data);
+            })),
+            on_replay_point: Arc::new(Box::new(|data| {
+                info!("callback trigger on replay point: {:?}", data);
+            })),
+            on_replay_instance_id: Arc::new(Box::new(|data| {
+                info!("callback trigger on replay instance id: {:?}", data);
+            })),
+            on_replay_resolutions: Arc::new(Box::new(|data| {
+                info!("callback trigger on replay resolutions: {:?}", data);
+            })),
+            on_replay_data_end: Arc::new(Box::new(|data| {
+                info!("callback trigger on replay data end: {:?}", data);
+            })),
+            on_study_loading: Arc::new(Box::new(|data| {
+                info!("callback trigger on study loading: {:?}", data);
+            })),
+            on_study_completed: Arc::new(Box::new(|data| {
+                info!("callback trigger on study completed: {:?}", data);
+            })),
+            on_unknown_event: Arc::new(Box::new(|data| {
+                info!("callback trigger on unknown event: {:?}", data);
             })),
         }
     }
 }
 
-impl<'a> Callbacks<'a> {
-    pub fn on_chart_data<Fut>(
+impl Callbacks {
+    pub fn on_chart_data(
         mut self,
-        f: impl Fn((ChartOptions, Vec<DataPoint>)) -> Fut + Send + Sync + 'a,
-    ) -> Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_chart_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        f: impl Fn((ChartOptions, Vec<DataPoint>)) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_chart_data = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_quote_data<Fut>(mut self, f: impl Fn(QuoteValue) -> Fut + Send + Sync + 'a) -> Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_quote_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
+    pub fn on_quote_data(mut self, f: impl Fn(QuoteValue) -> () + Send + Sync + 'static) -> Self {
+        self.on_quote_data = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_study_data<Fut>(
+    pub fn on_study_data(
         mut self,
-        f: impl Fn((StudyOptions, StudyResponseData)) -> Fut + Send + Sync + 'a,
-    ) -> Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_study_data = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        f: impl Fn((StudyOptions, StudyResponseData)) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_study_data = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_error<Fut>(mut self, f: impl Fn(Error) -> Fut + Send + Sync + 'a) -> Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_error = Arc::new(Box::new(move |data| Box::pin(f(data))));
-        self
-    }
-
-    pub fn on_symbol_info<Fut>(mut self, f: impl Fn(SymbolInfo) -> Fut + Send + Sync + 'a) -> Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_symbol_info = Arc::new(Box::new(move |data| Box::pin(f(data))));
-        self
-    }
-
-    pub fn on_other_event<Fut>(
+    pub fn on_error(
         mut self,
-        f: impl Fn((TradingViewDataEvent, Vec<Value>)) -> Fut + Send + Sync + 'a,
-    ) -> Self
-    where
-        Fut: Future<Output = ()> + Send + 'a,
-    {
-        self.on_other_event = Arc::new(Box::new(move |data| Box::pin(f(data))));
+        f: impl Fn((Error, Vec<Value>)) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_error = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_symbol_info(mut self, f: impl Fn(SymbolInfo) -> () + Send + Sync + 'static) -> Self {
+        self.on_symbol_info = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_series_completed(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_series_completed = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_series_loading(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_series_loading = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_quote_completed(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_quote_completed = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_replay_ok(mut self, f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static) -> Self {
+        self.on_replay_ok = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_replay_point(mut self, f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static) -> Self {
+        self.on_replay_point = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_replay_instance_id(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_replay_instance_id = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_replay_resolutions(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_replay_resolutions = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_replay_data_end(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_replay_data_end = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_study_loading(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_study_loading = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_study_completed(
+        mut self,
+        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_study_completed = Arc::new(Box::new(f));
+        self
+    }
+
+    pub fn on_unknown_event(
+        mut self,
+        f: impl Fn((String, Vec<Value>)) -> () + Send + Sync + 'static,
+    ) -> Self {
+        self.on_unknown_event = Arc::new(Box::new(f));
         self
     }
 }

@@ -25,13 +25,14 @@ pub enum NewsSection {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct NewsHeadlines {
     #[serde(rename = "items")]
     pub items: Vec<News>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct News {
     pub id: String,
     pub title: String,
@@ -52,7 +53,7 @@ pub struct RelatedSymbol {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct NewsContent {
     pub short_description: String,
     pub ast_description: AstDescription,
@@ -72,7 +73,7 @@ pub struct NewsContent {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct AstDescription {
     #[serde(rename = "type")]
     pub type_field: String,
@@ -80,7 +81,7 @@ pub struct AstDescription {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Children {
     #[serde(rename = "type")]
     pub type_field: String,
@@ -88,14 +89,14 @@ pub struct Children {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Tag {
     pub title: String,
     pub args: Vec<Arg>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Arg {
     pub id: String,
     pub value: String,

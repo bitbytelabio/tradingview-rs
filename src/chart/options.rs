@@ -7,6 +7,7 @@ use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::Scr
 pub struct ChartOptions {
     // Required
     pub symbol: String,
+    pub exchange: String,
     pub interval: Interval,
     // Optional
     pub bar_count: u64,
@@ -30,9 +31,10 @@ pub struct StudyOptions {
 }
 
 impl ChartOptions {
-    pub fn new(symbol: &str, interval: Interval) -> Self {
+    pub fn new(symbol: &str, exchange: &str, interval: Interval) -> Self {
         Self {
             symbol: symbol.to_string(),
+            exchange: exchange.to_string(),
             interval,
             bar_count: 500_000,
             ..Default::default()
@@ -41,6 +43,11 @@ impl ChartOptions {
 
     pub fn symbol(mut self, symbol: &str) -> Self {
         self.symbol = symbol.to_string();
+        self
+    }
+
+    pub fn exchange(mut self, exchange: &str) -> Self {
+        self.exchange = exchange.to_string();
         self
     }
 
