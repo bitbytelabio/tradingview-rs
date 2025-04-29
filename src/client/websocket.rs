@@ -1,5 +1,5 @@
 use crate::{
-    Error, Interval, Result, Timezone,
+    DataPoint, Error, Interval, Result, Timezone,
     callback::Callbacks,
     chart::{
         ChartOptions, StudyOptions,
@@ -36,6 +36,7 @@ struct Metadata {
     studies: HashMap<String, String>,
     quotes: HashMap<String, QuoteValue>,
     quote_session: String,
+    chart_data_cache: Arc<RwLock<Option<Vec<DataPoint>>>>,
 }
 
 #[derive(Clone)]
@@ -634,7 +635,20 @@ impl WebSocketClient {
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let data = ChartResponseData::deserialize(resp_data)?.series;
-                    (self.callbacks.on_chart_data)((s.options.clone(), data));
+                    self.metadata.chart_data_cache.write().await.replace(data);
+                    debug!(
+                        "series data extracted: {:?}",
+                        self.metadata.chart_data_cache.read().await
+                    );
+                    (self.callbacks.on_chart_data)((
+                        s.options.clone(),
+                        self.metadata
+                            .chart_data_cache
+                            .read()
+                            .await
+                            .clone()
+                            .unwrap_or_default(),
+                    ));
                 }
                 None => {
                     debug!("receive empty data on series: {:?}", s);

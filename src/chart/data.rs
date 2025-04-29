@@ -150,13 +150,13 @@ mod tests {
         let symbol = "VCB";
         let exchange = "HOSE";
         let interval = Interval::Daily;
-        let option = ChartOptions::new(symbol, exchange, interval).bar_count(10);
+        let option = ChartOptions::new(symbol, exchange, interval).bar_count(100);
         let server = Some(DataServer::ProData);
         let data = fetch_chart_historical(&auth_token, option, server).await?;
         // println!("Fetched data: {:?}", data.data.len());
         // println!("First data point: {:?}", data);
         assert!(!data.data.is_empty(), "Data should not be empty");
-        assert_eq!(data.data.len(), 10, "Data length should be 10");
+        assert_eq!(data.data.len(), 100, "Data length should be 10");
         assert_eq!(data.options.symbol, symbol, "Symbol should match");
         assert_eq!(data.options.interval, interval, "Interval should match");
         Ok(())
