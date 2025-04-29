@@ -5,5 +5,3 @@ pub(crate) mod utils;
 pub use options::ChartOptions;
 pub use options::StudyOptions;
 pub mod data;
-#[cfg(feature = "technical-analysis")]
-pub mod ta;
