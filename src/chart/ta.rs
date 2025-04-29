@@ -27,11 +27,11 @@ pub fn ema_recursive(close: &[f64], period: u8) -> Result<f64> {
         return Ok(NAN);
     }
     let mut ema = EMA::new(period, &close[0])?;
+    let mut final_ema = NAN;
     for price in close.iter().skip(1) {
-        let value = ema.next(&price);
-        return Ok(value);
+        final_ema = ema.next(&price);
     }
-    Ok(NAN)
+    Ok(final_ema)
 }
 
 pub fn ema_weighted_linear(close: &[f64], _period: u8) -> Result<f64> {
