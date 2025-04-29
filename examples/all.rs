@@ -67,6 +67,6 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     tokio::spawn(async move { websocket.subscribe().await });
-
+    #[warn(clippy::empty_loop)]
     loop {}
 }
