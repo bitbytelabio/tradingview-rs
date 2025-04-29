@@ -42,8 +42,14 @@ pub enum Error {
     Base64DecodeError(#[from] base64::DecodeError),
     #[error("zip error")]
     ZipError(#[from] zip::result::ZipError),
-    #[error("io error")]
-    IOError(#[from] std::io::Error),
+
+    #[error("chrono parse error")]
+    ChronoParseError(#[from] chrono::ParseError),
+    #[error("chrono out of range error")]
+    ChronoOutOfRangeError(#[from] chrono::OutOfRangeError),
+
+    #[error("I/O error")]
+    IoError(#[from] std::io::Error),
 
     #[error("TradingView error")]
     TradingViewError(#[from] TradingViewError),
