@@ -2,12 +2,16 @@ use crate::{
     ChartHistoricalData, DataPoint, Result,
     callback::Callbacks,
     chart::ChartOptions,
-    socket::{DataServer, TradingViewDataEvent},
+    socket::DataServer,
     websocket::{WebSocket, WebSocketClient},
 };
 use serde_json::Value;
-use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc, oneshot};
+use std::{sync::Arc, time::Duration};
+use tokio::{
+    spawn,
+    sync::{Mutex, mpsc, oneshot},
+    time::{sleep, timeout},
+};
 
 /// Fetch historical chart data from TradingView
 pub async fn fetch_chart_historical(
@@ -34,7 +38,7 @@ pub async fn fetch_chart_historical(
             let points = data_points.to_vec();
 
             // Spawn the async work and return ()
-            tokio::spawn(async move {
+            spawn(async move {
                 // Acquire mutex lock to send data points
                 let tx = sender.lock().await;
                 if let Err(e) = tx.send(points).await {
@@ -42,22 +46,16 @@ pub async fn fetch_chart_historical(
                 }
             });
         })
-        .on_other_event({
+        .on_series_completed({
             // Create a clone for the closure
             let done_sender = Arc::clone(&done_tx);
-
-            move |(event, _): (TradingViewDataEvent, Vec<Value>)| {
+            move |message: Vec<Value>| {
                 let done_sender = Arc::clone(&done_sender);
-
-                tokio::spawn(async move {
-                    if matches!(event, TradingViewDataEvent::OnSeriesCompleted) {
-                        // Wait a small amount of time to ensure all data is processed
-                        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-                        // Take the sender out of the Option and send the signal
-                        if let Some(sender) = done_sender.lock().await.take() {
-                            let _ = sender.send(());
-                        }
+                tracing::debug!("Series completed with message: {:?}", message);
+                spawn(async move {
+                    // Take the sender out of the Option and send the signal
+                    if let Some(sender) = done_sender.lock().await.take() {
+                        let _ = sender.send(());
                     }
                 });
             }
@@ -80,7 +78,7 @@ pub async fn fetch_chart_historical(
     // Set the market before spawning the task
     websocket.set_market(options.clone()).await?;
     // Spawn WebSocket subscription loop in background
-    let subscription_handle = tokio::spawn(async move {
+    let subscription_handle = spawn(async move {
         websocket_for_loop.subscribe().await;
     });
 
@@ -100,8 +98,8 @@ pub async fn fetch_chart_historical(
             _ = &mut completion_future => {
                 tracing::debug!("Completion signal received");
                 // Process any remaining data points
-                while let Ok(Some(points)) = tokio::time::timeout(
-                    tokio::time::Duration::from_millis(100),
+                while let Ok(Some(points)) = timeout(
+                   Duration::from_millis(100),
                     bar_rx.recv()
                 ).await {
                     tracing::debug!("Processing final batch of {} data points", points.len());
@@ -117,7 +115,7 @@ pub async fn fetch_chart_historical(
     subscription_handle.abort();
 
     // Give a little extra time for any final cleanup
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(100)).await;
 
     tracing::debug!(
         "Data collection completed with {} points",
@@ -150,13 +148,13 @@ mod tests {
         let symbol = "VCB";
         let exchange = "HOSE";
         let interval = Interval::Daily;
-        let option = ChartOptions::new(symbol, exchange, interval).bar_count(100);
+        let option = ChartOptions::new(symbol, exchange, interval).bar_count(10);
         let server = Some(DataServer::ProData);
         let data = fetch_chart_historical(&auth_token, option, server).await?;
         // println!("Fetched data: {:?}", data.data.len());
         // println!("First data point: {:?}", data);
         assert!(!data.data.is_empty(), "Data should not be empty");
-        assert_eq!(data.data.len(), 100, "Data length should be 10");
+        assert_eq!(data.data.len(), 10, "Data length should be 10");
         assert_eq!(data.options.symbol, symbol, "Symbol should match");
         assert_eq!(data.options.interval, interval, "Interval should match");
         Ok(())

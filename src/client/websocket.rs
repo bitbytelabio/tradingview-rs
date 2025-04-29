@@ -20,7 +20,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Default)]
 pub struct WebSocketClient {
@@ -580,7 +580,7 @@ impl Socket for WebSocket {
     }
 
     async fn handle_error(&self, error: Error) {
-        (self.client.read().await.callbacks.on_error)(error);
+        (self.client.read().await.callbacks.on_error)((error, vec![]));
     }
 }
 
@@ -600,7 +600,7 @@ impl WebSocketClient {
                     Ok(_) => (),
                     Err(e) => {
                         error!("chart data parsing error: {:?}", e);
-                        (self.callbacks.on_error)(e);
+                        (self.callbacks.on_error)((e, message.to_owned()));
                     }
                 };
             }
@@ -613,13 +613,60 @@ impl WebSocketClient {
                     }
                     Err(e) => {
                         error!("symbol resolved parsing error: {:?}", e);
-                        (self.callbacks.on_error)(Error::JsonParseError(e));
+                        (self.callbacks.on_error)((Error::JsonParseError(e), message.to_owned()));
                     }
                 };
             }
-            _ => {
-                debug!("event: {:?}, message: {:?}", event, message);
-                (self.callbacks.on_other_event)((event, message.to_owned()));
+            TradingViewDataEvent::OnSeriesCompleted => {
+                debug!("series completed: {:?}", message);
+                (self.callbacks.on_series_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnSeriesLoading => {
+                debug!("series loading: {:?}", message);
+                (self.callbacks.on_series_loading)(message.to_owned());
+            }
+            TradingViewDataEvent::OnQuoteCompleted => {
+                debug!("quote completed: {:?}", message);
+                (self.callbacks.on_series_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnReplayOk => {
+                debug!("replay ok: {:?}", message);
+                (self.callbacks.on_series_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnReplayPoint => {
+                debug!("replay point: {:?}", message);
+                (self.callbacks.on_series_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnReplayInstanceId => {
+                debug!("replay instance id: {:?}", message);
+                (self.callbacks.on_series_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnReplayResolutions => {
+                debug!("replay resolutions: {:?}", message);
+                (self.callbacks.on_series_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnReplayDataEnd => {
+                debug!("replay data end: {:?}", message);
+                (self.callbacks.on_series_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnStudyLoading => {
+                debug!("study loading: {:?}", message);
+                (self.callbacks.on_study_loading)(message.to_owned());
+            }
+            TradingViewDataEvent::OnStudyCompleted => {
+                debug!("study completed: {:?}", message);
+                (self.callbacks.on_study_completed)(message.to_owned());
+            }
+            TradingViewDataEvent::OnError(trading_view_error) => {
+                error!("trading view error: {:?}", trading_view_error);
+                (self.callbacks.on_error)((
+                    Error::TradingViewError(trading_view_error),
+                    message.to_owned(),
+                ));
+            }
+            TradingViewDataEvent::UnknownEvent(event) => {
+                warn!("unknown event: {:?}", event);
+                (self.callbacks.on_unknown_event)((event, message.to_owned()));
             }
         }
     }
@@ -695,8 +742,9 @@ impl WebSocketClient {
             }
         } else {
             error!("quote data status error: {:?}", qsd);
-            (self.callbacks.on_error)(Error::TradingViewError(
-                TradingViewError::QuoteDataStatusError,
+            (self.callbacks.on_error)((
+                Error::TradingViewError(TradingViewError::QuoteDataStatusError),
+                message.to_owned(),
             ));
         }
     }
