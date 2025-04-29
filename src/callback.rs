@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tracing::info;
 
-pub type Callback<T> = Box<dyn (Fn(T) -> ()) + Send + Sync>;
+pub type Callback<T> = Box<dyn (Fn(T)) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Callbacks {
@@ -97,20 +97,20 @@ impl Default for Callbacks {
 impl Callbacks {
     pub fn on_chart_data(
         mut self,
-        f: impl Fn((ChartOptions, Vec<DataPoint>)) -> () + Send + Sync + 'static,
+        f: impl Fn((ChartOptions, Vec<DataPoint>)) + Send + Sync + 'static,
     ) -> Self {
         self.on_chart_data = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_quote_data(mut self, f: impl Fn(QuoteValue) -> () + Send + Sync + 'static) -> Self {
+    pub fn on_quote_data(mut self, f: impl Fn(QuoteValue) + Send + Sync + 'static) -> Self {
         self.on_quote_data = Arc::new(Box::new(f));
         self
     }
 
     pub fn on_study_data(
         mut self,
-        f: impl Fn((StudyOptions, StudyResponseData)) -> () + Send + Sync + 'static,
+        f: impl Fn((StudyOptions, StudyResponseData)) + Send + Sync + 'static,
     ) -> Self {
         self.on_study_data = Arc::new(Box::new(f));
         self
@@ -118,20 +118,20 @@ impl Callbacks {
 
     pub fn on_error(
         mut self,
-        f: impl Fn((Error, Vec<Value>)) -> () + Send + Sync + 'static,
+        f: impl Fn((Error, Vec<Value>)) + Send + Sync + 'static,
     ) -> Self {
         self.on_error = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_symbol_info(mut self, f: impl Fn(SymbolInfo) -> () + Send + Sync + 'static) -> Self {
+    pub fn on_symbol_info(mut self, f: impl Fn(SymbolInfo) + Send + Sync + 'static) -> Self {
         self.on_symbol_info = Arc::new(Box::new(f));
         self
     }
 
     pub fn on_series_completed(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_series_completed = Arc::new(Box::new(f));
         self
@@ -139,7 +139,7 @@ impl Callbacks {
 
     pub fn on_series_loading(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_series_loading = Arc::new(Box::new(f));
         self
@@ -147,25 +147,25 @@ impl Callbacks {
 
     pub fn on_quote_completed(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_quote_completed = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_replay_ok(mut self, f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static) -> Self {
+    pub fn on_replay_ok(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_replay_ok = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_replay_point(mut self, f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static) -> Self {
+    pub fn on_replay_point(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_replay_point = Arc::new(Box::new(f));
         self
     }
 
     pub fn on_replay_instance_id(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_replay_instance_id = Arc::new(Box::new(f));
         self
@@ -173,7 +173,7 @@ impl Callbacks {
 
     pub fn on_replay_resolutions(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_replay_resolutions = Arc::new(Box::new(f));
         self
@@ -181,7 +181,7 @@ impl Callbacks {
 
     pub fn on_replay_data_end(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_replay_data_end = Arc::new(Box::new(f));
         self
@@ -189,7 +189,7 @@ impl Callbacks {
 
     pub fn on_study_loading(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_study_loading = Arc::new(Box::new(f));
         self
@@ -197,7 +197,7 @@ impl Callbacks {
 
     pub fn on_study_completed(
         mut self,
-        f: impl Fn(Vec<Value>) -> () + Send + Sync + 'static,
+        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
     ) -> Self {
         self.on_study_completed = Arc::new(Box::new(f));
         self
@@ -205,7 +205,7 @@ impl Callbacks {
 
     pub fn on_unknown_event(
         mut self,
-        f: impl Fn((String, Vec<Value>)) -> () + Send + Sync + 'static,
+        f: impl Fn((String, Vec<Value>)) + Send + Sync + 'static,
     ) -> Self {
         self.on_unknown_event = Arc::new(Box::new(f));
         self
