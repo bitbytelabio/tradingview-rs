@@ -627,7 +627,7 @@ impl WebSocketClient {
             }
             TradingViewDataEvent::OnQuoteCompleted => {
                 debug!("quote completed: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_quote_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayOk => {
                 debug!("replay ok: {:?}", message);
