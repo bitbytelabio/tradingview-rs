@@ -631,7 +631,7 @@ impl WebSocketClient {
             }
             TradingViewDataEvent::OnReplayOk => {
                 debug!("replay ok: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_ok)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayPoint => {
                 debug!("replay point: {:?}", message);
