@@ -10,7 +10,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::{
     spawn,
     sync::{Mutex, mpsc, oneshot},
-    time::{sleep, timeout},
+    time::timeout,
 };
 
 /// Fetch historical chart data from TradingView
@@ -111,11 +111,10 @@ pub async fn fetch_chart_historical(
     }
 
     // Ensure the WebSocket is properly closed
-    let _ = websocket.delete().await;
+    if let Err(e) = websocket.delete().await {
+        tracing::error!("Failed to close WebSocket: {}", e);
+    }
     subscription_handle.abort();
-
-    // Give a little extra time for any final cleanup
-    sleep(Duration::from_millis(100)).await;
 
     tracing::debug!(
         "Data collection completed with {} points",
