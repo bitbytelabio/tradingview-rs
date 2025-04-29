@@ -1,21 +1,21 @@
 use crate::{
+    Result, UserCookies,
     models::{MarketAdjustment, SessionType},
     socket::{SocketMessage, SocketMessageDe},
-    Result, UserCookies,
 };
-use base64::engine::{general_purpose::STANDARD as BASE64, Engine as _};
+use base64::engine::{Engine as _, general_purpose::STANDARD as BASE64};
 use iso_currency::Currency;
-use rand::{distr::Alphanumeric, Rng};
+use rand::{Rng, distr::Alphanumeric};
 use regex::Regex;
 use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, ORIGIN, REFERER},
     Response,
+    header::{ACCEPT, COOKIE, HeaderMap, HeaderValue, ORIGIN, REFERER},
 };
 use serde::Serialize;
 use serde_json::Value;
 use std::{
     collections::HashMap,
-    io::{prelude::*, Cursor},
+    io::{Cursor, prelude::*},
 };
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};

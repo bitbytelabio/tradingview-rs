@@ -1,9 +1,8 @@
 use super::ChartOptions;
+use crate::{Error, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-#[cfg(feature = "technical-analysis")]
-use yata::prelude::OHLCV;
 
 pub enum ChartType {
     HeikinAshi,
@@ -80,43 +79,127 @@ pub struct DataPoint {
     pub value: Vec<f64>,
 }
 
-impl DataPoint {}
+pub trait OHLCV {
+    fn datetime(&self) -> Result<DateTime<Utc>>;
+    fn open(&self) -> f64;
+    fn high(&self) -> f64;
+    fn low(&self) -> f64;
+    fn close(&self) -> f64;
+    fn volume(&self) -> f64;
+    fn is_ohlcv(&self) -> bool;
+    fn is_ohlc4(&self) -> bool;
 
-#[cfg(feature = "technical-analysis")]
+    fn validate(&self) -> bool {
+        !(self.close() > self.high() || self.close() < self.low() || self.high() < self.low())
+            && self.close() > 0.
+            && self.open() > 0.
+            && self.high() > 0.
+            && self.low() > 0.
+            && self.close().is_finite()
+            && self.open().is_finite()
+            && self.high().is_finite()
+            && self.low().is_finite()
+            && (self.volume().is_nan() || self.volume() >= 0.0)
+    }
+
+    fn tr(&self, prev_candle: &dyn OHLCV) -> f64 {
+        self.tr_close(prev_candle.close())
+    }
+
+    fn tr_close(&self, prev_close: f64) -> f64 {
+        self.high().max(prev_close) - self.low().min(prev_close)
+    }
+
+    fn clv(&self) -> f64 {
+        if self.high() == self.low() {
+            0.
+        } else {
+            let twice: f64 = 2.;
+            (twice.mul_add(self.close(), -self.low()) - self.high()) / (self.high() - self.low())
+        }
+    }
+
+    fn ohlc4(&self) -> f64 {
+        (self.high() + self.low() + self.close() + self.open()) * 0.25
+    }
+
+    fn hl2(&self) -> f64 {
+        (self.high() + self.low()) * 0.5
+    }
+
+    fn tp(&self) -> f64 {
+        (self.high() + self.low() + self.close()) / 3.
+    }
+
+    fn volumed_price(&self) -> f64 {
+        self.tp() * self.volume()
+    }
+
+    fn is_rising(&self) -> bool {
+        self.close() > self.open()
+    }
+
+    fn is_falling(&self) -> bool {
+        self.close() < self.open()
+    }
+}
+
 impl OHLCV for DataPoint {
+    fn datetime(&self) -> Result<DateTime<Utc>> {
+        if self.value.is_empty() {
+            return Err(Error::Generic("DataPoint value is empty".to_owned()));
+        }
+
+        let timestamp = self.value[0] as i64;
+        if let Some(datetime) = DateTime::<Utc>::from_timestamp(timestamp, 0) {
+            return Ok(datetime);
+        }
+        return Err(Error::Generic(
+            "Failed to convert timestamp to DateTime".to_owned(),
+        ));
+    }
+
     fn open(&self) -> f64 {
-        if self.value.len() < 6 {
+        if !(self.is_ohlcv() || self.is_ohlc4()) {
             return f64::NAN;
         }
         self.value[1]
     }
 
     fn high(&self) -> f64 {
-        if self.value.len() < 6 {
+        if !(self.is_ohlcv() || self.is_ohlc4()) {
             return f64::NAN;
         }
         self.value[2]
     }
 
     fn low(&self) -> f64 {
-        if self.value.len() < 6 {
+        if !(self.is_ohlcv() || self.is_ohlc4()) {
             return f64::NAN;
         }
         self.value[3]
     }
 
     fn close(&self) -> f64 {
-        if self.value.len() < 6 {
+        if !(self.is_ohlcv() || self.is_ohlc4()) {
             return f64::NAN;
         }
         self.value[4]
     }
 
     fn volume(&self) -> f64 {
-        if self.value.len() < 6 {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[5]
+    }
+
+    fn is_ohlcv(&self) -> bool {
+        self.value.len() == 6
+    }
+
+    fn is_ohlc4(&self) -> bool {
+        self.value.len() == 5
     }
 }
 

@@ -76,6 +76,7 @@ impl ChartOptions {
         self
     }
 
+    /// range: |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
     pub fn range(mut self, range: &str) -> Self {
         self.range = Some(range.to_string());
         self

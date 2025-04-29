@@ -398,7 +398,7 @@ impl From<&str> for Interval {
             "120d" => Interval::Quarterly,
             "180d" => Interval::SixMonths,
             "1y" => Interval::Yearly,
-            _ => panic!("Invalid interval: {}", value),
+            _ => Interval::Daily,
         }
     }
 }
