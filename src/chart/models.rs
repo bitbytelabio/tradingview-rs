@@ -30,6 +30,7 @@ impl std::fmt::Display for ChartType {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChartHistoricalData {
     pub options: ChartOptions,
+    pub info: SymbolInfo,
     pub data: Vec<DataPoint>,
 }
 
@@ -37,6 +38,7 @@ impl ChartHistoricalData {
     pub fn new(opt: &ChartOptions) -> Self {
         Self {
             options: opt.clone(),
+            info: SymbolInfo::default(),
             data: Vec::new(),
         }
     }
