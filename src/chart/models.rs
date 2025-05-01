@@ -1,4 +1,3 @@
-use super::ChartOptions;
 use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -29,15 +28,13 @@ impl std::fmt::Display for ChartType {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChartHistoricalData {
-    pub options: ChartOptions,
     pub info: SymbolInfo,
     pub data: Vec<DataPoint>,
 }
 
 impl ChartHistoricalData {
-    pub fn new(opt: &ChartOptions) -> Self {
+    pub fn new() -> Self {
         Self {
-            options: opt.clone(),
             info: SymbolInfo::default(),
             data: Vec::new(),
         }
