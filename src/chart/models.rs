@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{Error, Result, websocket::SeriesInfo};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,14 +28,16 @@ impl std::fmt::Display for ChartType {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChartHistoricalData {
-    pub info: SymbolInfo,
+    pub symbol_info: SymbolInfo,
+    pub series_info: SeriesInfo,
     pub data: Vec<DataPoint>,
 }
 
 impl ChartHistoricalData {
     pub fn new() -> Self {
         Self {
-            info: SymbolInfo::default(),
+            symbol_info: SymbolInfo::default(),
+            series_info: SeriesInfo::default(),
             data: Vec::new(),
         }
     }

@@ -16,7 +16,7 @@ use crate::{
     socket::{DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     utils::{gen_id, gen_session_id, symbol_init},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -36,7 +36,7 @@ struct Metadata {
     studies: Arc<RwLock<HashMap<String, String>>>,
     quotes: Arc<RwLock<HashMap<String, QuoteValue>>>,
     quote_session: String,
-    chart: Arc<RwLock<Option<Vec<DataPoint>>>>,
+    chart: Arc<RwLock<Option<(SeriesInfo, Vec<DataPoint>)>>>,
     symbol_info: Arc<RwLock<Option<SymbolInfo>>>,
 }
 
@@ -53,7 +53,7 @@ pub struct WebSocketBuilder {
     server: Option<DataServer>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SeriesInfo {
     pub chart_session: String,
     pub options: ChartOptions,
@@ -706,13 +706,18 @@ impl WebSocketClient {
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let data = ChartResponseData::deserialize(resp_data)?.series;
-                    self.metadata.read().await.chart.write().await.replace(data);
+                    self.metadata
+                        .read()
+                        .await
+                        .chart
+                        .write()
+                        .await
+                        .replace((s.clone(), data.clone()));
                     debug!(
                         "series data extracted: {:?}",
                         self.metadata.read().await.chart.read().await
                     );
-                    (self.callbacks.on_chart_data)((
-                        s.options.clone(),
+                    (self.callbacks.on_chart_data)(
                         self.metadata
                             .read()
                             .await
@@ -721,7 +726,7 @@ impl WebSocketClient {
                             .await
                             .clone()
                             .unwrap_or_default(),
-                    ));
+                    );
                 }
                 None => {
                     debug!("receive empty data on series: {:?}", s);

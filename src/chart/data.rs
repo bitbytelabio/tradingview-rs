@@ -3,7 +3,7 @@ use crate::{
     callback::Callbacks,
     chart::ChartOptions,
     socket::DataServer,
-    websocket::{WebSocket, WebSocketClient},
+    websocket::{SeriesInfo, WebSocket, WebSocketClient},
 };
 use serde_json::Value;
 use std::{sync::Arc, time::Duration};
@@ -20,7 +20,7 @@ pub async fn fetch_chart_historical(
     server: Option<DataServer>,
 ) -> Result<ChartHistoricalData> {
     // Create communication channels with appropriate buffer sizes
-    let (data_sender, mut data_receiver) = mpsc::channel::<Vec<DataPoint>>(100);
+    let (data_sender, mut data_receiver) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(100);
     let (info_sender, mut info_receiver) = mpsc::channel::<SymbolInfo>(100);
     let (completion_sender, completion_receiver) = oneshot::channel::<()>();
 
@@ -65,21 +65,23 @@ pub async fn fetch_chart_historical(
 
 /// Create callback handlers for processing incoming WebSocket data
 fn create_data_callbacks(
-    data_sender: Arc<Mutex<mpsc::Sender<Vec<DataPoint>>>>,
+    data_sender: Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>,
     completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
 ) -> Callbacks {
     Callbacks::default()
-        .on_chart_data(move |(_, data_points): (ChartOptions, Vec<DataPoint>)| {
-            tracing::debug!("Received data batch with {} points", data_points.len());
-            let sender = Arc::clone(&data_sender);
-            spawn(async move {
-                let tx = sender.lock().await;
-                if let Err(e) = tx.send(data_points).await {
-                    tracing::error!("Failed to send data points to processing channel: {}", e);
-                }
-            });
-        })
+        .on_chart_data(
+            move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
+                tracing::debug!("Received data batch with {} points", data_points.len());
+                let sender = Arc::clone(&data_sender);
+                spawn(async move {
+                    let tx = sender.lock().await;
+                    if let Err(e) = tx.send((series_info, data_points)).await {
+                        tracing::error!("Failed to send data points to processing channel: {}", e);
+                    }
+                });
+            },
+        )
         .on_symbol_info(move |symbol_info| {
             tracing::debug!("Received symbol info: {:?}", symbol_info);
             let sender = Arc::clone(&info_sender);
@@ -130,7 +132,7 @@ async fn setup_websocket_connection(
 
 /// Collect and accumulate incoming historical data from channels
 async fn collect_historical_data(
-    data_receiver: &mut mpsc::Receiver<Vec<DataPoint>>,
+    data_receiver: &mut mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
     info_receiver: &mut mpsc::Receiver<SymbolInfo>,
     completion_receiver: oneshot::Receiver<()>,
 ) -> ChartHistoricalData {
@@ -140,8 +142,9 @@ async fn collect_historical_data(
     // Process incoming data until completion signal or channel closure
     loop {
         tokio::select! {
-            Some(data_points) = data_receiver.recv() => {
+            Some((series_info, data_points)) = data_receiver.recv() => {
                 tracing::debug!("Processing batch of {} data points", data_points.len());
+                historical_data.series_info = series_info;
                 historical_data.data.extend(data_points);
             }
             _ = &mut completion_future => {
@@ -153,7 +156,7 @@ async fn collect_historical_data(
             }
             Some(symbol_info) = info_receiver.recv() => {
                 tracing::debug!("Processing symbol info: {:?}", symbol_info);
-                historical_data.info = symbol_info;
+                historical_data.symbol_info = symbol_info;
             }
             else => {
                 tracing::debug!("All channels closed, no more data to receive");
@@ -174,23 +177,24 @@ async fn process_remaining_symbol_info(
         timeout(Duration::from_millis(100), info_receiver.recv()).await
     {
         tracing::debug!("Processing final symbol info: {:?}", symbol_info);
-        historical_data.info = symbol_info;
+        historical_data.symbol_info = symbol_info;
     }
 }
 
 /// Process any remaining data points in the channel after completion signal
 async fn process_remaining_data_points(
-    data_receiver: &mut mpsc::Receiver<Vec<DataPoint>>,
+    data_receiver: &mut mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
     historical_data: &mut ChartHistoricalData,
 ) {
     // Use a short timeout to collect any in-flight data
-    while let Ok(Some(data_points)) =
+    while let Ok(Some((series_info, data_points))) =
         timeout(Duration::from_millis(100), data_receiver.recv()).await
     {
         tracing::debug!(
             "Processing final batch of {} data points",
             data_points.len()
         );
+        historical_data.series_info = series_info;
         historical_data.data.extend(data_points);
     }
 }
@@ -244,7 +248,16 @@ mod tests {
         let data = fetch_chart_historical(&auth_token, option, server).await?;
         assert!(!data.data.is_empty(), "Data should not be empty");
         assert_eq!(data.data.len(), 10, "Data length should be 10");
-        assert_eq!(data.info.id, "HOSE:VCB", "Symbol should match");
+        assert_eq!(data.symbol_info.id, "HOSE:VCB", "Symbol should match");
+        assert_eq!(data.series_info.options.symbol, symbol, "Name should match");
+        assert_eq!(
+            data.series_info.options.interval, interval,
+            "Interval should match"
+        );
+        assert_eq!(
+            data.series_info.options.exchange, exchange,
+            "Exchange should match"
+        );
         Ok(())
     }
 
