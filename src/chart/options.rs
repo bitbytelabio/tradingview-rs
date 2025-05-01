@@ -5,11 +5,9 @@ use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::Scr
 
 #[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct ChartOptions {
-    // Required
     pub symbol: String,
     pub exchange: String,
     pub interval: Interval,
-    // Optional
     pub bar_count: u64,
     pub range: Option<String>,
     pub from: Option<u64>,
@@ -31,7 +29,11 @@ pub struct StudyOptions {
 }
 
 impl ChartOptions {
-    pub fn new(symbol: &str, exchange: &str, interval: Interval) -> Self {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn new_with(symbol: &str, exchange: &str, interval: Interval) -> Self {
         Self {
             symbol: symbol.to_string(),
             exchange: exchange.to_string(),

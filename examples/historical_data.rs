@@ -45,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
         bars.to_string().bright_blue()
     );
 
-    let option = ChartOptions::new(symbol, exchange, interval).bar_count(bars);
+    let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(bars);
     let data = fetch_chart_historical(&auth_token, option, Some(DataServer::ProData)).await?;
 
     println!("{}", "✅ Data retrieved successfully!".green());

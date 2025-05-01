@@ -1,5 +1,5 @@
 use crate::{
-    ChartHistoricalData, DataPoint, Result,
+    ChartHistoricalData, DataPoint, Interval, Result, Symbol,
     callback::Callbacks,
     chart::ChartOptions,
     socket::DataServer,
@@ -123,6 +123,21 @@ pub async fn fetch_chart_historical(
     Ok(result)
 }
 
+pub fn batch_fetch_chart_historical(
+    auth_token: &str,
+    symbols: &[Symbol],
+    based_opts: ChartOptions,
+    server: Option<DataServer>,
+) -> Result<Vec<ChartHistoricalData>> {
+    // Use a bounded channel with sufficient capacity to provide backpressure if needed
+    let (bar_tx, mut bar_rx) = mpsc::channel::<Vec<DataPoint>>(100);
+
+    // One-shot channel for series completion signal
+    let (done_tx, done_rx) = oneshot::channel::<()>();
+
+    todo!()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,7 +162,7 @@ mod tests {
         let symbol = "VCB";
         let exchange = "HOSE";
         let interval = Interval::Daily;
-        let option = ChartOptions::new(symbol, exchange, interval).bar_count(10);
+        let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(10);
         let server = Some(DataServer::ProData);
         let data = fetch_chart_historical(&auth_token, option, server).await?;
         // println!("Fetched data: {:?}", data.data.len());

@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .await?;
 
-    let opts = ChartOptions::new("ACV", "UPCOM", Interval::Daily)
+    let opts = ChartOptions::new_with("ACV", "UPCOM", Interval::Daily)
         .bar_count(1)
         .study_config(
             &buildins[0].script_id,
