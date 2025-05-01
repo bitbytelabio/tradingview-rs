@@ -142,6 +142,7 @@ pub async fn fetch_chart_historical(
     Ok(result)
 }
 
+// TOFIX: Session Rate Limit reached, limit 10 symbol per second and clear sessions before continue
 pub async fn batch_fetch_chart_historical(
     auth_token: &str,
     symbols: &[Symbol],
@@ -181,7 +182,6 @@ pub async fn batch_fetch_chart_historical(
         })
         .collect::<Vec<ChartOptions>>();
     let count = Arc::new(Mutex::new(symbols.len()));
-    let count_clone = Arc::clone(&count);
 
     let callbacks = Callbacks::default()
         .on_chart_data(move |(opt, data_points): (ChartOptions, Vec<DataPoint>)| {
@@ -215,15 +215,7 @@ pub async fn batch_fetch_chart_historical(
                 let done_sender = Arc::clone(&done_sender);
                 tracing::debug!("Series completed with message: {:?}", message);
                 // Decrement the count of completed series
-                let count_clone: Arc<Mutex<usize>> = Arc::clone(&count_clone);
                 spawn(async move {
-                    let mut count = count_clone.lock().await;
-                    *count -= 1;
-                    tracing::debug!("Remaining series count: {}", *count);
-                    if *count > 0 {
-                        return;
-                    }
-                    // Take the sender out of the Option and send the signal
                     if let Some(sender) = done_sender.lock().await.take() {
                         let _ = sender.send(());
                     }
@@ -279,7 +271,14 @@ pub async fn batch_fetch_chart_historical(
                         .data
                         .extend(data);
                 }
-                break;
+
+                let mut count = count.lock().await;
+                *count -= 1;
+                tracing::debug!("Remaining symbols to process: {}", *count);
+                if *count == 0 {
+                    tracing::debug!("All symbols processed, breaking the loop");
+                    break;
+                }
             }
             Some(info) = info_rx.recv() => {
                 tracing::debug!("Received symbol info: {:?}", info);
@@ -354,6 +353,8 @@ mod tests {
         )
         .await?;
         assert!(!symbols.is_empty(), "No symbols found");
+        let symbols = symbols[0..20].to_vec();
+
         println!("Fetched {} symbols", symbols.len());
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
         let based_opt = ChartOptions::new_with("VCB", "HOSE", Interval::Daily).bar_count(10);

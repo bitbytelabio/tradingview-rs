@@ -300,7 +300,7 @@ pub trait Socket {
                     self.handle_error(Error::WebSocketError(e)).await;
                 }
                 None => {
-                    debug!("no messages to read");
+                    trace!("no messages to read");
                     continue;
                 }
             }
