@@ -103,7 +103,7 @@ pub struct ExchangeSource {
     pub description: String,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum SessionType {
     #[default]
     Regular,
@@ -123,7 +123,7 @@ impl Display for SessionType {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum MarketAdjustment {
     #[default]
     Splits,
@@ -139,9 +139,10 @@ impl Display for MarketAdjustment {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum MarketStatus {
     Holiday,
+    #[default]
     Open,
     Close,
     Post,
@@ -160,7 +161,7 @@ impl Display for MarketStatus {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum Timezone {
     AfricaCairo,
     AfricaCasablanca,
@@ -431,6 +432,7 @@ impl Display for Interval {
     }
 }
 
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum LanguageCode {
     Arabic,
     Chinese,
@@ -438,6 +440,7 @@ pub enum LanguageCode {
     Danish,
     Catalan,
     Dutch,
+    #[default]
     English,
     Estonian,
     French,
@@ -540,7 +543,10 @@ impl Display for FinancialPeriod {
         }
     }
 }
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum SymbolType {
+    #[default]
     Stock,
     Index,
     Forex,
@@ -592,7 +598,7 @@ impl Display for SymbolType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum MarketType {
     #[default]
     All,
@@ -606,7 +612,7 @@ pub enum MarketType {
     Economy,
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum StocksType {
     #[default]
     All,
@@ -616,7 +622,7 @@ pub enum StocksType {
     Warrant,
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum CryptoType {
     #[default]
     All,
@@ -627,7 +633,7 @@ pub enum CryptoType {
     Fundamental,
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum FundsType {
     #[default]
     All,
@@ -637,8 +643,9 @@ pub enum FundsType {
     REIT,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum CryptoCentralization {
+    #[default]
     CEX,
     DEX,
 }
@@ -687,10 +694,11 @@ impl Display for CryptoCentralization {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum FuturesProductType {
     SingleStock,
     WorldIndices,
+    #[default]
     Currencies,
     InterestRates,
     Energy,
@@ -714,7 +722,7 @@ impl Display for FuturesProductType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum StockSector {
     CommercialServices,
     Communications,
@@ -724,6 +732,7 @@ pub enum StockSector {
     DistributionServices,
     ElectronicTechnology,
     EnergyMinerals,
+    #[default]
     Finance,
     Government,
     HealthServices,
@@ -767,8 +776,9 @@ impl Display for StockSector {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum EconomicSource {
+    #[default]
     WorldBank,
     EUROSTAT,
     AKAMAI,
@@ -818,8 +828,9 @@ impl Display for EconomicSource {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum EconomicCategory {
+    #[default]
     GDP,
     Labor,
     Prices,
