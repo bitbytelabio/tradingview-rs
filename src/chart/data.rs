@@ -64,6 +64,7 @@ pub async fn fetch_chart_historical(
 }
 
 /// Create callback handlers for processing incoming WebSocket data
+#[allow(clippy::type_complexity)]
 fn create_data_callbacks(
     data_sender: Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>,
     completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
