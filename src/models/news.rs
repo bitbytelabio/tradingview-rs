@@ -2,7 +2,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum NewsArea {
+    #[default]
     World,
     Americas,
     Europe,
@@ -11,7 +13,9 @@ pub enum NewsArea {
     Africa,
 }
 
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum NewsSection {
+    #[default]
     AnalysisAll,
     AnalysisRecommendations,
     EstimatesAndForecasts,

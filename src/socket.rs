@@ -143,7 +143,7 @@ pub enum SocketMessage<T> {
     Unknown(String),
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize, Copy, Eq)]
 pub enum DataServer {
     #[default]
     Data,
