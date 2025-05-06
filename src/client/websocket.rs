@@ -28,6 +28,7 @@ pub struct WebSocketClient {
     callbacks: Callbacks,
 }
 
+#[allow(clippy::type_complexity)]
 #[derive(Default, Clone)]
 struct Metadata {
     series_count: u16,
@@ -214,9 +215,9 @@ impl WebSocket {
                     series_id,
                     symbol_init(
                         symbol,
-                        config.adjustment.clone(),
+                        config.adjustment,
                         config.currency,
-                        config.session_type.clone(),
+                        config.session_type,
                         None
                     )?,
                     config.interval.to_string()
@@ -435,9 +436,9 @@ impl WebSocket {
                     symbol_series_id,
                     symbol_init(
                         symbol,
-                        config.adjustment.clone(),
+                        config.adjustment,
                         config.currency,
-                        config.session_type.clone(),
+                        config.session_type,
                         replay_session
                     )?
                 ),

@@ -43,6 +43,12 @@ impl ChartHistoricalData {
     }
 }
 
+impl Default for ChartHistoricalData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChartResponseData {
     #[serde(default)]
@@ -155,9 +161,10 @@ impl OHLCV for DataPoint {
         if let Some(datetime) = DateTime::<Utc>::from_timestamp(timestamp, 0) {
             return Ok(datetime);
         }
-        return Err(Error::Generic(
+
+        Err(Error::Generic(
             "Failed to convert timestamp to DateTime".to_owned(),
-        ));
+        ))
     }
 
     fn open(&self) -> f64 {
