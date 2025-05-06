@@ -27,3 +27,7 @@ pub use crate::models::*;
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub use error::Error;
+
+// Re-exporting some commonly used types
+pub use async_trait::async_trait;
+pub use iso_currency::{Country, Currency, CurrencySymbol};
