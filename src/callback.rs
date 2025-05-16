@@ -11,7 +11,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tracing::info;
 
-pub type Callback<T> = Box<dyn (Fn(T)) + Send + Sync>;
+pub type Callback<T> = Box<dyn Fn(T) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Callbacks {
