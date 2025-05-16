@@ -296,7 +296,7 @@ pub trait Socket {
                 Some(Ok(message)) => self.handle_raw_messages(session, message).await,
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
-                    self.handle_error(Error::WebSocketError(e)).await;
+                    self.handle_error(Error::WebSocketError(Box::new(e))).await;
                 }
                 None => {
                     trace!("no messages to read");

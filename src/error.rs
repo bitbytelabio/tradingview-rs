@@ -17,7 +17,7 @@ pub enum Error {
     #[error("failed to capture regex data")]
     RegexError(#[from] regex::Error),
     #[error("can not establish websocket connection")]
-    WebSocketError(#[from] tokio_tungstenite::tungstenite::Error),
+    WebSocketError(#[from] Box<tokio_tungstenite::tungstenite::Error>),
     #[error("no chart token found")]
     NoChartTokenFound,
     #[error("No scan data found")]
@@ -41,7 +41,7 @@ pub enum Error {
     #[error("base64 decode error")]
     Base64DecodeError(#[from] base64::DecodeError),
     #[error("zip error")]
-    ZipError(#[from] zip::result::ZipError),
+    ZipError(#[from] Box<zip::result::ZipError>),
 
     #[error("chrono parse error")]
     ChronoParseError(#[from] chrono::ParseError),
@@ -97,4 +97,16 @@ pub enum LoginError {
     ParsePrivateChannelError,
     #[error("can not parse auth token")]
     ParseAuthTokenError,
+}
+
+impl From<tokio_tungstenite::tungstenite::Error> for Error {
+    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
+        Error::WebSocketError(Box::new(err))
+    }
+}
+
+impl From<zip::result::ZipError> for Error {
+    fn from(err: zip::result::ZipError) -> Self {
+        Error::ZipError(Box::new(err))
+    }
 }
