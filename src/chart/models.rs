@@ -22,7 +22,7 @@ impl std::fmt::Display for ChartType {
             ChartType::PointAndFigure => "BarSetPnF@tv-prostudies-34!",
             ChartType::Range => "BarSetRange@tv-basicstudies-72!",
         };
-        write!(f, "{}", chart_type)
+        write!(f, "{chart_type}")
     }
 }
 

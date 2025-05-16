@@ -363,7 +363,7 @@ impl WebSocket {
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
-            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
+            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
             _ => String::default(),
         };
         self.socket
@@ -393,7 +393,7 @@ impl WebSocket {
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
-            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
+            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
             _ => String::default(),
         };
         self.socket
@@ -502,7 +502,7 @@ impl WebSocket {
     ) -> Result<&Self> {
         self.client.metadata.write().await.studies_count += 1;
         let study_count = self.client.metadata.read().await.studies_count;
-        let study_id = format!("st{}", study_count);
+        let study_id = format!("st{study_count}");
 
         let indicator = PineIndicator::build()
             .fetch(
@@ -529,9 +529,9 @@ impl WebSocket {
     pub async fn set_market(&self, options: ChartOptions) -> Result<&Self> {
         self.client.metadata.write().await.series_count += 1;
         let series_count = self.client.metadata.read().await.series_count;
-        let symbol_series_id = format!("sds_sym_{}", series_count);
-        let series_id = format!("sds_{}", series_count);
-        let series_version = format!("s{}", series_count);
+        let symbol_series_id = format!("sds_sym_{series_count}");
+        let series_id = format!("sds_{series_count}");
+        let series_version = format!("s{series_count}");
         let chart_session = gen_session_id("cs");
         let symbol = format!("{}:{}", options.exchange, options.symbol);
         self.create_chart_session(&chart_session).await?;

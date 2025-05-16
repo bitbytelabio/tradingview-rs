@@ -139,7 +139,7 @@ pub fn symbol_init(
         symbol_init.insert("session".to_string(), s.to_string());
     }
     let symbol_init_json = serde_json::to_value(&symbol_init)?;
-    Ok(format!("={}", symbol_init_json))
+    Ok(format!("={symbol_init_json}"))
 }
 
 pub fn _parse_compressed(data: &str) -> Result<Value> {

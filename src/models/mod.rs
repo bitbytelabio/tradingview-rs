@@ -428,7 +428,7 @@ impl Display for Interval {
             Interval::SixMonths => "6M",
             Interval::Yearly => "12M",
         };
-        write!(f, "{}", time_interval)
+        write!(f, "{time_interval}")
     }
 }
 
@@ -539,7 +539,7 @@ impl Display for FinancialPeriod {
             FinancialPeriod::FiscalQuarter => write!(f, "FQ"),
             FinancialPeriod::FiscalHalfYear => write!(f, "FH"),
             FinancialPeriod::TrailingTwelveMonths => write!(f, "TTM"),
-            FinancialPeriod::UnknownPeriod(ref s) => write!(f, "{}", s),
+            FinancialPeriod::UnknownPeriod(ref s) => write!(f, "{s}"),
         }
     }
 }

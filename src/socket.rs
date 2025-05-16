@@ -203,8 +203,7 @@ impl SocketSession {
         SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     )> {
         let url = Url::parse(&format!(
-            "wss://{}.tradingview.com/socket.io/websocket",
-            server
+            "wss://{server}.tradingview.com/socket.io/websocket"
         ))?;
 
         let mut request = url.into_client_request()?;

@@ -35,8 +35,7 @@ impl UserCookies {
             .post("https://www.tradingview.com/accounts/signin/")
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(format!(
-                "username={}&password={}&remember=true",
-                username, password
+                "username={username}&password={password}&remember=true"
             ))
             .send()
             .await?;
