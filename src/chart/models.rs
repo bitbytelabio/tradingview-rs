@@ -88,6 +88,7 @@ pub struct DataPoint {
 
 pub trait OHLCV {
     fn datetime(&self) -> Result<DateTime<Utc>>;
+    fn timestamp(&self) -> i64;
     fn open(&self) -> f64;
     fn high(&self) -> f64;
     fn low(&self) -> f64;
@@ -208,6 +209,10 @@ impl OHLCV for DataPoint {
 
     fn is_ohlc4(&self) -> bool {
         self.value.len() == 5
+    }
+
+    fn timestamp(&self) -> i64 {
+        self.value[0] as i64
     }
 }
 
