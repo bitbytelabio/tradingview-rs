@@ -1,5 +1,4 @@
-use super::ChartOptions;
-use crate::{Error, Result};
+use crate::{Error, Result, websocket::SeriesInfo};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,22 +22,30 @@ impl std::fmt::Display for ChartType {
             ChartType::PointAndFigure => "BarSetPnF@tv-prostudies-34!",
             ChartType::Range => "BarSetRange@tv-basicstudies-72!",
         };
-        write!(f, "{}", chart_type)
+        write!(f, "{chart_type}")
     }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ChartHistoricalData {
-    pub options: ChartOptions,
+    pub symbol_info: SymbolInfo,
+    pub series_info: SeriesInfo,
     pub data: Vec<DataPoint>,
 }
 
 impl ChartHistoricalData {
-    pub fn new(opt: &ChartOptions) -> Self {
+    pub fn new() -> Self {
         Self {
-            options: opt.clone(),
+            symbol_info: SymbolInfo::default(),
+            series_info: SeriesInfo::default(),
             data: Vec::new(),
         }
+    }
+}
+
+impl Default for ChartHistoricalData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -81,6 +88,7 @@ pub struct DataPoint {
 
 pub trait OHLCV {
     fn datetime(&self) -> Result<DateTime<Utc>>;
+    fn timestamp(&self) -> i64;
     fn open(&self) -> f64;
     fn high(&self) -> f64;
     fn low(&self) -> f64;
@@ -154,9 +162,10 @@ impl OHLCV for DataPoint {
         if let Some(datetime) = DateTime::<Utc>::from_timestamp(timestamp, 0) {
             return Ok(datetime);
         }
-        return Err(Error::Generic(
+
+        Err(Error::Generic(
             "Failed to convert timestamp to DateTime".to_owned(),
-        ));
+        ))
     }
 
     fn open(&self) -> f64 {
@@ -200,6 +209,10 @@ impl OHLCV for DataPoint {
 
     fn is_ohlc4(&self) -> bool {
         self.value.len() == 5
+    }
+
+    fn timestamp(&self) -> i64 {
+        self.value[0] as i64
     }
 }
 

@@ -16,7 +16,7 @@ use crate::{
     socket::{DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     utils::{gen_id, gen_session_id, symbol_init},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -24,24 +24,26 @@ use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Default)]
 pub struct WebSocketClient {
-    metadata: Metadata,
+    metadata: Arc<RwLock<Metadata>>,
     callbacks: Callbacks,
 }
 
+#[allow(clippy::type_complexity)]
 #[derive(Default, Clone)]
 struct Metadata {
     series_count: u16,
-    series: HashMap<String, SeriesInfo>,
+    series: Arc<RwLock<HashMap<String, SeriesInfo>>>,
     studies_count: u16,
-    studies: HashMap<String, String>,
-    quotes: HashMap<String, QuoteValue>,
+    studies: Arc<RwLock<HashMap<String, String>>>,
+    quotes: Arc<RwLock<HashMap<String, QuoteValue>>>,
     quote_session: String,
-    chart_data_cache: Arc<RwLock<Option<Vec<DataPoint>>>>,
+    chart: Arc<RwLock<Option<(SeriesInfo, Vec<DataPoint>)>>>,
+    symbol_info: Arc<RwLock<Option<SymbolInfo>>>,
 }
 
 #[derive(Clone)]
 pub struct WebSocket {
-    client: Arc<RwLock<WebSocketClient>>,
+    client: WebSocketClient,
     socket: SocketSession,
 }
 
@@ -52,7 +54,7 @@ pub struct WebSocketBuilder {
     server: Option<DataServer>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SeriesInfo {
     pub chart_session: String,
     pub options: ChartOptions,
@@ -94,16 +96,13 @@ impl WebSocket {
     }
 
     pub fn new_with_session(client: WebSocketClient, socket: SocketSession) -> Self {
-        Self {
-            client: Arc::new(RwLock::new(client)),
-            socket,
-        }
+        Self { client, socket }
     }
 
     // Begin TradingView WebSocket Quote methods
     pub async fn create_quote_session(&self) -> Result<&Self> {
         let quote_session = gen_session_id("qs");
-        self.client.write().await.metadata.quote_session = quote_session.clone();
+        self.client.metadata.write().await.quote_session = quote_session.clone();
         self.socket
             .send("quote_create_session", &payload!(quote_session))
             .await?;
@@ -114,7 +113,7 @@ impl WebSocket {
         self.socket
             .send(
                 "quote_delete_session",
-                &payload!(self.client.read().await.metadata.quote_session.clone()),
+                &payload!(self.client.metadata.read().await.quote_session.clone()),
             )
             .await?;
         Ok(self)
@@ -123,9 +122,9 @@ impl WebSocket {
     pub async fn set_fields(&self) -> Result<&Self> {
         let mut quote_fields = payload![
             self.client
+                .metadata
                 .read()
                 .await
-                .metadata
                 .quote_session
                 .clone()
                 .to_string()
@@ -136,7 +135,7 @@ impl WebSocket {
     }
 
     pub async fn add_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.client.read().await.metadata.quote_session.clone()];
+        let mut payloads = payload![self.client.metadata.read().await.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_add_symbols", &payloads).await?;
         Ok(self)
@@ -148,14 +147,14 @@ impl WebSocket {
     }
 
     pub async fn fast_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.client.read().await.metadata.quote_session.clone()];
+        let mut payloads = payload![self.client.metadata.read().await.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_fast_symbols", &payloads).await?;
         Ok(self)
     }
 
     pub async fn remove_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.client.read().await.metadata.quote_session.clone()];
+        let mut payloads = payload![self.client.metadata.read().await.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(self)
@@ -216,9 +215,9 @@ impl WebSocket {
                     series_id,
                     symbol_init(
                         symbol,
-                        config.adjustment.clone(),
+                        config.adjustment,
                         config.currency,
-                        config.session_type.clone(),
+                        config.session_type,
                         None
                     )?,
                     config.interval.to_string()
@@ -364,7 +363,7 @@ impl WebSocket {
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
-            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
+            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
             _ => String::default(),
         };
         self.socket
@@ -394,7 +393,7 @@ impl WebSocket {
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
-            (None, Some(from), Some(to)) => format!("r,{}:{}", from, to),
+            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
             _ => String::default(),
         };
         self.socket
@@ -437,9 +436,9 @@ impl WebSocket {
                     symbol_series_id,
                     symbol_init(
                         symbol,
-                        config.adjustment.clone(),
+                        config.adjustment,
                         config.currency,
-                        config.session_type.clone(),
+                        config.session_type,
                         replay_session
                     )?
                 ),
@@ -449,7 +448,16 @@ impl WebSocket {
     }
 
     pub async fn delete(&self) -> Result<&Self> {
-        for (_, s) in self.client.read().await.metadata.series.clone() {
+        for (_, s) in self
+            .client
+            .metadata
+            .read()
+            .await
+            .series
+            .read()
+            .await
+            .clone()
+        {
             debug!("delete series: {:?}", s);
             self.delete_chart_session_id(&s.chart_session).await?;
         }
@@ -492,9 +500,9 @@ impl WebSocket {
         chart_session: &str,
         series_id: &str,
     ) -> Result<&Self> {
-        self.client.write().await.metadata.studies_count += 1;
-        let study_count = self.client.read().await.metadata.studies_count;
-        let study_id = format!("st{}", study_count);
+        self.client.metadata.write().await.studies_count += 1;
+        let study_count = self.client.metadata.read().await.studies_count;
+        let study_id = format!("st{study_count}");
 
         let indicator = PineIndicator::build()
             .fetch(
@@ -505,10 +513,12 @@ impl WebSocket {
             .await?;
 
         self.client
+            .metadata
+            .read()
+            .await
+            .studies
             .write()
             .await
-            .metadata
-            .studies
             .insert(indicator.metadata.data.id.clone(), study_id.clone());
 
         self.create_study(chart_session, &study_id, series_id, indicator)
@@ -517,11 +527,11 @@ impl WebSocket {
     }
 
     pub async fn set_market(&self, options: ChartOptions) -> Result<&Self> {
-        self.client.write().await.metadata.series_count += 1;
-        let series_count = self.client.read().await.metadata.series_count;
-        let symbol_series_id = format!("sds_sym_{}", series_count);
-        let series_id = format!("sds_{}", series_count);
-        let series_version = format!("s{}", series_count);
+        self.client.metadata.write().await.series_count += 1;
+        let series_count = self.client.metadata.read().await.series_count;
+        let symbol_series_id = format!("sds_sym_{series_count}");
+        let series_id = format!("sds_{series_count}");
+        let series_version = format!("s{series_count}");
         let chart_session = gen_session_id("cs");
         let symbol = format!("{}:{}", options.exchange, options.symbol);
         self.create_chart_session(&chart_session).await?;
@@ -553,10 +563,12 @@ impl WebSocket {
         };
 
         self.client
+            .metadata
+            .read()
+            .await
+            .series
             .write()
             .await
-            .metadata
-            .series
             .insert(series_id, series_info);
 
         Ok(self)
@@ -571,30 +583,26 @@ impl WebSocket {
 impl Socket for WebSocket {
     async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.to_owned());
-        self.client
-            .write()
-            .await
-            .handle_events(event, &message.p)
-            .await;
+        self.client.handle_events(event, &message.p).await;
         Ok(())
     }
 
     async fn handle_error(&self, error: Error) {
-        (self.client.read().await.callbacks.on_error)((error, vec![]));
+        (self.client.callbacks.on_error)((error, vec![]));
     }
 }
 
 impl WebSocketClient {
-    pub(crate) async fn handle_events(
-        &mut self,
-        event: TradingViewDataEvent,
-        message: &Vec<Value>,
-    ) {
+    pub(crate) async fn handle_events(&self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received raw chart data: {:?}", message);
                 match self
-                    .handle_chart_data(&self.metadata.series, &self.metadata.studies, message)
+                    .handle_chart_data(
+                        &self.metadata.read().await.series.read().await.clone(),
+                        &self.metadata.read().await.studies.read().await.clone(),
+                        message,
+                    )
                     .await
                 {
                     Ok(_) => (),
@@ -609,7 +617,24 @@ impl WebSocketClient {
                 match SymbolInfo::deserialize(&message[2]) {
                     Ok(s) => {
                         debug!("receive symbol info: {:?}", s);
-                        (self.callbacks.on_symbol_info)(s);
+                        self.metadata
+                            .read()
+                            .await
+                            .symbol_info
+                            .write()
+                            .await
+                            .replace(s.clone());
+                        let info = self
+                            .metadata
+                            .read()
+                            .await
+                            .symbol_info
+                            .read()
+                            .await
+                            .clone()
+                            .unwrap_or_default();
+
+                        (self.callbacks.on_symbol_info)(info);
                     }
                     Err(e) => {
                         error!("symbol resolved parsing error: {:?}", e);
@@ -635,19 +660,19 @@ impl WebSocketClient {
             }
             TradingViewDataEvent::OnReplayPoint => {
                 debug!("replay point: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_point)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayInstanceId => {
                 debug!("replay instance id: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_instance_id)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayResolutions => {
                 debug!("replay resolutions: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_resolutions)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayDataEnd => {
                 debug!("replay data end: {:?}", message);
-                (self.callbacks.on_series_completed)(message.to_owned());
+                (self.callbacks.on_replay_data_end)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyLoading => {
                 debug!("study loading: {:?}", message);
@@ -682,20 +707,27 @@ impl WebSocketClient {
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let data = ChartResponseData::deserialize(resp_data)?.series;
-                    self.metadata.chart_data_cache.write().await.replace(data);
+                    self.metadata
+                        .read()
+                        .await
+                        .chart
+                        .write()
+                        .await
+                        .replace((s.clone(), data.clone()));
                     debug!(
                         "series data extracted: {:?}",
-                        self.metadata.chart_data_cache.read().await
+                        self.metadata.read().await.chart.read().await
                     );
-                    (self.callbacks.on_chart_data)((
-                        s.options.clone(),
+                    (self.callbacks.on_chart_data)(
                         self.metadata
-                            .chart_data_cache
+                            .read()
+                            .await
+                            .chart
                             .read()
                             .await
                             .clone()
                             .unwrap_or_default(),
-                    ));
+                    );
                 }
                 None => {
                     debug!("receive empty data on series: {:?}", s);
@@ -726,17 +758,31 @@ impl WebSocketClient {
         Ok(())
     }
 
-    async fn handle_quote_data(&mut self, message: &[Value]) {
+    async fn handle_quote_data(&self, message: &[Value]) {
         debug!("received raw quote data: {:?}", message);
         let qsd = QuoteData::deserialize(&message[1]).unwrap_or_default();
         if qsd.status == "ok" {
-            if let Some(prev_quote) = self.metadata.quotes.get_mut(&qsd.name) {
+            if let Some(prev_quote) = self
+                .metadata
+                .read()
+                .await
+                .quotes
+                .write()
+                .await
+                .get_mut(&qsd.name)
+            {
                 *prev_quote = merge_quotes(prev_quote, &qsd.value);
             } else {
-                self.metadata.quotes.insert(qsd.name, qsd.value);
+                self.metadata
+                    .read()
+                    .await
+                    .quotes
+                    .write()
+                    .await
+                    .insert(qsd.name, qsd.value);
             }
 
-            for q in self.metadata.quotes.values() {
+            for q in self.metadata.read().await.quotes.read().await.values() {
                 debug!("quote data: {:?}", q);
                 (self.callbacks.on_quote_data)(q.to_owned());
             }

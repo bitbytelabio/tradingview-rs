@@ -155,7 +155,7 @@ pub async fn advanced_search_symbol(
 
     let params_str = params
         .iter()
-        .map(|(k, v)| format!("{}={}", k, v))
+        .map(|(k, v)| format!("{k}={v}"))
         .collect::<Vec<String>>()
         .join("&");
 
@@ -223,7 +223,10 @@ pub async fn list_symbols(
         let semaphore = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = semaphore
+                .acquire()
+                .await
+                .expect("Failed to acquire semaphore");
             advanced_search_symbol(
                 "",
                 &exchange,

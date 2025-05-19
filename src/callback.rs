@@ -1,23 +1,24 @@
 use crate::{
     Error,
     chart::{
-        ChartOptions, StudyOptions,
+        StudyOptions,
         models::{DataPoint, StudyResponseData, SymbolInfo},
     },
     quote::models::QuoteValue,
+    websocket::SeriesInfo,
 };
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::info;
 
-pub type Callback<T> = Box<dyn (Fn(T)) + Send + Sync>;
+pub type Callback<T> = Box<dyn Fn(T) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Callbacks {
     pub on_symbol_info: Arc<Callback<SymbolInfo>>,
 
     pub on_series_loading: Arc<Callback<Vec<Value>>>,
-    pub on_chart_data: Arc<Callback<(ChartOptions, Vec<DataPoint>)>>,
+    pub on_chart_data: Arc<Callback<(SeriesInfo, Vec<DataPoint>)>>,
     pub on_series_completed: Arc<Callback<Vec<Value>>>,
 
     pub on_study_loading: Arc<Callback<Vec<Value>>>,
@@ -97,7 +98,7 @@ impl Default for Callbacks {
 impl Callbacks {
     pub fn on_chart_data(
         mut self,
-        f: impl Fn((ChartOptions, Vec<DataPoint>)) + Send + Sync + 'static,
+        f: impl Fn((SeriesInfo, Vec<DataPoint>)) + Send + Sync + 'static,
     ) -> Self {
         self.on_chart_data = Arc::new(Box::new(f));
         self
@@ -116,10 +117,7 @@ impl Callbacks {
         self
     }
 
-    pub fn on_error(
-        mut self,
-        f: impl Fn((Error, Vec<Value>)) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_error(mut self, f: impl Fn((Error, Vec<Value>)) + Send + Sync + 'static) -> Self {
         self.on_error = Arc::new(Box::new(f));
         self
     }
@@ -129,26 +127,17 @@ impl Callbacks {
         self
     }
 
-    pub fn on_series_completed(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_series_completed(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_series_completed = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_series_loading(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_series_loading(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_series_loading = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_quote_completed(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_quote_completed(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_quote_completed = Arc::new(Box::new(f));
         self
     }
@@ -163,42 +152,27 @@ impl Callbacks {
         self
     }
 
-    pub fn on_replay_instance_id(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_replay_instance_id(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_replay_instance_id = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_replay_resolutions(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_replay_resolutions(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_replay_resolutions = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_replay_data_end(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_replay_data_end(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_replay_data_end = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_study_loading(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_study_loading(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_study_loading = Arc::new(Box::new(f));
         self
     }
 
-    pub fn on_study_completed(
-        mut self,
-        f: impl Fn(Vec<Value>) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn on_study_completed(mut self, f: impl Fn(Vec<Value>) + Send + Sync + 'static) -> Self {
         self.on_study_completed = Arc::new(Box::new(f));
         self
     }

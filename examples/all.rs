@@ -32,15 +32,15 @@ async fn main() -> anyhow::Result<()> {
         .await
         .unwrap();
 
-    let opts = ChartOptions::new("BTCUSDT", "BINANCE", Interval::OneMinute).bar_count(100);
-    let opts2 = ChartOptions::new("BTCUSDT", "BINANCE", Interval::Daily)
+    let opts = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneMinute).bar_count(100);
+    let opts2 = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::Daily)
         .bar_count(1)
         .study_config(
             "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby",
             "33.0",
             ScriptType::IntervalScript,
         );
-    let opts3 = ChartOptions::new("BTCUSDT", "BINANCE", Interval::OneHour)
+    let opts3 = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneHour)
         .replay_mode(true)
         .replay_from(1698624060);
 

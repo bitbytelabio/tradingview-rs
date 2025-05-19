@@ -143,7 +143,7 @@ pub enum SocketMessage<T> {
     Unknown(String),
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize, Copy, Eq)]
 pub enum DataServer {
     #[default]
     Data,
@@ -203,8 +203,7 @@ impl SocketSession {
         SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     )> {
         let url = Url::parse(&format!(
-            "wss://{}.tradingview.com/socket.io/websocket",
-            server
+            "wss://{server}.tradingview.com/socket.io/websocket"
         ))?;
 
         let mut request = url.into_client_request()?;
@@ -297,10 +296,10 @@ pub trait Socket {
                 Some(Ok(message)) => self.handle_raw_messages(session, message).await,
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
-                    self.handle_error(Error::WebSocketError(e)).await;
+                    self.handle_error(Error::WebSocketError(Box::new(e))).await;
                 }
                 None => {
-                    debug!("no messages to read");
+                    trace!("no messages to read");
                     continue;
                 }
             }
