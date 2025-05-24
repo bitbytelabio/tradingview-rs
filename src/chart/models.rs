@@ -1,4 +1,5 @@
 use crate::{Error, MarketSymbol, Result, websocket::SeriesInfo};
+use bon::Builder;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,7 +28,7 @@ impl std::fmt::Display for ChartType {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Builder)]
 pub struct ChartHistoricalData {
     pub symbol_info: SymbolInfo,
     pub series_info: SeriesInfo,
@@ -339,12 +340,10 @@ impl MarketSymbol for SymbolInfo {
     }
 
     fn symbol(&self) -> &str {
-        
         (self.id.split(':').collect::<Vec<&str>>()[1]) as _
     }
 
     fn exchange(&self) -> &str {
-        
         (self.id.split(':').collect::<Vec<&str>>()[0]) as _
     }
 
