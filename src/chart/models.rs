@@ -1,4 +1,4 @@
-use crate::{Error, Result, websocket::SeriesInfo};
+use crate::{Error, MarketSymbol, Result, websocket::SeriesInfo};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -331,6 +331,26 @@ pub struct SymbolInfo {
     #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "16"))]
     #[serde(default)]
     pub aliases: Vec<String>,
+}
+
+impl MarketSymbol for SymbolInfo {
+    fn id(&self) -> String {
+        self.id.clone()
+    }
+
+    fn symbol(&self) -> &str {
+        let symbol = self.id.split(':').collect::<Vec<&str>>()[1];
+        symbol
+    }
+
+    fn exchange(&self) -> &str {
+        let exchange = self.id.split(':').collect::<Vec<&str>>()[0];
+        exchange
+    }
+
+    fn currency(&self) -> &str {
+        &self.currency_id
+    }
 }
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]

@@ -5,6 +5,7 @@ pub use crate::quote::models::*;
 
 use std::{collections::HashMap, fmt::Display};
 
+use bon::Builder;
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod news;
 pub mod pine_indicator;
@@ -98,10 +99,11 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash, Builder)]
 pub struct Symbol {
     pub symbol: String,
     #[serde(default)]
+    #[builder(default)]
     pub description: String,
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
