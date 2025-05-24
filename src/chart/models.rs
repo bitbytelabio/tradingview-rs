@@ -339,13 +339,13 @@ impl MarketSymbol for SymbolInfo {
     }
 
     fn symbol(&self) -> &str {
-        let symbol = self.id.split(':').collect::<Vec<&str>>()[1];
-        symbol
+        
+        (self.id.split(':').collect::<Vec<&str>>()[1]) as _
     }
 
     fn exchange(&self) -> &str {
-        let exchange = self.id.split(':').collect::<Vec<&str>>()[0];
-        exchange
+        
+        (self.id.split(':').collect::<Vec<&str>>()[0]) as _
     }
 
     fn currency(&self) -> &str {
