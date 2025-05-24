@@ -5,9 +5,35 @@ pub use crate::quote::models::*;
 
 use std::{collections::HashMap, fmt::Display};
 
+use bon::Builder;
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod news;
 pub mod pine_indicator;
+
+pub trait MarketSymbol {
+    fn symbol(&self) -> &str;
+    fn exchange(&self) -> &str;
+    fn currency(&self) -> &str;
+    fn id(&self) -> String {
+        format!("{}:{}", self.exchange(), self.symbol())
+    }
+}
+
+impl MarketSymbol for Symbol {
+    fn symbol(&self) -> &str {
+        self.id.split_once(':')
+            .map(|(_, symbol)| symbol)
+            .unwrap_or(&self.symbol)
+    }
+
+    fn exchange(&self) -> &str {
+        &self.exchange
+    }
+
+    fn currency(&self) -> &str {
+        &self.currency_code
+    }
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChartDrawing {
@@ -75,10 +101,11 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash, Builder)]
 pub struct Symbol {
     pub symbol: String,
     #[serde(default)]
+    #[builder(default)]
     pub description: String,
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
@@ -96,7 +123,7 @@ pub struct Symbol {
     pub exchange_source: ExchangeSource,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash)]
 pub struct ExchangeSource {
     pub id: String,
     pub name: String,

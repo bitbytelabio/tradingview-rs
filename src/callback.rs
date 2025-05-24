@@ -7,13 +7,14 @@ use crate::{
     quote::models::QuoteValue,
     websocket::SeriesInfo,
 };
+use bon::Builder;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::info;
 
 pub type Callback<T> = Box<dyn Fn(T) + Send + Sync>;
 
-#[derive(Clone)]
+#[derive(Clone, Builder)]
 pub struct Callbacks {
     pub on_symbol_info: Arc<Callback<SymbolInfo>>,
 

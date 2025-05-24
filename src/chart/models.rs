@@ -1,8 +1,9 @@
-use crate::{Error, Result, websocket::SeriesInfo};
+use crate::{Error, MarketSymbol, Result, websocket::SeriesInfo};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ChartType {
     HeikinAshi,
     Renko,
@@ -84,6 +85,47 @@ pub struct DataPoint {
     #[cfg_attr(feature = "protobuf", prost(double, repeated, tag = "2"))]
     #[serde(rename(deserialize = "v"))]
     pub value: Vec<f64>,
+}
+
+pub trait DataPointIter {
+    fn closes(&self) -> impl Iterator<Item = f64> + '_;
+    fn opens(&self) -> impl Iterator<Item = f64> + '_;
+    fn highs(&self) -> impl Iterator<Item = f64> + '_;
+    fn lows(&self) -> impl Iterator<Item = f64> + '_;
+    fn volumes(&self) -> impl Iterator<Item = f64> + '_;
+    fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_;
+    fn timestamps(&self) -> impl Iterator<Item = i64> + '_;
+}
+
+impl DataPointIter for Vec<DataPoint> {
+    fn closes(&self) -> impl Iterator<Item = f64> + '_ {
+        self.iter().map(|dp| dp.close())
+    }
+
+    fn opens(&self) -> impl Iterator<Item = f64> + '_ {
+        self.iter().map(|dp| dp.open())
+    }
+
+    fn highs(&self) -> impl Iterator<Item = f64> + '_ {
+        self.iter().map(|dp| dp.high())
+    }
+
+    fn lows(&self) -> impl Iterator<Item = f64> + '_ {
+        self.iter().map(|dp| dp.low())
+    }
+
+    fn volumes(&self) -> impl Iterator<Item = f64> + '_ {
+        self.iter().map(|dp| dp.volume())
+    }
+
+    fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_ {
+        self.iter()
+            .map(|dp| dp.datetime().expect("Invalid DataPoint datetime"))
+    }
+
+    fn timestamps(&self) -> impl Iterator<Item = i64> + '_ {
+        self.iter().map(|dp| dp.timestamp())
+    }
 }
 
 pub trait OHLCV {
@@ -289,6 +331,26 @@ pub struct SymbolInfo {
     #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "16"))]
     #[serde(default)]
     pub aliases: Vec<String>,
+}
+
+impl MarketSymbol for SymbolInfo {
+    fn id(&self) -> String {
+        self.id.clone()
+    }
+
+    fn symbol(&self) -> &str {
+        
+        (self.id.split(':').collect::<Vec<&str>>()[1]) as _
+    }
+
+    fn exchange(&self) -> &str {
+        
+        (self.id.split(':').collect::<Vec<&str>>()[0]) as _
+    }
+
+    fn currency(&self) -> &str {
+        &self.currency_id
+    }
 }
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]

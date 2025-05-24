@@ -1,18 +1,24 @@
+use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType};
+use bon::Builder;
 use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType};
-
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, Builder)]
 pub struct ChartOptions {
+    #[builder(default)]
     pub symbol: String,
+    #[builder(default)]
     pub exchange: String,
+    #[builder(default = Interval::Daily)]
     pub interval: Interval,
+    #[builder(default = 500_000)]
     pub bar_count: u64,
     pub range: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
+    #[builder(default = false)]
     pub replay_mode: bool,
+    #[builder(default = 0)]
     pub replay_from: i64,
     pub replay_session: Option<String>,
     pub adjustment: Option<MarketAdjustment>,
@@ -21,7 +27,7 @@ pub struct ChartOptions {
     pub study_config: Option<StudyOptions>,
 }
 
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, Builder)]
 pub struct StudyOptions {
     pub script_id: String,
     pub script_version: String,
