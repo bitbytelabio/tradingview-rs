@@ -21,9 +21,7 @@ pub trait MarketSymbol {
 
 impl MarketSymbol for Symbol {
     fn symbol(&self) -> &str {
-        self.id.split_once(':')
-            .map(|(_, symbol)| symbol)
-            .unwrap_or(&self.symbol)
+        &self.symbol
     }
 
     fn exchange(&self) -> &str {
