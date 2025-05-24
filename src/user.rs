@@ -12,16 +12,7 @@ use tracing::{debug, error, info, warn};
 
 impl UserCookies {
     pub fn new() -> Self {
-        UserCookies {
-            session: String::new(),
-            session_signature: String::new(),
-            device_token: String::new(),
-            session_hash: String::new(),
-            private_channel: String::new(),
-            auth_token: String::new(),
-            id: 0,
-            username: String::new(),
-        }
+        Default::default()
     }
 
     pub async fn login(
