@@ -51,12 +51,12 @@ bon = "3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-criterion = { version = "0.6.0", features = ["html_reports"] }
+criterion = { version = "0.6", features = ["html_reports"] }
 anyhow = "1"
 dotenv = "0.15"
 tracing-subscriber = "0.3"
-chrono = { version = "0.4.31", features = ["serde"] }
-colored = "3.0.0"
+chrono = { version = "0.4", features = ["serde"] }
+colored = "3"
 
 # [[bench]]
 # harness = false
