@@ -1,6 +1,6 @@
 use crate::{
     ChartHistoricalData, DataPoint, Result, Symbol, SymbolInfo,
-    callback::EventsCallback,
+    callback::EventCallback,
     chart::ChartOptions,
     socket::DataServer,
     websocket::{SeriesInfo, WebSocket, WebSocketClient},
@@ -69,8 +69,8 @@ fn create_data_callbacks(
     data_sender: Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>,
     completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
-) -> EventsCallback {
-    EventsCallback::default()
+) -> EventCallback {
+    EventCallback::default()
         .on_chart_data(
             move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
                 tracing::debug!("Received data batch with {} points", data_points.len());
@@ -113,7 +113,7 @@ fn create_data_callbacks(
 async fn setup_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: EventsCallback,
+    callbacks: EventCallback,
     options: ChartOptions,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
@@ -206,8 +206,8 @@ fn create_batch_data_callbacks(
     completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
     symbols_count: Arc<Mutex<usize>>, // Add counter for tracking symbols
-) -> EventsCallback {
-    EventsCallback::default()
+) -> EventCallback {
+    EventCallback::default()
         .on_chart_data(
             move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
                 tracing::debug!("Received data batch with {} points", data_points.len());
@@ -260,7 +260,7 @@ fn create_batch_data_callbacks(
 async fn setup_batch_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: EventsCallback,
+    callbacks: EventCallback,
     symbols: &[Symbol],
     base_options: ChartOptions,
 ) -> Result<WebSocket> {

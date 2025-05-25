@@ -3,7 +3,7 @@ use std::env;
 
 use tradingview::{
     Interval, QuoteValue,
-    callback::EventsCallback,
+    callback::EventCallback,
     chart::ChartOptions,
     pine_indicator::ScriptType,
     socket::DataServer,
@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
         println!("{:#?}", data);
     };
 
-    let callbacks: EventsCallback = EventsCallback::default().on_quote_data(quote_callback);
+    let callbacks: EventCallback = EventCallback::default().on_quote_data(quote_callback);
 
     let client = WebSocketClient::default().set_callbacks(callbacks);
 

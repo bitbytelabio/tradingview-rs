@@ -37,7 +37,7 @@ macro_rules! event_setter {
 }
 
 #[derive(Clone, Builder)]
-pub struct EventsCallback {
+pub struct EventCallback {
     #[builder(default= default_callback::<SymbolInfo>("ON_SYMBOL_INFO"))]
     pub on_symbol_info: Arc<CallbackFn<SymbolInfo>>,
 
@@ -87,13 +87,13 @@ pub struct EventsCallback {
     pub on_unknown_event: Arc<CallbackFn<(String, Vec<Value>)>>,
 }
 
-impl Default for EventsCallback {
+impl Default for EventCallback {
     fn default() -> Self {
-        EventsCallback::builder().build()
+        EventCallback::builder().build()
     }
 }
 
-impl EventsCallback {
+impl EventCallback {
     event_setter!(on_chart_data, (SeriesInfo, Vec<DataPoint>));
     event_setter!(on_quote_data, QuoteValue);
     event_setter!(on_study_data, (StudyOptions, StudyResponseData));
