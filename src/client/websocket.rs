@@ -1,10 +1,7 @@
 use crate::{
     DataPoint, Error, Interval, Result, Timezone,
     callback::EventCallback,
-    chart::{
-        ChartOptions, StudyOptions,
-        models::{ChartResponseData, StudyResponseData, SymbolInfo},
-    },
+    chart::{ChartOptions, ChartResponseData, StudyOptions, StudyResponseData, SymbolInfo},
     error::TradingViewError,
     payload,
     pine_indicator::PineIndicator,

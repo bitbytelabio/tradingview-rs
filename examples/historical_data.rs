@@ -1,9 +1,8 @@
-use std::sync::Once;
-
 use colored::*;
+use std::sync::Once;
 use tradingview::{
     Interval, OHLCV,
-    chart::{ChartOptions, data::fetch_chart_historical},
+    chart::{ChartOptions, fetch_chart_historical},
     socket::DataServer,
 };
 

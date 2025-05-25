@@ -1,8 +1,7 @@
 use crate::{
     Error,
     chart::{
-        StudyOptions,
-        models::{DataPoint, StudyResponseData, SymbolInfo},
+        StudyOptions, {DataPoint, StudyResponseData, SymbolInfo},
     },
     quote::models::QuoteValue,
     websocket::SeriesInfo,

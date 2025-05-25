@@ -1,6 +1,6 @@
 pub use self::MarketType::*;
 pub use self::news::*;
-pub use crate::chart::models::*;
+pub use crate::chart::*;
 pub use crate::quote::models::*;
 
 use std::{collections::HashMap, fmt::Display};
