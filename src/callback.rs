@@ -10,115 +10,69 @@ use crate::{
 use bon::Builder;
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::info;
 
 pub type Callback<T> = Box<dyn Fn(T) + Send + Sync + 'static>;
 
+fn default_callback<T: std::fmt::Debug>(name: &'static str) -> Arc<Callback<T>> {
+    Arc::new(Box::new(move |data| {
+        tracing::trace!("Callback trigger on {}: {:?}", name, data);
+    }))
+}
+
 #[derive(Clone, Builder)]
 pub struct Callbacks {
-    #[builder(default= Callbacks::default().on_symbol_info)]
+    #[builder(default= default_callback::<SymbolInfo>("ON_SYMBOL_INFO"))]
     pub on_symbol_info: Arc<Callback<SymbolInfo>>,
 
-    #[builder(default= Callbacks::default().on_series_loading)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_SERIES_LOADING"))]
     pub on_series_loading: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_chart_data)]
+    #[builder(default= default_callback::<(SeriesInfo, Vec<DataPoint>)>("ON_CHART_DATA"))]
     pub on_chart_data: Arc<Callback<(SeriesInfo, Vec<DataPoint>)>>,
 
-    #[builder(default= Callbacks::default().on_series_completed)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_SERIES_COMPLETED"))]
     pub on_series_completed: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_study_loading)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_STUDY_LOADING"))]
     pub on_study_loading: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_study_data)]
+    #[builder(default= default_callback::<(StudyOptions, StudyResponseData)>("ON_STUDY_DATA"))]
     pub on_study_data: Arc<Callback<(StudyOptions, StudyResponseData)>>,
 
-    #[builder(default= Callbacks::default().on_study_completed)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_STUDY_COMPLETED"))]
     pub on_study_completed: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_quote_data)]
+    #[builder(default= default_callback::<QuoteValue>("ON_QUOTE_DATA"))]
     pub on_quote_data: Arc<Callback<QuoteValue>>,
 
-    #[builder(default= Callbacks::default().on_quote_completed)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_QUOTE_COMPLETED"))]
     pub on_quote_completed: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_replay_ok)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_REPLAY_OK"))]
     pub on_replay_ok: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_replay_point)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_REPLAY_POINT"))]
     pub on_replay_point: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_replay_instance_id)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_REPLAY_INSTANCE_ID"))]
     pub on_replay_instance_id: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_replay_resolutions)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_REPLAY_RESOLUTIONS"))]
     pub on_replay_resolutions: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_replay_data_end)]
+    #[builder(default= default_callback::<Vec<Value>>("ON_REPLAY_DATA_END"))]
     pub on_replay_data_end: Arc<Callback<Vec<Value>>>,
 
-    #[builder(default= Callbacks::default().on_error)]
+    #[builder(default= default_callback::<(Error, Vec<Value>)>("ON_ERROR"))]
     pub on_error: Arc<Callback<(Error, Vec<Value>)>>,
 
-    #[builder(default= Callbacks::default().on_unknown_event)]
+    #[builder(default= default_callback::<(String, Vec<Value>)>("ON_UNKNOWN_EVENT"))]
     pub on_unknown_event: Arc<Callback<(String, Vec<Value>)>>,
 }
 
 impl Default for Callbacks {
     fn default() -> Self {
-        Self {
-            on_chart_data: Arc::new(Box::new(|data| {
-                info!("callback trigger on chart data: {:?}", data);
-            })),
-            on_quote_data: Arc::new(Box::new(|data| {
-                info!("callback trigger on quote data: {:?}", data);
-            })),
-            on_study_data: Arc::new(Box::new(|data| {
-                info!("callback trigger on study data: {:?}", data);
-            })),
-
-            on_error: Arc::new(Box::new(|data| {
-                info!("callback trigger on error: {:?}", data);
-            })),
-            on_symbol_info: Arc::new(Box::new(|data| {
-                info!("callback trigger on symbol info: {:?}", data);
-            })),
-
-            on_series_completed: Arc::new(Box::new(|data| {
-                info!("callback trigger on series completed: {:?}", data);
-            })),
-            on_series_loading: Arc::new(Box::new(|data| {
-                info!("callback trigger on series loading: {:?}", data);
-            })),
-            on_quote_completed: Arc::new(Box::new(|data| {
-                info!("callback trigger on quote completed: {:?}", data);
-            })),
-            on_replay_ok: Arc::new(Box::new(|data| {
-                info!("callback trigger on replay ok: {:?}", data);
-            })),
-            on_replay_point: Arc::new(Box::new(|data| {
-                info!("callback trigger on replay point: {:?}", data);
-            })),
-            on_replay_instance_id: Arc::new(Box::new(|data| {
-                info!("callback trigger on replay instance id: {:?}", data);
-            })),
-            on_replay_resolutions: Arc::new(Box::new(|data| {
-                info!("callback trigger on replay resolutions: {:?}", data);
-            })),
-            on_replay_data_end: Arc::new(Box::new(|data| {
-                info!("callback trigger on replay data end: {:?}", data);
-            })),
-            on_study_loading: Arc::new(Box::new(|data| {
-                info!("callback trigger on study loading: {:?}", data);
-            })),
-            on_study_completed: Arc::new(Box::new(|data| {
-                info!("callback trigger on study completed: {:?}", data);
-            })),
-            on_unknown_event: Arc::new(Box::new(|data| {
-                info!("callback trigger on unknown event: {:?}", data);
-            })),
-        }
+        Callbacks::builder().build()
     }
 }
 
