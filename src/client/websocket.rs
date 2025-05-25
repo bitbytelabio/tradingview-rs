@@ -1,6 +1,6 @@
 use crate::{
     DataPoint, Error, Interval, Result, Timezone,
-    callback::Callbacks,
+    callback::EventsCallback,
     chart::{
         ChartOptions, StudyOptions,
         models::{ChartResponseData, StudyResponseData, SymbolInfo},
@@ -25,7 +25,7 @@ use tracing::{debug, error, trace, warn};
 #[derive(Clone, Default)]
 pub struct WebSocketClient {
     metadata: Arc<RwLock<Metadata>>,
-    callbacks: Callbacks,
+    callbacks: EventsCallback,
 }
 
 #[allow(clippy::type_complexity)]
@@ -795,7 +795,7 @@ impl WebSocketClient {
         }
     }
 
-    pub fn set_callbacks(mut self, callbacks: Callbacks) -> Self {
+    pub fn set_callbacks(mut self, callbacks: EventsCallback) -> Self {
         self.callbacks = callbacks;
         self
     }
