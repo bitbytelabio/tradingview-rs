@@ -10,7 +10,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
     spawn,
     sync::{Mutex, mpsc, oneshot},
-    time::{self, timeout},
+    time::{sleep, timeout},
 };
 
 /// Fetch historical chart data from TradingView
@@ -299,7 +299,7 @@ async fn setup_batch_websocket_connection(
             }
 
             // Wait 5 seconds before processing the next batch
-            time::sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_secs(2)).await;
             tracing::debug!(
                 "Processed batch of {} markets, waiting before next batch",
                 chunk.len()

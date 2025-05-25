@@ -12,30 +12,56 @@ use serde_json::Value;
 use std::sync::Arc;
 use tracing::info;
 
-pub type Callback<T> = Box<dyn Fn(T) + Send + Sync>;
+pub type Callback<T> = Box<dyn Fn(T) + Send + Sync + 'static>;
 
 #[derive(Clone, Builder)]
 pub struct Callbacks {
+    #[builder(default= Callbacks::default().on_symbol_info)]
     pub on_symbol_info: Arc<Callback<SymbolInfo>>,
 
+    #[builder(default= Callbacks::default().on_series_loading)]
     pub on_series_loading: Arc<Callback<Vec<Value>>>,
+
+    #[builder(default= Callbacks::default().on_chart_data)]
     pub on_chart_data: Arc<Callback<(SeriesInfo, Vec<DataPoint>)>>,
+
+    #[builder(default= Callbacks::default().on_series_completed)]
     pub on_series_completed: Arc<Callback<Vec<Value>>>,
 
+    #[builder(default= Callbacks::default().on_study_loading)]
     pub on_study_loading: Arc<Callback<Vec<Value>>>,
+
+    #[builder(default= Callbacks::default().on_study_data)]
     pub on_study_data: Arc<Callback<(StudyOptions, StudyResponseData)>>,
+
+    #[builder(default= Callbacks::default().on_study_completed)]
     pub on_study_completed: Arc<Callback<Vec<Value>>>,
 
+    #[builder(default= Callbacks::default().on_quote_data)]
     pub on_quote_data: Arc<Callback<QuoteValue>>,
+
+    #[builder(default= Callbacks::default().on_quote_completed)]
     pub on_quote_completed: Arc<Callback<Vec<Value>>>,
 
+    #[builder(default= Callbacks::default().on_replay_ok)]
     pub on_replay_ok: Arc<Callback<Vec<Value>>>,
+
+    #[builder(default= Callbacks::default().on_replay_point)]
     pub on_replay_point: Arc<Callback<Vec<Value>>>,
+
+    #[builder(default= Callbacks::default().on_replay_instance_id)]
     pub on_replay_instance_id: Arc<Callback<Vec<Value>>>,
+
+    #[builder(default= Callbacks::default().on_replay_resolutions)]
     pub on_replay_resolutions: Arc<Callback<Vec<Value>>>,
+
+    #[builder(default= Callbacks::default().on_replay_data_end)]
     pub on_replay_data_end: Arc<Callback<Vec<Value>>>,
 
+    #[builder(default= Callbacks::default().on_error)]
     pub on_error: Arc<Callback<(Error, Vec<Value>)>>,
+
+    #[builder(default= Callbacks::default().on_unknown_event)]
     pub on_unknown_event: Arc<Callback<(String, Vec<Value>)>>,
 }
 
