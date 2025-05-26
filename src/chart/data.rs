@@ -491,13 +491,12 @@ mod tests {
     async fn test_batch_fetch_chart_historical() -> anyhow::Result<()> {
         init();
         dotenv::dotenv().ok();
-        let symbols = list_symbols(
-            Some("HNX".to_string()),
-            Some(MarketType::Stocks(StocksType::Common)),
-            Some("VN".to_string()),
-            None,
-        )
-        .await?;
+        let symbols = list_symbols()
+            .exchange("HNX")
+            .market_type(MarketType::Stocks(StocksType::Common))
+            .country("VN")
+            .call()
+            .await?;
         assert!(!symbols.is_empty(), "No symbols found");
         let symbols = symbols[0..50].to_vec();
 
