@@ -2,10 +2,11 @@ use crate::{
     MarketType, News, NewsArea, NewsContent, NewsHeadlines, NewsSection, Result, UserCookies,
     utils::get,
 };
+use bon::builder;
 
 static BASE_NEWS_URL: &str = "https://news-headlines.tradingview.com/v2";
 
-fn get_news_category(market_type: &MarketType) -> &str {
+fn get_news_category(market_type: MarketType) -> &'static str {
     match market_type {
         MarketType::All => "base",
         MarketType::Stocks(_) => "stock",
@@ -19,7 +20,7 @@ fn get_news_category(market_type: &MarketType) -> &str {
     }
 }
 
-fn get_news_area(area: &NewsArea) -> &str {
+fn get_news_area(area: NewsArea) -> &'static str {
     match area {
         NewsArea::World => "WLD",
         NewsArea::Americas => "AME",
@@ -30,7 +31,7 @@ fn get_news_area(area: &NewsArea) -> &str {
     }
 }
 
-fn get_news_section(section: &NewsSection) -> &str {
+fn get_news_section(section: NewsSection) -> &'static str {
     match section {
         NewsSection::PressRelease => "press_release",
         NewsSection::FinancialStatement => "financial_statement",
@@ -45,11 +46,12 @@ fn get_news_section(section: &NewsSection) -> &str {
     }
 }
 
+#[builder]
 pub async fn list_news(
     client: Option<&UserCookies>,
-    category: &MarketType,
-    area: Option<&NewsArea>,
-    section: Option<&NewsSection>,
+    #[builder(default = MarketType::All)] category: MarketType,
+    area: Option<NewsArea>,
+    section: Option<NewsSection>,
 ) -> Result<NewsHeadlines> {
     let category = get_news_category(category);
     let mut queries = vec![
@@ -116,13 +118,7 @@ impl News {
 
 #[tokio::test]
 async fn test_list_news() -> Result<()> {
-    let res = list_news(
-        None,
-        &MarketType::All,
-        None,
-        Some(&NewsSection::AnalysisAll),
-    )
-    .await?;
+    let res = list_news().section(NewsSection::AnalysisAll).call().await?;
     println!("{:#?}", res);
     Ok(())
 }
@@ -131,13 +127,7 @@ async fn test_list_news() -> Result<()> {
 async fn test_fetch_news() -> Result<()> {
     let _ = fetch_news("tag:reuters.com,2024:newsml_L4N3E9476:0").await?;
 
-    let res = list_news(
-        None,
-        &MarketType::All,
-        None,
-        Some(&NewsSection::AnalysisAll),
-    )
-    .await?;
+    let res = list_news().section(NewsSection::AnalysisAll).call().await?;
 
     for item in res.items[0..2].iter() {
         let content = item.get_content().await.unwrap();
@@ -149,13 +139,7 @@ async fn test_fetch_news() -> Result<()> {
 
 #[tokio::test]
 async fn test_get_source_html() -> Result<()> {
-    let res = list_news(
-        None,
-        &MarketType::All,
-        None,
-        Some(&NewsSection::AnalysisAll),
-    )
-    .await?;
+    let res = list_news().section(NewsSection::AnalysisAll).call().await?;
 
     for item in res.items[0..1].iter() {
         let html = item.get_source_html().await.unwrap();
