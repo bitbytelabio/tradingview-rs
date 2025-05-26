@@ -55,9 +55,7 @@ async fn main() -> anyhow::Result<()> {
         println!(
             "{} {} | Open: {} | High: {} | Low: {} | Close: {} | Volume: {}",
             format!("[{}]", i).blue(),
-            format!("{}", bar.datetime().ok().unwrap())
-                .bright_yellow()
-                .bold(),
+            format!("{}", bar.datetime()).bright_yellow().bold(),
             format!("{:.2}", bar.open()).green(),
             format!("{:.2}", bar.high()).bright_green(),
             format!("{:.2}", bar.low()).red(),

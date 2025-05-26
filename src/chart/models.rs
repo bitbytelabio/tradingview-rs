@@ -1,4 +1,4 @@
-use crate::{Error, MarketSymbol, Result, websocket::SeriesInfo};
+use crate::{MarketSymbol, websocket::SeriesInfo};
 use bon::Builder;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -150,8 +150,7 @@ impl DataPointIter for Vec<DataPoint> {
     }
 
     fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_ {
-        self.iter()
-            .map(|dp| dp.datetime().expect("Invalid DataPoint datetime"))
+        self.iter().map(|dp| dp.datetime())
     }
 
     fn timestamps(&self) -> impl Iterator<Item = i64> + '_ {
@@ -160,7 +159,7 @@ impl DataPointIter for Vec<DataPoint> {
 }
 
 pub trait OHLCV {
-    fn datetime(&self) -> Result<DateTime<Utc>>;
+    fn datetime(&self) -> DateTime<Utc>;
     fn timestamp(&self) -> i64;
     fn open(&self) -> f64;
     fn high(&self) -> f64;
@@ -226,19 +225,9 @@ pub trait OHLCV {
 }
 
 impl OHLCV for DataPoint {
-    fn datetime(&self) -> Result<DateTime<Utc>> {
-        if self.value.is_empty() {
-            return Err(Error::Generic("DataPoint value is empty".to_owned()));
-        }
-
+    fn datetime(&self) -> DateTime<Utc> {
         let timestamp = self.value[0] as i64;
-        if let Some(datetime) = DateTime::<Utc>::from_timestamp(timestamp, 0) {
-            return Ok(datetime);
-        }
-
-        Err(Error::Generic(
-            "Failed to convert timestamp to DateTime".to_owned(),
-        ))
+        DateTime::<Utc>::from_timestamp(timestamp, 0).expect("Invalid timestamp")
     }
 
     fn open(&self) -> f64 {
