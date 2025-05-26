@@ -14,7 +14,7 @@ use tokio::{
 };
 
 /// Fetch historical chart data from TradingView
-pub async fn fetch_chart_historical(
+pub async fn fetch_chart_data(
     auth_token: &str,
     options: ChartOptions,
     server: Option<DataServer>,
@@ -312,7 +312,7 @@ async fn setup_batch_websocket_connection(
     Ok(websocket)
 }
 
-pub async fn batch_fetch_chart_historical(
+pub async fn fetch_chart_data_batch(
     auth_token: &str,
     symbols: &[Symbol],
     base_options: ChartOptions,
@@ -471,7 +471,7 @@ mod tests {
         let interval = Interval::Daily;
         let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(10);
         let server = Some(DataServer::ProData);
-        let data = fetch_chart_historical(&auth_token, option, server).await?;
+        let data = fetch_chart_data(&auth_token, option, server).await?;
         assert!(!data.data.is_empty(), "Data should not be empty");
         assert_eq!(data.data.len(), 10, "Data length should be 10");
         assert_eq!(data.symbol_info.id, "HOSE:VCB", "Symbol should match");
@@ -509,7 +509,7 @@ mod tests {
 
         let server = Some(DataServer::ProData);
         let data: HashMap<String, ChartHistoricalData> =
-            batch_fetch_chart_historical(&auth_token, &symbols, based_opt, server).await?;
+            fetch_chart_data_batch(&auth_token, &symbols, based_opt, server).await?;
 
         for (k, d) in data {
             println!(

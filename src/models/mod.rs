@@ -103,7 +103,6 @@ pub struct SymbolSearchResponse {
 pub struct Symbol {
     pub symbol: String,
     #[serde(default)]
-    #[builder(default)]
     pub description: String,
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
@@ -112,12 +111,15 @@ pub struct Symbol {
     #[serde(default)]
     pub currency_code: String,
     #[serde(default, rename(deserialize = "provider_id"))]
+    #[builder(default)]
     pub data_provider: String,
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
     #[serde(default, rename(deserialize = "typespecs"))]
+    #[builder(default)]
     pub type_specs: Vec<String>,
     #[serde(default, rename(deserialize = "source2"))]
+    #[builder(default)]
     pub exchange_source: ExchangeSource,
 }
 
