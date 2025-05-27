@@ -1,4 +1,4 @@
-use crate::{Error, MarketSymbol, Result, websocket::SeriesInfo};
+use crate::{MarketSymbol, websocket::SeriesInfo};
 use bon::Builder;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,14 @@ impl Default for ChartHistoricalData {
     }
 }
 
+impl OHLCVs for ChartHistoricalData {
+    type Item = DataPoint;
+
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.data.iter()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChartResponseData {
     #[serde(default)]
@@ -88,17 +96,11 @@ pub struct DataPoint {
     pub value: Vec<f64>,
 }
 
-pub trait DataPointIter {
-    fn closes(&self) -> impl Iterator<Item = f64> + '_;
-    fn opens(&self) -> impl Iterator<Item = f64> + '_;
-    fn highs(&self) -> impl Iterator<Item = f64> + '_;
-    fn lows(&self) -> impl Iterator<Item = f64> + '_;
-    fn volumes(&self) -> impl Iterator<Item = f64> + '_;
-    fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_;
-    fn timestamps(&self) -> impl Iterator<Item = i64> + '_;
-}
+pub trait OHLCVs {
+    type Item: OHLCV;
 
-impl DataPointIter for Vec<DataPoint> {
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_;
+
     fn closes(&self) -> impl Iterator<Item = f64> + '_ {
         self.iter().map(|dp| dp.close())
     }
@@ -120,8 +122,7 @@ impl DataPointIter for Vec<DataPoint> {
     }
 
     fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_ {
-        self.iter()
-            .map(|dp| dp.datetime().expect("Invalid DataPoint datetime"))
+        self.iter().map(|dp| dp.datetime())
     }
 
     fn timestamps(&self) -> impl Iterator<Item = i64> + '_ {
@@ -129,8 +130,16 @@ impl DataPointIter for Vec<DataPoint> {
     }
 }
 
+impl OHLCVs for Vec<DataPoint> {
+    type Item = DataPoint;
+
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.into_iter()
+    }
+}
+
 pub trait OHLCV {
-    fn datetime(&self) -> Result<DateTime<Utc>>;
+    fn datetime(&self) -> DateTime<Utc>;
     fn timestamp(&self) -> i64;
     fn open(&self) -> f64;
     fn high(&self) -> f64;
@@ -196,19 +205,9 @@ pub trait OHLCV {
 }
 
 impl OHLCV for DataPoint {
-    fn datetime(&self) -> Result<DateTime<Utc>> {
-        if self.value.is_empty() {
-            return Err(Error::Generic("DataPoint value is empty".to_owned()));
-        }
-
+    fn datetime(&self) -> DateTime<Utc> {
         let timestamp = self.value[0] as i64;
-        if let Some(datetime) = DateTime::<Utc>::from_timestamp(timestamp, 0) {
-            return Ok(datetime);
-        }
-
-        Err(Error::Generic(
-            "Failed to convert timestamp to DateTime".to_owned(),
-        ))
+        DateTime::<Utc>::from_timestamp(timestamp, 0).expect("Invalid timestamp")
     }
 
     fn open(&self) -> f64 {

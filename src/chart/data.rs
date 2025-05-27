@@ -1,6 +1,6 @@
 use crate::{
     ChartHistoricalData, DataPoint, Result, Symbol, SymbolInfo,
-    callback::Callbacks,
+    callback::EventCallback,
     chart::ChartOptions,
     socket::DataServer,
     websocket::{SeriesInfo, WebSocket, WebSocketClient},
@@ -10,11 +10,11 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
     spawn,
     sync::{Mutex, mpsc, oneshot},
-    time::{self, timeout},
+    time::{sleep, timeout},
 };
 
 /// Fetch historical chart data from TradingView
-pub async fn fetch_chart_historical(
+pub async fn fetch_chart_data(
     auth_token: &str,
     options: ChartOptions,
     server: Option<DataServer>,
@@ -69,8 +69,8 @@ fn create_data_callbacks(
     data_sender: Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>,
     completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
-) -> Callbacks {
-    Callbacks::default()
+) -> EventCallback {
+    EventCallback::default()
         .on_chart_data(
             move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
                 tracing::debug!("Received data batch with {} points", data_points.len());
@@ -113,7 +113,7 @@ fn create_data_callbacks(
 async fn setup_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: Callbacks,
+    callbacks: EventCallback,
     options: ChartOptions,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
@@ -206,8 +206,8 @@ fn create_batch_data_callbacks(
     completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
     symbols_count: Arc<Mutex<usize>>, // Add counter for tracking symbols
-) -> Callbacks {
-    Callbacks::default()
+) -> EventCallback {
+    EventCallback::default()
         .on_chart_data(
             move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
                 tracing::debug!("Received data batch with {} points", data_points.len());
@@ -260,7 +260,7 @@ fn create_batch_data_callbacks(
 async fn setup_batch_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: Callbacks,
+    callbacks: EventCallback,
     symbols: &[Symbol],
     base_options: ChartOptions,
 ) -> Result<WebSocket> {
@@ -299,7 +299,7 @@ async fn setup_batch_websocket_connection(
             }
 
             // Wait 5 seconds before processing the next batch
-            time::sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_secs(2)).await;
             tracing::debug!(
                 "Processed batch of {} markets, waiting before next batch",
                 chunk.len()
@@ -312,7 +312,7 @@ async fn setup_batch_websocket_connection(
     Ok(websocket)
 }
 
-pub async fn batch_fetch_chart_historical(
+pub async fn fetch_chart_data_batch(
     auth_token: &str,
     symbols: &[Symbol],
     base_options: ChartOptions,
@@ -471,7 +471,7 @@ mod tests {
         let interval = Interval::Daily;
         let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(10);
         let server = Some(DataServer::ProData);
-        let data = fetch_chart_historical(&auth_token, option, server).await?;
+        let data = fetch_chart_data(&auth_token, option, server).await?;
         assert!(!data.data.is_empty(), "Data should not be empty");
         assert_eq!(data.data.len(), 10, "Data length should be 10");
         assert_eq!(data.symbol_info.id, "HOSE:VCB", "Symbol should match");
@@ -491,13 +491,12 @@ mod tests {
     async fn test_batch_fetch_chart_historical() -> anyhow::Result<()> {
         init();
         dotenv::dotenv().ok();
-        let symbols = list_symbols(
-            Some("HNX".to_string()),
-            Some(MarketType::Stocks(StocksType::Common)),
-            Some("VN".to_string()),
-            None,
-        )
-        .await?;
+        let symbols = list_symbols()
+            .exchange("HNX")
+            .market_type(MarketType::Stocks(StocksType::Common))
+            .country("VN")
+            .call()
+            .await?;
         assert!(!symbols.is_empty(), "No symbols found");
         let symbols = symbols[0..50].to_vec();
 
@@ -510,7 +509,7 @@ mod tests {
 
         let server = Some(DataServer::ProData);
         let data: HashMap<String, ChartHistoricalData> =
-            batch_fetch_chart_historical(&auth_token, &symbols, based_opt, server).await?;
+            fetch_chart_data_batch(&auth_token, &symbols, based_opt, server).await?;
 
         for (k, d) in data {
             println!(

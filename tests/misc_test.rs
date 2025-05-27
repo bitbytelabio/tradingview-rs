@@ -4,21 +4,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_symbol() {
-        let res = advanced_search_symbol(
-            "",
-            "",
-            &MarketType::Crypto(CryptoType::All),
-            0,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let res = advanced_search_symbol()
+            .market_type(MarketType::Crypto(CryptoType::All))
+            .call()
+            .await
+            .unwrap();
 
         println!("{:#?}", res);
         assert!(!res.symbols.is_empty());
@@ -26,7 +16,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_symbol() {
-        let res = list_symbols(None, None, None, None).await.unwrap();
+        let res = list_symbols().call().await.unwrap();
 
         println!("{:#?}", res.len());
         assert!(!res.is_empty());

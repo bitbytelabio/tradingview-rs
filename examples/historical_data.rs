@@ -1,9 +1,8 @@
-use std::sync::Once;
-
 use colored::*;
+use std::sync::Once;
 use tradingview::{
     Interval, OHLCV,
-    chart::{ChartOptions, data::fetch_chart_historical},
+    chart::{ChartOptions, fetch_chart_data},
     socket::DataServer,
 };
 
@@ -46,7 +45,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(bars);
-    let data = fetch_chart_historical(&auth_token, option, Some(DataServer::ProData)).await?;
+    let data = fetch_chart_data(&auth_token, option, Some(DataServer::ProData)).await?;
 
     println!("{}", "✅ Data retrieved successfully!".green());
     println!("{}", "----------------------------------------".dimmed());
@@ -56,9 +55,7 @@ async fn main() -> anyhow::Result<()> {
         println!(
             "{} {} | Open: {} | High: {} | Low: {} | Close: {} | Volume: {}",
             format!("[{}]", i).blue(),
-            format!("{}", bar.datetime().ok().unwrap())
-                .bright_yellow()
-                .bold(),
+            format!("{}", bar.datetime()).bright_yellow().bold(),
             format!("{:.2}", bar.open()).green(),
             format!("{:.2}", bar.high()).bright_green(),
             format!("{:.2}", bar.low()).red(),

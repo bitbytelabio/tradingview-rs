@@ -3,7 +3,7 @@ use dotenv::dotenv;
 use std::env;
 use tradingview::{
     Interval,
-    callback::Callbacks,
+    callback::EventCallback,
     chart::ChartOptions,
     get_builtin_indicators,
     pine_indicator::{BuiltinIndicators, ScriptType},
@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     let study_callback = |data| {
         println!("{:#?}", data);
     };
-    let callbacks: Callbacks = Callbacks::default().on_study_data(study_callback);
+    let callbacks: EventCallback = EventCallback::default().on_study_data(study_callback);
 
     let client = WebSocketClient::default().set_callbacks(callbacks);
 

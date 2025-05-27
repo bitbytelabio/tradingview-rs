@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     ChartDrawing, CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType,
     MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
@@ -7,8 +5,10 @@ use crate::{
     pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
     utils::build_request,
 };
+use bon::builder;
 use reqwest::Response;
 use serde_json::Value;
+use std::sync::Arc;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::debug;
 
@@ -38,21 +38,12 @@ async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
 }
 
 pub async fn get_symbol(symbol: &str, exchange: &str) -> Option<Symbol> {
-    let search_data = advanced_search_symbol(
-        symbol,
-        exchange,
-        &MarketType::All,
-        0,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    .await
-    .ok()?;
+    let search_data = advanced_search_symbol()
+        .search(symbol)
+        .exchange(exchange)
+        .call()
+        .await
+        .ok()?;
 
     let symbol = match search_data.symbols.first() {
         Some(symbol) => symbol,
@@ -65,20 +56,11 @@ pub async fn get_symbol(symbol: &str, exchange: &str) -> Option<Symbol> {
 }
 
 pub async fn search_symbols(search: &str, exchange: &str) -> Result<Vec<Symbol>> {
-    let search_data = advanced_search_symbol(
-        search,
-        exchange,
-        &MarketType::All,
-        0,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    .await?;
+    let search_data = advanced_search_symbol()
+        .search(search)
+        .exchange(exchange)
+        .call()
+        .await?;
     Ok(search_data.symbols)
 }
 
@@ -97,13 +79,14 @@ pub async fn search_symbols(search: &str, exchange: &str) -> Result<Vec<Symbol>>
 ///
 /// A `Result` containing a `SymbolSearchResponse` struct representing the search results, or an error if the search failed.
 #[allow(clippy::too_many_arguments)]
+#[builder]
 pub async fn advanced_search_symbol(
-    search: &str,
-    exchange: &str,
-    market_type: &MarketType,
-    start: u64,
+    search: Option<&str>,
+    exchange: Option<&str>,
+    #[builder(default= MarketType::All)] market_type: MarketType,
+    #[builder(default = 0)] start: u64,
     country: Option<&str>,
-    domain: Option<&str>,
+    #[builder(default = "production")] domain: &str,
     futures_type: Option<&FuturesProductType>, // For Futures Only
     stock_sector: Option<&StockSector>,        // For Stock Only
     crypto_centralization: Option<&CryptoCentralization>, // For Crypto Only
@@ -111,9 +94,11 @@ pub async fn advanced_search_symbol(
     economic_category: Option<&EconomicCategory>, // For Economy Only
 ) -> Result<SymbolSearchResponse> {
     let mut params: Vec<(String, String)> = Vec::new();
-    let domain = domain.unwrap_or("production");
-    params.push(("text".to_string(), search.to_string()));
-    params.push(("exchange".to_string(), exchange.to_string()));
+    params.push(("text".to_string(), search.unwrap_or_default().to_string()));
+    params.push((
+        "exchange".to_string(),
+        exchange.unwrap_or_default().to_string(),
+    ));
     params.push(("search_type".to_string(), market_type.to_string()));
     params.push(("domain".to_string(), domain.to_string()));
     if let Some(country) = country {
@@ -181,32 +166,26 @@ pub async fn advanced_search_symbol(
 /// # Returns
 ///
 /// A `Result` containing a vector of `Symbol` structs representing the search results, or an error if the search failed.
-#[tracing::instrument]
+#[builder]
 pub async fn list_symbols(
-    exchange: Option<String>,
+    exchange: Option<&str>,
     market_type: Option<MarketType>,
-    country: Option<String>,
-    domain: Option<String>,
+    country: Option<&str>,
+    domain: Option<&str>,
 ) -> Result<Vec<Symbol>> {
     let market_type: Arc<MarketType> = Arc::new(market_type.unwrap_or_default());
-    let exchange: Arc<String> = Arc::new(exchange.unwrap_or("".to_string()));
-    let country = Arc::new(country.unwrap_or("".to_string()));
-    let domain = Arc::new(domain.unwrap_or("production".to_string()));
+    let exchange: Arc<String> = Arc::new(exchange.unwrap_or("").to_string());
+    let country = Arc::new(country.unwrap_or("").to_string());
+    let domain = Arc::new(domain.unwrap_or("production").to_string());
 
-    let search_symbol_reps = advanced_search_symbol(
-        "",
-        &exchange,
-        &market_type,
-        0,
-        Some(&country),
-        Some(&domain),
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    .await?;
+    let search_symbol_reps = advanced_search_symbol()
+        .exchange(&exchange)
+        .market_type(*market_type)
+        .country(&country)
+        .domain(&domain)
+        .call()
+        .await?;
+
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
@@ -227,21 +206,15 @@ pub async fn list_symbols(
                 .acquire()
                 .await
                 .expect("Failed to acquire semaphore");
-            advanced_search_symbol(
-                "",
-                &exchange,
-                &market_type,
-                i,
-                Some(&country),
-                Some(&domain),
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-            .await
-            .map(|resp| resp.symbols)
+            advanced_search_symbol()
+                .exchange(&exchange)
+                .country(&country)
+                .market_type(*market_type)
+                .domain(&domain)
+                .start(i)
+                .call()
+                .await
+                .map(|resp| resp.symbols)
         });
 
         tasks.push(task);

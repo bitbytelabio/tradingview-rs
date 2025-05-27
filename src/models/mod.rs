@@ -1,6 +1,6 @@
 pub use self::MarketType::*;
 pub use self::news::*;
-pub use crate::chart::models::*;
+pub use crate::chart::*;
 pub use crate::quote::models::*;
 
 use std::{collections::HashMap, fmt::Display};
@@ -103,7 +103,6 @@ pub struct SymbolSearchResponse {
 pub struct Symbol {
     pub symbol: String,
     #[serde(default)]
-    #[builder(default)]
     pub description: String,
     #[serde(default, rename(deserialize = "type"))]
     pub market_type: String,
@@ -112,12 +111,15 @@ pub struct Symbol {
     #[serde(default)]
     pub currency_code: String,
     #[serde(default, rename(deserialize = "provider_id"))]
+    #[builder(default)]
     pub data_provider: String,
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
     #[serde(default, rename(deserialize = "typespecs"))]
+    #[builder(default)]
     pub type_specs: Vec<String>,
     #[serde(default, rename(deserialize = "source2"))]
+    #[builder(default)]
     pub exchange_source: ExchangeSource,
 }
 
@@ -128,7 +130,7 @@ pub struct ExchangeSource {
     pub description: String,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum SessionType {
     #[default]
     Regular,
@@ -186,7 +188,7 @@ impl Display for MarketStatus {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum Timezone {
     AfricaCairo,
     AfricaCasablanca,
@@ -376,7 +378,7 @@ impl Display for Timezone {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize, Serialize, Hash)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum Interval {
     OneSecond = 0,
     FiveSeconds = 1,
@@ -569,7 +571,7 @@ impl Display for FinancialPeriod {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum SymbolType {
     #[default]
     Stock,
@@ -623,7 +625,7 @@ impl Display for SymbolType {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum MarketType {
     #[default]
     All,
@@ -637,7 +639,7 @@ pub enum MarketType {
     Economy,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum StocksType {
     #[default]
     All,
@@ -647,7 +649,7 @@ pub enum StocksType {
     Warrant,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum CryptoType {
     #[default]
     All,
@@ -658,7 +660,7 @@ pub enum CryptoType {
     Fundamental,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum FundsType {
     #[default]
     All,
@@ -668,7 +670,7 @@ pub enum FundsType {
     REIT,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum CryptoCentralization {
     #[default]
     CEX,
