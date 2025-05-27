@@ -51,33 +51,11 @@ impl Default for ChartHistoricalData {
     }
 }
 
-impl DataPointIter for ChartHistoricalData {
-    fn closes(&self) -> impl Iterator<Item = f64> + '_ {
-        self.data.closes()
-    }
+impl OHLCVs for ChartHistoricalData {
+    type Item = DataPoint;
 
-    fn opens(&self) -> impl Iterator<Item = f64> + '_ {
-        self.data.opens()
-    }
-
-    fn highs(&self) -> impl Iterator<Item = f64> + '_ {
-        self.data.highs()
-    }
-
-    fn lows(&self) -> impl Iterator<Item = f64> + '_ {
-        self.data.lows()
-    }
-
-    fn volumes(&self) -> impl Iterator<Item = f64> + '_ {
-        self.data.volumes()
-    }
-
-    fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_ {
-        self.data.datetimes()
-    }
-
-    fn timestamps(&self) -> impl Iterator<Item = i64> + '_ {
-        self.data.timestamps()
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.data.iter()
     }
 }
 
@@ -118,17 +96,11 @@ pub struct DataPoint {
     pub value: Vec<f64>,
 }
 
-pub trait DataPointIter {
-    fn closes(&self) -> impl Iterator<Item = f64> + '_;
-    fn opens(&self) -> impl Iterator<Item = f64> + '_;
-    fn highs(&self) -> impl Iterator<Item = f64> + '_;
-    fn lows(&self) -> impl Iterator<Item = f64> + '_;
-    fn volumes(&self) -> impl Iterator<Item = f64> + '_;
-    fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_;
-    fn timestamps(&self) -> impl Iterator<Item = i64> + '_;
-}
+pub trait OHLCVs {
+    type Item: OHLCV;
 
-impl DataPointIter for Vec<DataPoint> {
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_;
+
     fn closes(&self) -> impl Iterator<Item = f64> + '_ {
         self.iter().map(|dp| dp.close())
     }
@@ -155,6 +127,14 @@ impl DataPointIter for Vec<DataPoint> {
 
     fn timestamps(&self) -> impl Iterator<Item = i64> + '_ {
         self.iter().map(|dp| dp.timestamp())
+    }
+}
+
+impl OHLCVs for Vec<DataPoint> {
+    type Item = DataPoint;
+
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.into_iter()
     }
 }
 
