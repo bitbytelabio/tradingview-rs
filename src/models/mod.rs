@@ -18,6 +18,7 @@ pub trait MarketSymbol {
     fn id(&self) -> String {
         format!("{}:{}", self.exchange(), self.symbol())
     }
+    fn market_type(&self) -> MarketType;
 }
 
 impl MarketSymbol for Symbol {
@@ -31,6 +32,10 @@ impl MarketSymbol for Symbol {
 
     fn currency(&self) -> &str {
         &self.currency_code
+    }
+
+    fn market_type(&self) -> MarketType {
+        MarketType::from(self.market_type.as_str())
     }
 }
 
@@ -705,27 +710,57 @@ pub enum CryptoCentralization {
     DEX,
 }
 
+impl From<&str> for MarketType {
+    fn from(value: &str) -> Self {
+        match value {
+            "all" | "undefined" => All,
+            "stocks" => Stocks(StocksType::All),
+            "common_stock" => Stocks(StocksType::Common),
+            "preferred_stock" => Stocks(StocksType::Preferred),
+            "depository_receipt" => Stocks(StocksType::DepositoryReceipt),
+            "warrant" => Stocks(StocksType::Warrant),
+            "funds" => Funds(FundsType::All),
+            "etf" => Funds(FundsType::ETF),
+            "mutual_fund" => Funds(FundsType::MutualFund),
+            "trust_fund" => Funds(FundsType::Trust),
+            "reit" => Funds(FundsType::REIT),
+            "futures" => Futures,
+            "forex" => Forex,
+            "crypto" => Crypto(CryptoType::All),
+            "crypto_spot" => Crypto(CryptoType::Spot),
+            "crypto_futures" => Crypto(CryptoType::Futures),
+            "crypto_swap" => Crypto(CryptoType::Swap),
+            "crypto_index" => Crypto(CryptoType::Index),
+            "crypto_fundamental" => Crypto(CryptoType::Fundamental),
+            "index" => Indices,
+            "bond" => Bonds,
+            "economic" => Economy,
+            _ => All,
+        }
+    }
+}
+
 impl Display for MarketType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            MarketType::All => write!(f, "undefined"),
-            MarketType::Stocks(t) => match t {
+            All => write!(f, "undefined"),
+            Stocks(t) => match t {
                 StocksType::All => write!(f, "stocks"),
                 StocksType::Common => write!(f, "common_stock"),
                 StocksType::Preferred => write!(f, "preferred_stock"),
                 StocksType::DepositoryReceipt => write!(f, "depository_receipt"),
                 StocksType::Warrant => write!(f, "warrant"),
             },
-            MarketType::Funds(t) => match t {
+            Funds(t) => match t {
                 FundsType::All => write!(f, "funds"),
                 FundsType::ETF => write!(f, "etf"),
                 FundsType::MutualFund => write!(f, "mutual_fund"),
                 FundsType::Trust => write!(f, "trust_fund"),
                 FundsType::REIT => write!(f, "reit"),
             },
-            MarketType::Futures => write!(f, "futures"),
-            MarketType::Forex => write!(f, "forex"),
-            MarketType::Crypto(t) => match t {
+            Futures => write!(f, "futures"),
+            Forex => write!(f, "forex"),
+            Crypto(t) => match t {
                 CryptoType::All => write!(f, "crypto"),
                 CryptoType::Spot => write!(f, "crypto_spot"),
                 CryptoType::Futures => write!(f, "crypto_futures"),
@@ -733,9 +768,9 @@ impl Display for MarketType {
                 CryptoType::Index => write!(f, "crypto_index"),
                 CryptoType::Fundamental => write!(f, "crypto_fundamental"),
             },
-            MarketType::Indices => write!(f, "index"),
-            MarketType::Bonds => write!(f, "bond"),
-            MarketType::Economy => write!(f, "economic"),
+            Indices => write!(f, "index"),
+            Bonds => write!(f, "bond"),
+            Economy => write!(f, "economic"),
         }
     }
 }

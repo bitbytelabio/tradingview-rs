@@ -1,4 +1,4 @@
-use crate::{MarketSymbol, websocket::SeriesInfo};
+use crate::{MarketSymbol, MarketType, websocket::SeriesInfo};
 use bon::Builder;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -210,6 +210,10 @@ impl OHLCV for DataPoint {
         DateTime::<Utc>::from_timestamp(timestamp, 0).expect("Invalid timestamp")
     }
 
+    fn timestamp(&self) -> i64 {
+        self.value[0] as i64
+    }
+
     fn open(&self) -> f64 {
         if !(self.is_ohlcv() || self.is_ohlc4()) {
             return f64::NAN;
@@ -239,7 +243,7 @@ impl OHLCV for DataPoint {
     }
 
     fn volume(&self) -> f64 {
-        if !(self.is_ohlcv()) {
+        if !self.is_ohlcv() {
             return f64::NAN;
         }
         self.value[5]
@@ -251,10 +255,6 @@ impl OHLCV for DataPoint {
 
     fn is_ohlc4(&self) -> bool {
         self.value.len() == 5
-    }
-
-    fn timestamp(&self) -> i64 {
-        self.value[0] as i64
     }
 }
 
@@ -334,20 +334,24 @@ pub struct SymbolInfo {
 }
 
 impl MarketSymbol for SymbolInfo {
-    fn id(&self) -> String {
-        self.id.clone()
-    }
-
     fn symbol(&self) -> &str {
-        (self.id.split(':').collect::<Vec<&str>>()[1]) as _
+        self.id.split(':').collect::<Vec<&str>>()[1] as _
     }
 
     fn exchange(&self) -> &str {
-        (self.id.split(':').collect::<Vec<&str>>()[0]) as _
+        self.id.split(':').collect::<Vec<&str>>()[0] as _
     }
 
     fn currency(&self) -> &str {
         &self.currency_id
+    }
+
+    fn id(&self) -> String {
+        self.id.clone()
+    }
+
+    fn market_type(&self) -> MarketType {
+        MarketType::from(self.market_type.as_str())
     }
 }
 

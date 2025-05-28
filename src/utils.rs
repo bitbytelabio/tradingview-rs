@@ -210,7 +210,7 @@ mod tests {
         let test2 = symbol_init(
             "HOSE:FPT",
             Some(MarketAdjustment::Dividends),
-            Some(iso_currency::Currency::USD),
+            Some(Currency::USD),
             Some(SessionType::Extended),
             Some("aaaaaaaaaaaa".to_string()),
         );

@@ -130,7 +130,7 @@ async fn test_fetch_news() -> Result<()> {
     let res = list_news().section(NewsSection::AnalysisAll).call().await?;
 
     for item in res.items[0..2].iter() {
-        let content = item.get_content().await.unwrap();
+        let content = item.get_content().await?;
         println!("{:#?}", content);
     }
 
@@ -142,7 +142,7 @@ async fn test_get_source_html() -> Result<()> {
     let res = list_news().section(NewsSection::AnalysisAll).call().await?;
 
     for item in res.items[0..1].iter() {
-        let html = item.get_source_html().await.unwrap();
+        let html = item.get_source_html().await?;
         println!("{:#?}", html);
     }
 

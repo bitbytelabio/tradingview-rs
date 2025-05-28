@@ -252,12 +252,12 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
 
     match data.get("token") {
         Some(token) => {
-            return Ok(match token.as_str() {
+            Ok(match token.as_str() {
                 Some(token) => token.to_string(),
                 None => {
                     return Err(Error::NoChartTokenFound);
                 }
-            });
+            })
         }
         None => Err(Error::NoChartTokenFound),
     }

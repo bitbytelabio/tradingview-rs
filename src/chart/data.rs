@@ -286,7 +286,7 @@ async fn setup_batch_websocket_connection(
     let websocket_clone = websocket.clone();
 
     // Process market settings in background with batching
-    tokio::spawn(async move {
+    spawn(async move {
         // Process in batches of 15
         let batch_size = 15;
 
