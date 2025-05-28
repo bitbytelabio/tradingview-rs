@@ -282,64 +282,57 @@ pub struct SeriesCompletedMessage {
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
 #[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct SymbolInfo {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
-    #[serde(rename(deserialize = "pro_name"), default)]
+    #[serde(rename(deserialize = "pro_name"))]
     pub id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
-    #[serde(default)]
     pub name: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
-    #[serde(default)]
     pub description: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub exchange: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
-    #[serde(rename = "listed_exchange", default)]
+    #[serde(rename = "listed_exchange")]
     pub listed_exchange: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
-    #[serde(rename = "provider_id", default)]
+    #[serde(rename = "provider_id")]
     pub provider_id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
-    #[serde(rename = "base_currency", default)]
+    #[serde(rename = "base_currency")]
     pub base_currency: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "8"))]
-    #[serde(rename = "base_currency_id", default)]
+    #[serde(rename = "base_currency_id")]
     pub base_currency_id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "9"))]
-    #[serde(rename = "currency_id", default)]
+    #[serde(rename = "currency_id")]
     pub currency_id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "10"))]
-    #[serde(rename = "currency_code", default)]
+    #[serde(rename = "currency_code")]
     pub currency_code: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "11"))]
-    #[serde(default)]
     pub session_holidays: String,
     #[cfg_attr(feature = "protobuf", prost(message, repeated, tag = "12"))]
-    #[serde(default)]
     pub subsessions: Vec<Subsession>,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "13"))]
-    #[serde(default)]
     pub timezone: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "14"))]
-    #[serde(rename(deserialize = "type"), default)]
+    #[serde(rename(deserialize = "type"))]
     pub market_type: String,
     #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "15"))]
-    #[serde(default)]
     pub typespecs: Vec<String>,
     #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "16"))]
-    #[serde(default)]
     pub aliases: Vec<String>,
 }
 
 impl MarketSymbol for SymbolInfo {
     fn symbol(&self) -> &str {
-        self.id.split(':').collect::<Vec<&str>>()[1] as _
+        self.name.as_str()
     }
 
     fn exchange(&self) -> &str {
-        self.id.split(':').collect::<Vec<&str>>()[0] as _
+        self.exchange.as_str()
     }
 
     fn currency(&self) -> &str {
@@ -358,7 +351,7 @@ impl MarketSymbol for SymbolInfo {
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
 #[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct Subsession {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     pub id: String,

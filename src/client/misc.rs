@@ -1,6 +1,6 @@
 use crate::{
-    ChartDrawing, CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType,
-    MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
+    ChartDrawing, Country, CryptoCentralization, EconomicCategory, EconomicSource,
+    FuturesProductType, MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
     error::Error,
     pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
     utils::build_request,
@@ -170,12 +170,12 @@ pub async fn advanced_search_symbol(
 pub async fn list_symbols(
     exchange: Option<&str>,
     market_type: Option<MarketType>,
-    country: Option<&str>,
+    country: Option<Country>,
     domain: Option<&str>,
 ) -> Result<Vec<Symbol>> {
     let market_type: Arc<MarketType> = Arc::new(market_type.unwrap_or_default());
     let exchange: Arc<String> = Arc::new(exchange.unwrap_or("").to_string());
-    let country = Arc::new(country.unwrap_or("").to_string());
+    let country = Arc::new(country.unwrap_or(Country::US).to_string());
     let domain = Arc::new(domain.unwrap_or("production").to_string());
 
     let search_symbol_reps = advanced_search_symbol()

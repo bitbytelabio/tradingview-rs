@@ -409,6 +409,33 @@ pub enum Interval {
     Yearly = 19,
 }
 
+impl From<u8> for Interval {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Interval::OneSecond,
+            1 => Interval::FiveSeconds,
+            2 => Interval::TenSeconds,
+            3 => Interval::FifteenSeconds,
+            4 => Interval::ThirtySeconds,
+            5 => Interval::OneMinute,
+            6 => Interval::ThreeMinutes,
+            7 => Interval::FiveMinutes,
+            8 => Interval::FifteenMinutes,
+            9 => Interval::ThirtyMinutes,
+            10 => Interval::FortyFiveMinutes,
+            11 => Interval::OneHour,
+            12 => Interval::TwoHours,
+            13 => Interval::FourHours,
+            14 => Interval::OneDay,
+            15 => Interval::OneWeek,
+            16 => Interval::OneMonth,
+            17 => Interval::OneQuarter,
+            18 => Interval::SixMonths,
+            _ => Interval::Yearly, // Default to Yearly for any other value
+        }
+    }
+}
+
 impl From<Interval> for Duration {
     fn from(interval: Interval) -> Self {
         match interval {

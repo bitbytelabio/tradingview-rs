@@ -1,5 +1,5 @@
 use crate::{
-    ChartHistoricalData, DataPoint, Result, Symbol, SymbolInfo,
+    ChartHistoricalData, DataPoint, MarketSymbol, Result, SymbolInfo,
     callback::EventCallback,
     chart::ChartOptions,
     socket::DataServer,
@@ -261,7 +261,7 @@ async fn setup_batch_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
     callbacks: EventCallback,
-    symbols: &[Symbol],
+    symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
@@ -277,8 +277,8 @@ async fn setup_batch_websocket_connection(
     let mut opts = Vec::new();
     for symbol in symbols {
         let mut opt = base_options.clone();
-        opt.symbol = symbol.symbol.clone();
-        opt.exchange = symbol.exchange.clone();
+        opt.symbol = symbol.symbol().to_string();
+        opt.exchange = symbol.exchange().to_string();
         opts.push(opt);
     }
 
@@ -314,7 +314,7 @@ async fn setup_batch_websocket_connection(
 
 pub async fn fetch_chart_data_batch(
     auth_token: &str,
-    symbols: &[Symbol],
+    symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
     server: Option<DataServer>,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
@@ -448,7 +448,7 @@ pub async fn fetch_chart_data_batch(
 #[allow(unused)]
 mod tests {
     use super::*;
-    use crate::{Interval, MarketType, StocksType, chart::data, list_symbols};
+    use crate::{Country, Interval, MarketType, StocksType, chart::data, list_symbols};
     use anyhow::Ok;
     use std::sync::Once;
 
@@ -494,7 +494,7 @@ mod tests {
         let symbols = list_symbols()
             .exchange("HNX")
             .market_type(MarketType::Stocks(StocksType::Common))
-            .country("VN")
+            .country(Country::VN)
             .call()
             .await?;
         assert!(!symbols.is_empty(), "No symbols found");
