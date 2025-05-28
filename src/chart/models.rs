@@ -54,8 +54,8 @@ impl Default for ChartHistoricalData {
 impl OHLCVs for ChartHistoricalData {
     type Item = DataPoint;
 
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
-        self.data.iter()
+    fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.data.to_vec()
     }
 }
 
@@ -99,42 +99,42 @@ pub struct DataPoint {
 pub trait OHLCVs {
     type Item: OHLCV;
 
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_;
+    fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_;
 
     fn closes(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.close())
+        self.to_vec().map(|dp| dp.close())
     }
 
     fn opens(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.open())
+        self.to_vec().map(|dp| dp.open())
     }
 
     fn highs(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.high())
+        self.to_vec().map(|dp| dp.high())
     }
 
     fn lows(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.low())
+        self.to_vec().map(|dp| dp.low())
     }
 
     fn volumes(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.volume())
+        self.to_vec().map(|dp| dp.volume())
     }
 
     fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_ {
-        self.iter().map(|dp| dp.datetime())
+        self.to_vec().map(|dp| dp.datetime())
     }
 
     fn timestamps(&self) -> impl Iterator<Item = i64> + '_ {
-        self.iter().map(|dp| dp.timestamp())
+        self.to_vec().map(|dp| dp.timestamp())
     }
 }
 
 impl OHLCVs for Vec<DataPoint> {
     type Item = DataPoint;
 
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
-        self.into_iter()
+    fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.iter()
     }
 }
 

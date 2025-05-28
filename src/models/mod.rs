@@ -409,9 +409,9 @@ pub enum Interval {
     Yearly = 19,
 }
 
-impl Into<Duration> for Interval {
-    fn into(self) -> Duration {
-        match self {
+impl From<Interval> for Duration {
+    fn from(interval: Interval) -> Self {
+        match interval {
             Interval::OneSecond => Duration::seconds(1),
             Interval::FiveSeconds => Duration::seconds(5),
             Interval::TenSeconds => Duration::seconds(10),
