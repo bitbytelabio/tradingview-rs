@@ -93,8 +93,8 @@ pub async fn advanced_search_symbol(
     economic_source: Option<&EconomicSource>,  // For Economy Only
     economic_category: Option<&EconomicCategory>, // For Economy Only
 ) -> Result<SymbolSearchResponse> {
-    let mut params: Vec<(String, String)> = Vec::new();
-    params.push(("text".to_string(), search.unwrap_or_default().to_string()));
+    let mut params: Vec<(String, String)> =
+        vec![("text".to_string(), search.unwrap_or_default().to_string())];
     params.push((
         "exchange".to_string(),
         exchange.unwrap_or_default().to_string(),
@@ -251,14 +251,12 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
     .await?;
 
     match data.get("token") {
-        Some(token) => {
-            Ok(match token.as_str() {
-                Some(token) => token.to_string(),
-                None => {
-                    return Err(Error::NoChartTokenFound);
-                }
-            })
-        }
+        Some(token) => Ok(match token.as_str() {
+            Some(token) => token.to_string(),
+            None => {
+                return Err(Error::NoChartTokenFound);
+            }
+        }),
         None => Err(Error::NoChartTokenFound),
     }
 }
