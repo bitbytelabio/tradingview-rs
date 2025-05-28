@@ -741,12 +741,12 @@ impl From<&str> for MarketType {
     fn from(value: &str) -> Self {
         match value {
             "all" | "undefined" => All,
-            "stocks" => Stocks(StocksType::All),
+            "stock" => Stocks(StocksType::All),
             "common_stock" => Stocks(StocksType::Common),
             "preferred_stock" => Stocks(StocksType::Preferred),
             "depository_receipt" => Stocks(StocksType::DepositoryReceipt),
             "warrant" => Stocks(StocksType::Warrant),
-            "funds" => Funds(FundsType::All),
+            "fund" => Funds(FundsType::All),
             "etf" => Funds(FundsType::ETF),
             "mutual_fund" => Funds(FundsType::MutualFund),
             "trust_fund" => Funds(FundsType::Trust),
