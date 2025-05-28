@@ -9,7 +9,7 @@ pub struct ChartOptions {
     pub symbol: String,
     #[builder(default)]
     pub exchange: String,
-    #[builder(default = Interval::Daily)]
+    #[builder(default = Interval::OneDay)]
     pub interval: Interval,
     #[builder(default = 500_000)]
     pub bar_count: u64,

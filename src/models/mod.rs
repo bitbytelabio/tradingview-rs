@@ -6,6 +6,7 @@ pub use crate::quote::models::*;
 use std::{collections::HashMap, fmt::Display};
 
 use bon::Builder;
+use chrono::Duration;
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod news;
 pub mod pine_indicator;
@@ -395,12 +396,39 @@ pub enum Interval {
     TwoHours = 12,
     FourHours = 13,
     #[default]
-    Daily = 14,
-    Weekly = 15,
-    Monthly = 16,
-    Quarterly = 17,
+    OneDay = 14,
+    OneWeek = 15,
+    OneMonth = 16,
+    OneQuarter = 17,
     SixMonths = 18,
     Yearly = 19,
+}
+
+impl Into<Duration> for Interval {
+    fn into(self) -> Duration {
+        match self {
+            Interval::OneSecond => Duration::seconds(1),
+            Interval::FiveSeconds => Duration::seconds(5),
+            Interval::TenSeconds => Duration::seconds(10),
+            Interval::FifteenSeconds => Duration::seconds(15),
+            Interval::ThirtySeconds => Duration::seconds(30),
+            Interval::OneMinute => Duration::minutes(1),
+            Interval::ThreeMinutes => Duration::minutes(3),
+            Interval::FiveMinutes => Duration::minutes(5),
+            Interval::FifteenMinutes => Duration::minutes(15),
+            Interval::ThirtyMinutes => Duration::minutes(30),
+            Interval::FortyFiveMinutes => Duration::minutes(45),
+            Interval::OneHour => Duration::hours(1),
+            Interval::TwoHours => Duration::hours(2),
+            Interval::FourHours => Duration::hours(4),
+            Interval::OneDay => Duration::days(1),
+            Interval::OneWeek => Duration::weeks(1),
+            Interval::OneMonth => Duration::days(30), // Approximation
+            Interval::OneQuarter => Duration::days(90), // Approximation
+            Interval::SixMonths => Duration::days(180), // Approximation
+            Interval::Yearly => Duration::days(365),  // Approximation
+        }
+    }
 }
 
 impl From<&str> for Interval {
@@ -420,13 +448,13 @@ impl From<&str> for Interval {
             "1h" => Interval::OneHour,
             "2h" => Interval::TwoHours,
             "4h" => Interval::FourHours,
-            "1d" => Interval::Daily,
-            "7d" => Interval::Weekly,
-            "30d" => Interval::Monthly,
-            "120d" => Interval::Quarterly,
+            "1d" => Interval::OneDay,
+            "7d" => Interval::OneWeek,
+            "30d" => Interval::OneMonth,
+            "120d" => Interval::OneQuarter,
             "180d" => Interval::SixMonths,
             "1y" => Interval::Yearly,
-            _ => Interval::Daily,
+            _ => Interval::OneDay,
         }
     }
 }
@@ -448,10 +476,10 @@ impl Display for Interval {
             Interval::OneHour => "1H",
             Interval::TwoHours => "2H",
             Interval::FourHours => "4H",
-            Interval::Daily => "1D",
-            Interval::Weekly => "1W",
-            Interval::Monthly => "1M",
-            Interval::Quarterly => "3M",
+            Interval::OneDay => "1D",
+            Interval::OneWeek => "1W",
+            Interval::OneMonth => "1M",
+            Interval::OneQuarter => "3M",
             Interval::SixMonths => "6M",
             Interval::Yearly => "12M",
         };

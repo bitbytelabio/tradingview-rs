@@ -468,7 +468,7 @@ mod tests {
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
         let symbol = "VCB";
         let exchange = "HOSE";
-        let interval = Interval::Daily;
+        let interval = Interval::OneDay;
         let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(10);
         let server = Some(DataServer::ProData);
         let data = fetch_chart_data(&auth_token, option, server).await?;
@@ -503,7 +503,7 @@ mod tests {
         println!("Fetched {} symbols", symbols.len());
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
         let based_opt = ChartOptions::builder()
-            .interval(Interval::Daily)
+            .interval(Interval::OneDay)
             .bar_count(10)
             .build();
 
