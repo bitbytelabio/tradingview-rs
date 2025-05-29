@@ -263,6 +263,7 @@ async fn setup_batch_websocket_connection(
     callbacks: EventCallback,
     symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
+    batch_size: usize,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
 
@@ -287,9 +288,6 @@ async fn setup_batch_websocket_connection(
 
     // Process market settings in background with batching
     spawn(async move {
-        // Process in batches of 15
-        let batch_size = 15;
-
         for chunk in opts.chunks(batch_size) {
             // Process one batch
             for opt in chunk {
@@ -299,7 +297,7 @@ async fn setup_batch_websocket_connection(
             }
 
             // Wait 5 seconds before processing the next batch
-            sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_secs(5)).await;
             tracing::debug!(
                 "Processed batch of {} markets, waiting before next batch",
                 chunk.len()
@@ -317,6 +315,7 @@ pub async fn fetch_chart_data_batch(
     symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
     server: Option<DataServer>,
+    batch_size: usize,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
     let symbols_count = symbols.len();
     // Create communication channels with appropriate buffer sizes
@@ -344,6 +343,7 @@ pub async fn fetch_chart_data_batch(
         callbacks,
         symbols,
         base_options.clone(),
+        batch_size,
     )
     .await?;
     let websocket_shared = Arc::new(websocket);
@@ -509,7 +509,7 @@ mod tests {
 
         let server = Some(DataServer::ProData);
         let data: HashMap<String, ChartHistoricalData> =
-            fetch_chart_data_batch(&auth_token, &symbols, based_opt, server).await?;
+            fetch_chart_data_batch(&auth_token, &symbols, based_opt, server, 40).await?;
 
         for (k, d) in data {
             println!(
