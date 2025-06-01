@@ -3,6 +3,7 @@ pub mod chart;
 pub mod client;
 pub mod error;
 pub mod models;
+pub mod prelude;
 pub mod quote;
 pub mod socket;
 
