@@ -11,7 +11,7 @@ pub mod socket;
 pub mod user;
 
 mod utils;
-static UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36";
+static UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
 pub use crate::client::misc::{
     advanced_search_symbol, get_builtin_indicators, get_chart_token, get_drawing,
