@@ -3,13 +3,13 @@ use bon::Builder;
 use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Debug, Clone, Deserialize, Serialize, Builder)]
+#[derive(Debug, Clone, Deserialize, Serialize, Builder)]
 pub struct ChartOptions {
     #[builder(default)]
     pub symbol: String,
     #[builder(default)]
     pub exchange: String,
-    #[builder(default = Interval::Daily)]
+    #[builder(default = Interval::OneDay)]
     pub interval: Interval,
     #[builder(default = 500_000)]
     pub bar_count: u64,
@@ -32,6 +32,12 @@ pub struct StudyOptions {
     pub script_id: String,
     pub script_version: String,
     pub script_type: ScriptType,
+}
+
+impl Default for ChartOptions {
+    fn default() -> Self {
+        Self::builder().build()
+    }
 }
 
 impl ChartOptions {

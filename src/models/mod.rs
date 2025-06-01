@@ -6,6 +6,7 @@ pub use crate::quote::models::*;
 use std::{collections::HashMap, fmt::Display};
 
 use bon::Builder;
+use chrono::Duration;
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod news;
 pub mod pine_indicator;
@@ -17,6 +18,7 @@ pub trait MarketSymbol {
     fn id(&self) -> String {
         format!("{}:{}", self.exchange(), self.symbol())
     }
+    fn market_type(&self) -> MarketType;
 }
 
 impl MarketSymbol for Symbol {
@@ -30,6 +32,10 @@ impl MarketSymbol for Symbol {
 
     fn currency(&self) -> &str {
         &self.currency_code
+    }
+
+    fn market_type(&self) -> MarketType {
+        MarketType::from(self.market_type.as_str())
     }
 }
 
@@ -395,12 +401,92 @@ pub enum Interval {
     TwoHours = 12,
     FourHours = 13,
     #[default]
-    Daily = 14,
-    Weekly = 15,
-    Monthly = 16,
-    Quarterly = 17,
+    OneDay = 14,
+    OneWeek = 15,
+    OneMonth = 16,
+    OneQuarter = 17,
     SixMonths = 18,
     Yearly = 19,
+}
+
+impl Interval {
+    pub fn longer(self) -> Interval {
+        match self {
+            Interval::OneSecond => Interval::FiveSeconds,
+            Interval::FiveSeconds => Interval::TenSeconds,
+            Interval::TenSeconds => Interval::FifteenSeconds,
+            Interval::FifteenSeconds => Interval::ThirtySeconds,
+            Interval::ThirtySeconds => Interval::OneMinute,
+            Interval::OneMinute => Interval::ThreeMinutes,
+            Interval::ThreeMinutes => Interval::FiveMinutes,
+            Interval::FiveMinutes => Interval::FifteenMinutes,
+            Interval::FifteenMinutes => Interval::ThirtyMinutes,
+            Interval::ThirtyMinutes => Interval::FortyFiveMinutes,
+            Interval::FortyFiveMinutes => Interval::OneHour,
+            Interval::OneHour => Interval::TwoHours,
+            Interval::TwoHours => Interval::FourHours,
+            Interval::FourHours => Interval::OneDay,
+            Interval::OneDay => Interval::OneWeek,
+            Interval::OneWeek => Interval::OneMonth,
+            Interval::OneMonth => Interval::OneQuarter,
+            Interval::OneQuarter => Interval::SixMonths,
+            _ => self, // Yearly remains the same
+        }
+    }
+}
+
+impl From<u8> for Interval {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Interval::OneSecond,
+            1 => Interval::FiveSeconds,
+            2 => Interval::TenSeconds,
+            3 => Interval::FifteenSeconds,
+            4 => Interval::ThirtySeconds,
+            5 => Interval::OneMinute,
+            6 => Interval::ThreeMinutes,
+            7 => Interval::FiveMinutes,
+            8 => Interval::FifteenMinutes,
+            9 => Interval::ThirtyMinutes,
+            10 => Interval::FortyFiveMinutes,
+            11 => Interval::OneHour,
+            12 => Interval::TwoHours,
+            13 => Interval::FourHours,
+            14 => Interval::OneDay,
+            15 => Interval::OneWeek,
+            16 => Interval::OneMonth,
+            17 => Interval::OneQuarter,
+            18 => Interval::SixMonths,
+            _ => Interval::Yearly, // Default to Yearly for any other value
+        }
+    }
+}
+
+impl From<Interval> for Duration {
+    fn from(interval: Interval) -> Self {
+        match interval {
+            Interval::OneSecond => Duration::seconds(1),
+            Interval::FiveSeconds => Duration::seconds(5),
+            Interval::TenSeconds => Duration::seconds(10),
+            Interval::FifteenSeconds => Duration::seconds(15),
+            Interval::ThirtySeconds => Duration::seconds(30),
+            Interval::OneMinute => Duration::minutes(1),
+            Interval::ThreeMinutes => Duration::minutes(3),
+            Interval::FiveMinutes => Duration::minutes(5),
+            Interval::FifteenMinutes => Duration::minutes(15),
+            Interval::ThirtyMinutes => Duration::minutes(30),
+            Interval::FortyFiveMinutes => Duration::minutes(45),
+            Interval::OneHour => Duration::hours(1),
+            Interval::TwoHours => Duration::hours(2),
+            Interval::FourHours => Duration::hours(4),
+            Interval::OneDay => Duration::days(1),
+            Interval::OneWeek => Duration::weeks(1),
+            Interval::OneMonth => Duration::days(30), // Approximation
+            Interval::OneQuarter => Duration::days(90), // Approximation
+            Interval::SixMonths => Duration::days(180), // Approximation
+            Interval::Yearly => Duration::days(365),  // Approximation
+        }
+    }
 }
 
 impl From<&str> for Interval {
@@ -420,13 +506,13 @@ impl From<&str> for Interval {
             "1h" => Interval::OneHour,
             "2h" => Interval::TwoHours,
             "4h" => Interval::FourHours,
-            "1d" => Interval::Daily,
-            "7d" => Interval::Weekly,
-            "30d" => Interval::Monthly,
-            "120d" => Interval::Quarterly,
+            "1d" => Interval::OneDay,
+            "7d" => Interval::OneWeek,
+            "30d" => Interval::OneMonth,
+            "120d" => Interval::OneQuarter,
             "180d" => Interval::SixMonths,
             "1y" => Interval::Yearly,
-            _ => Interval::Daily,
+            _ => Interval::OneDay,
         }
     }
 }
@@ -448,10 +534,10 @@ impl Display for Interval {
             Interval::OneHour => "1H",
             Interval::TwoHours => "2H",
             Interval::FourHours => "4H",
-            Interval::Daily => "1D",
-            Interval::Weekly => "1W",
-            Interval::Monthly => "1M",
-            Interval::Quarterly => "3M",
+            Interval::OneDay => "1D",
+            Interval::OneWeek => "1W",
+            Interval::OneMonth => "1M",
+            Interval::OneQuarter => "3M",
             Interval::SixMonths => "6M",
             Interval::Yearly => "12M",
         };
@@ -677,27 +763,57 @@ pub enum CryptoCentralization {
     DEX,
 }
 
+impl From<&str> for MarketType {
+    fn from(value: &str) -> Self {
+        match value {
+            "all" | "undefined" => All,
+            "stock" => Stocks(StocksType::All),
+            "common_stock" => Stocks(StocksType::Common),
+            "preferred_stock" => Stocks(StocksType::Preferred),
+            "depository_receipt" => Stocks(StocksType::DepositoryReceipt),
+            "warrant" => Stocks(StocksType::Warrant),
+            "fund" => Funds(FundsType::All),
+            "etf" => Funds(FundsType::ETF),
+            "mutual_fund" => Funds(FundsType::MutualFund),
+            "trust_fund" => Funds(FundsType::Trust),
+            "reit" => Funds(FundsType::REIT),
+            "futures" => Futures,
+            "forex" => Forex,
+            "crypto" => Crypto(CryptoType::All),
+            "crypto_spot" => Crypto(CryptoType::Spot),
+            "crypto_futures" => Crypto(CryptoType::Futures),
+            "crypto_swap" => Crypto(CryptoType::Swap),
+            "crypto_index" => Crypto(CryptoType::Index),
+            "crypto_fundamental" => Crypto(CryptoType::Fundamental),
+            "index" => Indices,
+            "bond" => Bonds,
+            "economic" => Economy,
+            _ => All,
+        }
+    }
+}
+
 impl Display for MarketType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            MarketType::All => write!(f, "undefined"),
-            MarketType::Stocks(t) => match t {
+            All => write!(f, "undefined"),
+            Stocks(t) => match t {
                 StocksType::All => write!(f, "stocks"),
                 StocksType::Common => write!(f, "common_stock"),
                 StocksType::Preferred => write!(f, "preferred_stock"),
                 StocksType::DepositoryReceipt => write!(f, "depository_receipt"),
                 StocksType::Warrant => write!(f, "warrant"),
             },
-            MarketType::Funds(t) => match t {
+            Funds(t) => match t {
                 FundsType::All => write!(f, "funds"),
                 FundsType::ETF => write!(f, "etf"),
                 FundsType::MutualFund => write!(f, "mutual_fund"),
                 FundsType::Trust => write!(f, "trust_fund"),
                 FundsType::REIT => write!(f, "reit"),
             },
-            MarketType::Futures => write!(f, "futures"),
-            MarketType::Forex => write!(f, "forex"),
-            MarketType::Crypto(t) => match t {
+            Futures => write!(f, "futures"),
+            Forex => write!(f, "forex"),
+            Crypto(t) => match t {
                 CryptoType::All => write!(f, "crypto"),
                 CryptoType::Spot => write!(f, "crypto_spot"),
                 CryptoType::Futures => write!(f, "crypto_futures"),
@@ -705,9 +821,9 @@ impl Display for MarketType {
                 CryptoType::Index => write!(f, "crypto_index"),
                 CryptoType::Fundamental => write!(f, "crypto_fundamental"),
             },
-            MarketType::Indices => write!(f, "index"),
-            MarketType::Bonds => write!(f, "bond"),
-            MarketType::Economy => write!(f, "economic"),
+            Indices => write!(f, "index"),
+            Bonds => write!(f, "bond"),
+            Economy => write!(f, "economic"),
         }
     }
 }

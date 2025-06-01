@@ -1,6 +1,6 @@
 use crate::{
-    ChartDrawing, CryptoCentralization, EconomicCategory, EconomicSource, FuturesProductType,
-    MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
+    ChartDrawing, Country, CryptoCentralization, EconomicCategory, EconomicSource,
+    FuturesProductType, MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
     error::Error,
     pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
     utils::build_request,
@@ -85,7 +85,7 @@ pub async fn advanced_search_symbol(
     exchange: Option<&str>,
     #[builder(default= MarketType::All)] market_type: MarketType,
     #[builder(default = 0)] start: u64,
-    country: Option<&str>,
+    country: Option<Country>,
     #[builder(default = "production")] domain: &str,
     futures_type: Option<&FuturesProductType>, // For Futures Only
     stock_sector: Option<&StockSector>,        // For Stock Only
@@ -93,8 +93,8 @@ pub async fn advanced_search_symbol(
     economic_source: Option<&EconomicSource>,  // For Economy Only
     economic_category: Option<&EconomicCategory>, // For Economy Only
 ) -> Result<SymbolSearchResponse> {
-    let mut params: Vec<(String, String)> = Vec::new();
-    params.push(("text".to_string(), search.unwrap_or_default().to_string()));
+    let mut params: Vec<(String, String)> =
+        vec![("text".to_string(), search.unwrap_or_default().to_string())];
     params.push((
         "exchange".to_string(),
         exchange.unwrap_or_default().to_string(),
@@ -169,19 +169,17 @@ pub async fn advanced_search_symbol(
 #[builder]
 pub async fn list_symbols(
     exchange: Option<&str>,
-    market_type: Option<MarketType>,
-    country: Option<&str>,
+    #[builder(default = MarketType::All)] market_type: MarketType,
+    country: Option<Country>,
     domain: Option<&str>,
 ) -> Result<Vec<Symbol>> {
-    let market_type: Arc<MarketType> = Arc::new(market_type.unwrap_or_default());
     let exchange: Arc<String> = Arc::new(exchange.unwrap_or("").to_string());
-    let country = Arc::new(country.unwrap_or("").to_string());
     let domain = Arc::new(domain.unwrap_or("production").to_string());
 
     let search_symbol_reps = advanced_search_symbol()
         .exchange(&exchange)
-        .market_type(*market_type)
-        .country(&country)
+        .market_type(market_type)
+        .maybe_country(country)
         .domain(&domain)
         .call()
         .await?;
@@ -195,9 +193,7 @@ pub async fn list_symbols(
     let mut tasks = Vec::new();
 
     for i in (50..remaining).step_by(50) {
-        let market_type = Arc::clone(&market_type);
         let exchange = Arc::clone(&exchange);
-        let country = Arc::clone(&country);
         let domain = Arc::clone(&domain);
         let semaphore = Arc::clone(&semaphore);
 
@@ -208,8 +204,8 @@ pub async fn list_symbols(
                 .expect("Failed to acquire semaphore");
             advanced_search_symbol()
                 .exchange(&exchange)
-                .country(&country)
-                .market_type(*market_type)
+                .maybe_country(country)
+                .market_type(market_type)
                 .domain(&domain)
                 .start(i)
                 .call()
@@ -251,14 +247,12 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
     .await?;
 
     match data.get("token") {
-        Some(token) => {
-            return Ok(match token.as_str() {
-                Some(token) => token.to_string(),
-                None => {
-                    return Err(Error::NoChartTokenFound);
-                }
-            });
-        }
+        Some(token) => Ok(match token.as_str() {
+            Some(token) => token.to_string(),
+            None => {
+                return Err(Error::NoChartTokenFound);
+            }
+        }),
         None => Err(Error::NoChartTokenFound),
     }
 }

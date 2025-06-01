@@ -1,4 +1,4 @@
-use crate::{MarketSymbol, websocket::SeriesInfo};
+use crate::{MarketSymbol, MarketType, websocket::SeriesInfo};
 use bon::Builder;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -51,11 +51,11 @@ impl Default for ChartHistoricalData {
     }
 }
 
-impl OHLCVs for ChartHistoricalData {
+impl PriceIterable for ChartHistoricalData {
     type Item = DataPoint;
 
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
-        self.data.iter()
+    fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.data.to_vec()
     }
 }
 
@@ -96,45 +96,45 @@ pub struct DataPoint {
     pub value: Vec<f64>,
 }
 
-pub trait OHLCVs {
+pub trait PriceIterable {
     type Item: OHLCV;
 
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_;
+    fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_;
 
     fn closes(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.close())
+        self.to_vec().map(|dp| dp.close())
     }
 
     fn opens(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.open())
+        self.to_vec().map(|dp| dp.open())
     }
 
     fn highs(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.high())
+        self.to_vec().map(|dp| dp.high())
     }
 
     fn lows(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.low())
+        self.to_vec().map(|dp| dp.low())
     }
 
     fn volumes(&self) -> impl Iterator<Item = f64> + '_ {
-        self.iter().map(|dp| dp.volume())
+        self.to_vec().map(|dp| dp.volume())
     }
 
     fn datetimes(&self) -> impl Iterator<Item = DateTime<Utc>> + '_ {
-        self.iter().map(|dp| dp.datetime())
+        self.to_vec().map(|dp| dp.datetime())
     }
 
     fn timestamps(&self) -> impl Iterator<Item = i64> + '_ {
-        self.iter().map(|dp| dp.timestamp())
+        self.to_vec().map(|dp| dp.timestamp())
     }
 }
 
-impl OHLCVs for Vec<DataPoint> {
+impl PriceIterable for Vec<DataPoint> {
     type Item = DataPoint;
 
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> + '_ {
-        self.into_iter()
+    fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_ {
+        self.iter()
     }
 }
 
@@ -147,8 +147,6 @@ pub trait OHLCV {
     fn close(&self) -> f64;
     fn volume(&self) -> f64;
     fn is_ohlcv(&self) -> bool;
-    fn is_ohlc4(&self) -> bool;
-
     fn validate(&self) -> bool {
         !(self.close() > self.high() || self.close() < self.low() || self.high() < self.low())
             && self.close() > 0.
@@ -210,36 +208,40 @@ impl OHLCV for DataPoint {
         DateTime::<Utc>::from_timestamp(timestamp, 0).expect("Invalid timestamp")
     }
 
+    fn timestamp(&self) -> i64 {
+        self.value[0] as i64
+    }
+
     fn open(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[1]
     }
 
     fn high(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[2]
     }
 
     fn low(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[3]
     }
 
     fn close(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[4]
     }
 
     fn volume(&self) -> f64 {
-        if !(self.is_ohlcv()) {
+        if !self.is_ohlcv() {
             return f64::NAN;
         }
         self.value[5]
@@ -247,14 +249,6 @@ impl OHLCV for DataPoint {
 
     fn is_ohlcv(&self) -> bool {
         self.value.len() == 6
-    }
-
-    fn is_ohlc4(&self) -> bool {
-        self.value.len() == 5
-    }
-
-    fn timestamp(&self) -> i64 {
-        self.value[0] as i64
     }
 }
 
@@ -282,79 +276,76 @@ pub struct SeriesCompletedMessage {
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
 #[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct SymbolInfo {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
-    #[serde(rename(deserialize = "pro_name"), default)]
+    #[serde(rename(deserialize = "pro_name"))]
     pub id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
-    #[serde(default)]
     pub name: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
-    #[serde(default)]
     pub description: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub exchange: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
-    #[serde(rename = "listed_exchange", default)]
+    #[serde(rename = "listed_exchange")]
     pub listed_exchange: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
-    #[serde(rename = "provider_id", default)]
+    #[serde(rename = "provider_id")]
     pub provider_id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
-    #[serde(rename = "base_currency", default)]
+    #[serde(rename = "base_currency")]
     pub base_currency: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "8"))]
-    #[serde(rename = "base_currency_id", default)]
+    #[serde(rename = "base_currency_id")]
     pub base_currency_id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "9"))]
-    #[serde(rename = "currency_id", default)]
+    #[serde(rename = "currency_id")]
     pub currency_id: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "10"))]
-    #[serde(rename = "currency_code", default)]
+    #[serde(rename = "currency_code")]
     pub currency_code: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "11"))]
-    #[serde(default)]
     pub session_holidays: String,
     #[cfg_attr(feature = "protobuf", prost(message, repeated, tag = "12"))]
-    #[serde(default)]
     pub subsessions: Vec<Subsession>,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "13"))]
-    #[serde(default)]
     pub timezone: String,
     #[cfg_attr(feature = "protobuf", prost(string, tag = "14"))]
-    #[serde(rename(deserialize = "type"), default)]
+    #[serde(rename(deserialize = "type"))]
     pub market_type: String,
     #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "15"))]
-    #[serde(default)]
     pub typespecs: Vec<String>,
     #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "16"))]
-    #[serde(default)]
     pub aliases: Vec<String>,
 }
 
 impl MarketSymbol for SymbolInfo {
-    fn id(&self) -> String {
-        self.id.clone()
-    }
-
     fn symbol(&self) -> &str {
-        (self.id.split(':').collect::<Vec<&str>>()[1]) as _
+        self.name.as_str()
     }
 
     fn exchange(&self) -> &str {
-        (self.id.split(':').collect::<Vec<&str>>()[0]) as _
+        self.exchange.as_str()
     }
 
     fn currency(&self) -> &str {
         &self.currency_id
+    }
+
+    fn id(&self) -> String {
+        self.id.clone()
+    }
+
+    fn market_type(&self) -> MarketType {
+        MarketType::from(self.market_type.as_str())
     }
 }
 
 #[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
 #[cfg_attr(feature = "protobuf", derive(prost::Message))]
 #[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct Subsession {
     #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     pub id: String,

@@ -18,7 +18,7 @@ mod tests {
     async fn test_list_symbol() {
         let res = list_symbols().call().await.unwrap();
 
-        println!("{:#?}", res.len());
+        println!("{:#?}", res[0]);
         assert!(!res.is_empty());
     }
 

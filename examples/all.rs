@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let opts = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneMinute).bar_count(100);
-    let opts2 = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::Daily)
+    let opts2 = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneDay)
         .bar_count(1)
         .study_config(
             "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby",

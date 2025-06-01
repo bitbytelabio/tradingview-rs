@@ -1,5 +1,5 @@
 use crate::{
-    ChartHistoricalData, DataPoint, Result, Symbol, SymbolInfo,
+    ChartHistoricalData, DataPoint, MarketSymbol, Result, SymbolInfo,
     callback::EventCallback,
     chart::ChartOptions,
     socket::DataServer,
@@ -261,8 +261,9 @@ async fn setup_batch_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
     callbacks: EventCallback,
-    symbols: &[Symbol],
+    symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
+    batch_size: usize,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
 
@@ -277,8 +278,8 @@ async fn setup_batch_websocket_connection(
     let mut opts = Vec::new();
     for symbol in symbols {
         let mut opt = base_options.clone();
-        opt.symbol = symbol.symbol.clone();
-        opt.exchange = symbol.exchange.clone();
+        opt.symbol = symbol.symbol().to_string();
+        opt.exchange = symbol.exchange().to_string();
         opts.push(opt);
     }
 
@@ -286,10 +287,7 @@ async fn setup_batch_websocket_connection(
     let websocket_clone = websocket.clone();
 
     // Process market settings in background with batching
-    tokio::spawn(async move {
-        // Process in batches of 15
-        let batch_size = 15;
-
+    spawn(async move {
         for chunk in opts.chunks(batch_size) {
             // Process one batch
             for opt in chunk {
@@ -299,7 +297,7 @@ async fn setup_batch_websocket_connection(
             }
 
             // Wait 5 seconds before processing the next batch
-            sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_secs(5)).await;
             tracing::debug!(
                 "Processed batch of {} markets, waiting before next batch",
                 chunk.len()
@@ -314,9 +312,10 @@ async fn setup_batch_websocket_connection(
 
 pub async fn fetch_chart_data_batch(
     auth_token: &str,
-    symbols: &[Symbol],
+    symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
     server: Option<DataServer>,
+    batch_size: usize,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
     let symbols_count = symbols.len();
     // Create communication channels with appropriate buffer sizes
@@ -344,6 +343,7 @@ pub async fn fetch_chart_data_batch(
         callbacks,
         symbols,
         base_options.clone(),
+        batch_size,
     )
     .await?;
     let websocket_shared = Arc::new(websocket);
@@ -448,7 +448,7 @@ pub async fn fetch_chart_data_batch(
 #[allow(unused)]
 mod tests {
     use super::*;
-    use crate::{Interval, MarketType, StocksType, chart::data, list_symbols};
+    use crate::{Country, Interval, MarketType, StocksType, chart::data, list_symbols};
     use anyhow::Ok;
     use std::sync::Once;
 
@@ -468,7 +468,7 @@ mod tests {
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
         let symbol = "VCB";
         let exchange = "HOSE";
-        let interval = Interval::Daily;
+        let interval = Interval::OneDay;
         let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(10);
         let server = Some(DataServer::ProData);
         let data = fetch_chart_data(&auth_token, option, server).await?;
@@ -494,7 +494,7 @@ mod tests {
         let symbols = list_symbols()
             .exchange("HNX")
             .market_type(MarketType::Stocks(StocksType::Common))
-            .country("VN")
+            .country(Country::VN)
             .call()
             .await?;
         assert!(!symbols.is_empty(), "No symbols found");
@@ -503,13 +503,13 @@ mod tests {
         println!("Fetched {} symbols", symbols.len());
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
         let based_opt = ChartOptions::builder()
-            .interval(Interval::Daily)
+            .interval(Interval::OneDay)
             .bar_count(10)
             .build();
 
         let server = Some(DataServer::ProData);
         let data: HashMap<String, ChartHistoricalData> =
-            fetch_chart_data_batch(&auth_token, &symbols, based_opt, server).await?;
+            fetch_chart_data_batch(&auth_token, &symbols, based_opt, server, 40).await?;
 
         for (k, d) in data {
             println!(

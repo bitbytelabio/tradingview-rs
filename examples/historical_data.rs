@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 
     let symbol = "AAPL";
     let exchange = "NASDAQ";
-    let interval = Interval::Daily;
+    let interval = Interval::OneDay;
     let bars = 500_000;
 
     println!(
