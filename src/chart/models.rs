@@ -51,7 +51,7 @@ impl Default for ChartHistoricalData {
     }
 }
 
-impl OHLCVs for ChartHistoricalData {
+impl PriceIterable for ChartHistoricalData {
     type Item = DataPoint;
 
     fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_ {
@@ -96,7 +96,7 @@ pub struct DataPoint {
     pub value: Vec<f64>,
 }
 
-pub trait OHLCVs {
+pub trait PriceIterable {
     type Item: OHLCV;
 
     fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_;
@@ -130,7 +130,7 @@ pub trait OHLCVs {
     }
 }
 
-impl OHLCVs for Vec<DataPoint> {
+impl PriceIterable for Vec<DataPoint> {
     type Item = DataPoint;
 
     fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_ {
@@ -147,8 +147,6 @@ pub trait OHLCV {
     fn close(&self) -> f64;
     fn volume(&self) -> f64;
     fn is_ohlcv(&self) -> bool;
-    fn is_ohlc4(&self) -> bool;
-
     fn validate(&self) -> bool {
         !(self.close() > self.high() || self.close() < self.low() || self.high() < self.low())
             && self.close() > 0.
@@ -215,28 +213,28 @@ impl OHLCV for DataPoint {
     }
 
     fn open(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[1]
     }
 
     fn high(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[2]
     }
 
     fn low(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[3]
     }
 
     fn close(&self) -> f64 {
-        if !(self.is_ohlcv() || self.is_ohlc4()) {
+        if !(self.is_ohlcv()) {
             return f64::NAN;
         }
         self.value[4]
@@ -251,10 +249,6 @@ impl OHLCV for DataPoint {
 
     fn is_ohlcv(&self) -> bool {
         self.value.len() == 6
-    }
-
-    fn is_ohlc4(&self) -> bool {
-        self.value.len() == 5
     }
 }
 
