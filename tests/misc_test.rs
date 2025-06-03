@@ -46,4 +46,12 @@ mod tests {
             "Script$STD;Candlestick%1Pattern%1Bullish%1Upside%1Tasuki%1Gap@tv-scripting-101"
         );
     }
+
+    #[tokio::test]
+    async fn test_get_quote_token() {
+        let cookies = UserCookies::new();
+        let token = get_quote_token(&cookies).await;
+        // Must return error cause we are not logged in
+        assert!(token.is_err());
+    }
 }

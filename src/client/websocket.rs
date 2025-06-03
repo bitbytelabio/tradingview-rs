@@ -574,6 +574,11 @@ impl WebSocket {
     pub async fn subscribe(&self) {
         self.event_loop(&self.socket.to_owned()).await;
     }
+
+    pub async fn reconnect(&mut self) -> Result<()> {
+        self.socket.reconnect().await?;
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
