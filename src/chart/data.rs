@@ -255,6 +255,20 @@ fn create_batch_data_callbacks(
                 });
             }
         })
+        .on_error({
+            let symbols_count = Arc::clone(&symbols_count);
+            move |error| {
+                tracing::error!("WebSocket error: {:?}", error);
+                let symbols_count = Arc::clone(&symbols_count);
+
+                // Decrement the counter on error as well
+                spawn(async move {
+                    let mut count = symbols_count.lock().await;
+                    *count -= 1;
+                    tracing::debug!("Error occurred, remaining symbols: {}", *count);
+                });
+            }
+        })
 }
 
 async fn setup_batch_websocket_connection(

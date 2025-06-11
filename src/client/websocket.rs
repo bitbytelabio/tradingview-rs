@@ -574,6 +574,11 @@ impl WebSocket {
     pub async fn subscribe(&self) {
         self.event_loop(&self.socket.to_owned()).await;
     }
+
+    pub async fn reconnect(&mut self) -> Result<()> {
+        self.socket.reconnect().await?;
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -682,10 +687,10 @@ impl WebSocketClient {
                 debug!("study completed: {:?}", message);
                 (self.event_callback.on_study_completed)(message.to_owned());
             }
-            TradingViewDataEvent::OnError(trading_view_error) => {
-                error!("trading view error: {:?}", trading_view_error);
+            TradingViewDataEvent::OnError(tradingview_error) => {
+                error!("trading view error: {:?}", tradingview_error);
                 (self.event_callback.on_error)((
-                    Error::TradingViewError(trading_view_error),
+                    Error::TradingViewError(tradingview_error),
                     message.to_owned(),
                 ));
             }
