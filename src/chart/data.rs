@@ -1,10 +1,12 @@
 use crate::{
-    ChartHistoricalData, DataPoint, MarketSymbol, Result, SymbolInfo,
+    ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo,
     callback::EventCallback,
     chart::ChartOptions,
+    error::TradingViewError,
     socket::DataServer,
     websocket::{SeriesInfo, WebSocket, WebSocketClient},
 };
+use bon::builder;
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
@@ -102,6 +104,37 @@ fn create_data_callbacks(
                     if let Some(sender) = completion_sender.lock().await.take() {
                         if let Err(e) = sender.send(()) {
                             tracing::error!("Failed to send completion signal: {:?}", e);
+                        }
+                    }
+                });
+            }
+        })
+        .on_error({
+            move |(error, message)| {
+                tracing::error!("WebSocket error: {:?}", message);
+                // Check if this is a critical error that should abort the operation
+                let is_critical = match &error {
+                    Error::LoginError(_) => true,
+                    Error::NoChartTokenFound => true,
+                    Error::WebSocketError(_) => true,
+                    Error::TradingViewError(e) => {
+                        matches!(e, TradingViewError::CriticalError)
+                    }
+                    _ => false,
+                };
+                let completion_sender = Arc::clone(&completion_sender);
+                // Decrement the counter on error as well
+                spawn(async move {
+                    if is_critical {
+                        tracing::error!("Critical error occurred, aborting all operations");
+                        // If it's a critical error, we can send the completion signal immediately
+                        if let Some(sender) = completion_sender.lock().await.take() {
+                            if let Err(e) = sender.send(()) {
+                                tracing::error!(
+                                    "Failed to send completion signal on error: {:?}",
+                                    e
+                                );
+                            }
                         }
                     }
                 });
@@ -257,26 +290,50 @@ fn create_batch_data_callbacks(
         })
         .on_error({
             let symbols_count = Arc::clone(&symbols_count);
-            move |error| {
-                tracing::error!("WebSocket error: {:?}", error);
+            move |(error, message)| {
+                tracing::error!("WebSocket error: {:?}", message);
                 let symbols_count = Arc::clone(&symbols_count);
-
+                // Check if this is a critical error that should abort the operation
+                let is_critical = match &error {
+                    Error::LoginError(_) => true,
+                    Error::NoChartTokenFound => true,
+                    Error::WebSocketError(_) => true,
+                    Error::TradingViewError(e) => {
+                        matches!(e, TradingViewError::CriticalError)
+                    }
+                    _ => false,
+                };
+                let completion_sender = Arc::clone(&completion_sender);
                 // Decrement the counter on error as well
                 spawn(async move {
                     let mut count = symbols_count.lock().await;
                     *count -= 1;
                     tracing::debug!("Error occurred, remaining symbols: {}", *count);
+                    if is_critical {
+                        tracing::error!("Critical error occurred, aborting all operations");
+                        // If it's a critical error, we can send the completion signal immediately
+                        if let Some(sender) = completion_sender.lock().await.take() {
+                            if let Err(e) = sender.send(()) {
+                                tracing::error!(
+                                    "Failed to send completion signal on error: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    }
                 });
             }
         })
 }
 
+#[builder]
 async fn setup_batch_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
     callbacks: EventCallback,
     symbols: &[impl MarketSymbol],
-    base_options: ChartOptions,
+    interval: &[Interval],
+    with_replay: bool,
     batch_size: usize,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
@@ -291,10 +348,10 @@ async fn setup_batch_websocket_connection(
     // Prepare all market options
     let mut opts = Vec::new();
     for symbol in symbols {
-        let mut opt = base_options.clone();
-        opt.symbol = symbol.symbol().to_string();
-        opt.exchange = symbol.exchange().to_string();
-        opts.push(opt);
+        for &interval in interval {
+            let opt = ChartOptions::new_with(symbol.symbol(), symbol.exchange(), interval);
+            opts.push(opt);
+        }
     }
 
     // Clone websocket for the background task
@@ -307,6 +364,9 @@ async fn setup_batch_websocket_connection(
             for opt in chunk {
                 if let Err(e) = websocket_clone.set_market(opt.clone()).await {
                     tracing::error!("Failed to set market for {}: {}", opt.symbol, e);
+                }
+                if with_replay {
+                    // TODO: Handle replay mode if needed
                 }
             }
 
@@ -324,12 +384,14 @@ async fn setup_batch_websocket_connection(
     Ok(websocket)
 }
 
+#[builder]
 pub async fn fetch_chart_data_batch(
     auth_token: &str,
     symbols: &[impl MarketSymbol],
-    base_options: ChartOptions,
+    interval: &[Interval],
+    #[builder(default = false)] with_replay: bool,
     server: Option<DataServer>,
-    batch_size: usize,
+    #[builder(default = 40)] batch_size: usize,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
     let symbols_count = symbols.len();
     // Create communication channels with appropriate buffer sizes
@@ -351,15 +413,17 @@ pub async fn fetch_chart_data_batch(
     );
 
     // Initialize and configure WebSocket connection
-    let websocket = setup_batch_websocket_connection(
-        auth_token,
-        server,
-        callbacks,
-        symbols,
-        base_options.clone(),
-        batch_size,
-    )
-    .await?;
+    let websocket = setup_batch_websocket_connection()
+        .auth_token(auth_token)
+        .batch_size(batch_size)
+        .symbols(symbols)
+        .interval(interval)
+        .with_replay(with_replay)
+        .maybe_server(server)
+        .callbacks(callbacks)
+        .call()
+        .await?;
+
     let websocket_shared = Arc::new(websocket);
     let websocket_shared_for_loop = Arc::clone(&websocket_shared);
 
@@ -522,8 +586,14 @@ mod tests {
             .build();
 
         let server = Some(DataServer::ProData);
-        let data: HashMap<String, ChartHistoricalData> =
-            fetch_chart_data_batch(&auth_token, &symbols, based_opt, server, 40).await?;
+        let data: HashMap<String, ChartHistoricalData> = fetch_chart_data_batch()
+            .auth_token(&auth_token)
+            .symbols(&symbols)
+            .interval(&[Interval::OneDay])
+            .batch_size(40)
+            .with_replay(false)
+            .call()
+            .await?;
 
         for (k, d) in data {
             println!(

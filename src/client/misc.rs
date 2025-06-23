@@ -78,7 +78,6 @@ pub async fn search_symbols(search: &str, exchange: &str) -> Result<Vec<Symbol>>
 /// # Returns
 ///
 /// A `Result` containing a `SymbolSearchResponse` struct representing the search results, or an error if the search failed.
-#[allow(clippy::too_many_arguments)]
 #[builder]
 pub async fn advanced_search_symbol(
     search: Option<&str>,
@@ -87,11 +86,12 @@ pub async fn advanced_search_symbol(
     #[builder(default = 0)] start: u64,
     country: Option<Country>,
     #[builder(default = "production")] domain: &str,
-    futures_type: Option<&FuturesProductType>, // For Futures Only
-    stock_sector: Option<&StockSector>,        // For Stock Only
-    crypto_centralization: Option<&CryptoCentralization>, // For Crypto Only
-    economic_source: Option<&EconomicSource>,  // For Economy Only
-    economic_category: Option<&EconomicCategory>, // For Economy Only
+    futures_type: Option<FuturesProductType>, // For Futures Only
+    stock_sector: Option<StockSector>,        // For Stock Only
+    crypto_centralization: Option<CryptoCentralization>, // For Crypto Only
+    economic_source: Option<EconomicSource>,  // For Economy Only
+    economic_category: Option<EconomicCategory>, // For Economy Only
+    search_type: Option<&str>, // For Advanced Search Only, disabled market_type if is Some
 ) -> Result<SymbolSearchResponse> {
     let mut params: Vec<(String, String)> =
         vec![("text".to_string(), search.unwrap_or_default().to_string())];
@@ -99,7 +99,13 @@ pub async fn advanced_search_symbol(
         "exchange".to_string(),
         exchange.unwrap_or_default().to_string(),
     ));
-    params.push(("search_type".to_string(), market_type.to_string()));
+    if let Some(search_type) = search_type {
+        if !search_type.is_empty() {
+            params.push(("search_type".to_string(), search_type.to_string()));
+        }
+    } else {
+        params.push(("search_type".to_string(), market_type.to_string()));
+    }
     params.push(("domain".to_string(), domain.to_string()));
     if let Some(country) = country {
         params.push(("country".to_string(), country.to_string()));
@@ -171,15 +177,18 @@ pub async fn list_symbols(
     exchange: Option<&str>,
     #[builder(default = MarketType::All)] market_type: MarketType,
     country: Option<Country>,
+    search_type: Option<&str>, // For Advanced Search Only, disabled market_type if is Some
     domain: Option<&str>,
 ) -> Result<Vec<Symbol>> {
     let exchange: Arc<String> = Arc::new(exchange.unwrap_or("").to_string());
     let domain = Arc::new(domain.unwrap_or("production").to_string());
+    let search_type = Arc::new(search_type.unwrap_or("").to_string());
 
     let search_symbol_reps = advanced_search_symbol()
         .exchange(&exchange)
         .market_type(market_type)
         .maybe_country(country)
+        .search_type(&search_type)
         .domain(&domain)
         .call()
         .await?;
@@ -195,6 +204,8 @@ pub async fn list_symbols(
     for i in (50..remaining).step_by(50) {
         let exchange = Arc::clone(&exchange);
         let domain = Arc::clone(&domain);
+        let search_type = Arc::clone(&search_type);
+
         let semaphore = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
@@ -206,6 +217,7 @@ pub async fn list_symbols(
                 .exchange(&exchange)
                 .maybe_country(country)
                 .market_type(market_type)
+                .search_type(&search_type)
                 .domain(&domain)
                 .start(i)
                 .call()

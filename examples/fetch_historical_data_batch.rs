@@ -1,8 +1,7 @@
 use colored::*;
 use std::sync::Once;
 use tradingview::{
-    Country, Interval, MarketType, OHLCV, StocksType, chart::ChartOptions, fetch_chart_data_batch,
-    list_symbols, socket::DataServer,
+    Country, Interval, MarketType, OHLCV, StocksType, fetch_chart_data_batch, list_symbols,
 };
 
 fn init() {
@@ -39,19 +38,12 @@ async fn main() -> anyhow::Result<()> {
 
     assert!(!symbols.is_empty(), "No symbols found");
 
-    let based_opt = ChartOptions::builder()
-        .interval(Interval::OneDay)
-        .bar_count(10)
-        .build();
-
-    let data = fetch_chart_data_batch(
-        &auth_token,
-        &symbols,
-        based_opt,
-        Some(DataServer::ProData),
-        40,
-    )
-    .await?;
+    let data = fetch_chart_data_batch()
+        .auth_token(&auth_token)
+        .symbols(&symbols)
+        .interval(&[Interval::OneDay, Interval::OneWeek])
+        .call()
+        .await?;
 
     println!("{}", "✅ Data retrieved successfully!".green());
     println!("{}", "----------------------------------------".dimmed());
