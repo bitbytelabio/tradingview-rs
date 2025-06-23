@@ -1,14 +1,16 @@
+#![allow(unused)]
+
 use colored::*;
 use std::sync::Once;
 use tradingview::{
-    Country, Interval, MarketType, OHLCV, StocksType, fetch_chart_data_batch, list_symbols,
+    Country, Interval, MarketType, OHLCV, StocksType, Symbol, fetch_chart_data_batch, list_symbols,
 };
 
 fn init() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
         tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::INFO)
+            .with_max_level(tracing::Level::DEBUG)
             .init();
     });
 }
@@ -28,50 +30,76 @@ async fn main() -> anyhow::Result<()> {
 
     let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    let symbols = list_symbols()
-        .exchange("UPCOM")
-        .market_type(MarketType::Stocks(StocksType::Common))
-        .country(Country::VN)
-        .call()
-        .await?[0..50]
-        .to_vec();
+    // let symbols = list_symbols()
+    //     .exchange("UPCOM")
+    //     .market_type(MarketType::Stocks(StocksType::Common))
+    //     .country(Country::VN)
+    //     .call()
+    //     .await?[0..10]
+    //     .to_vec();
+    let symbols = vec![
+        Symbol::builder().symbol("XAUUSD").exchange("OANDA").build(),
+        Symbol::builder()
+            .symbol("SOLUSDT.P")
+            .exchange("OKX")
+            .build(),
+        Symbol::builder()
+            .symbol("DOGEUSDT.P")
+            .exchange("OKX")
+            .build(),
+        Symbol::builder()
+            .symbol("BNBUSDT.P")
+            .exchange("OKX")
+            .build(),
+    ];
 
     assert!(!symbols.is_empty(), "No symbols found");
 
-    let data = fetch_chart_data_batch()
+    let datamap = fetch_chart_data_batch()
         .auth_token(&auth_token)
         .symbols(&symbols)
-        .interval(&[Interval::OneDay, Interval::OneWeek])
+        .interval(&[Interval::OneHour, Interval::FifteenMinutes])
+        .with_replay(true)
         .call()
         .await?;
 
     println!("{}", "✅ Data retrieved successfully!".green());
     println!("{}", "----------------------------------------".dimmed());
 
-    for bar in data.values() {
+    for ticker_data in datamap.values() {
         println!(
             "{} | {} | {} | {} | {}",
-            format!("Symbol: {}", bar.symbol_info.name)
+            format!("Symbol: {}", ticker_data.symbol_info.name)
                 .bright_cyan()
                 .bold(),
-            format!("Exchange: {}", bar.symbol_info.exchange).green(),
-            format!("Description: {}", bar.symbol_info.description).yellow(),
-            format!("Currency: {}", bar.symbol_info.currency_code).blue(),
-            format!("Country: {}", bar.symbol_info.currency_code).magenta(),
+            format!("Exchange: {}", ticker_data.symbol_info.exchange).green(),
+            format!("Description: {}", ticker_data.symbol_info.description).yellow(),
+            format!("Currency: {}", ticker_data.symbol_info.currency_code).blue(),
+            format!("Country: {}", ticker_data.symbol_info.currency_code).magenta(),
         );
 
-        for (i, ohlcv) in bar.data.iter().rev().enumerate() {
-            println!(
-                "{} {} | Open: {} | High: {} | Low: {} | Close: {} | Volume: {}",
-                format!("[{}]", i).blue(),
-                format!("{}", ohlcv.datetime()).bright_yellow().bold(),
-                format!("{:.2}", ohlcv.open()).green(),
-                format!("{:.2}", ohlcv.high()).bright_green(),
-                format!("{:.2}", ohlcv.low()).red(),
-                format!("{:.2}", ohlcv.close()).bright_cyan().bold(),
-                format!("{}", ohlcv.volume()).magenta()
-            );
-        }
+        println!("{}", "----------------------------------------".dimmed());
+        let mut data = ticker_data.data.clone();
+        data.dedup_by_key(|point| point.timestamp());
+        data.sort_by(|a, b| a.timestamp().cmp(&b.timestamp()));
+        println!(
+            "{} Total data points: {}",
+            "📊".bright_yellow(),
+            data.len().to_string().bright_blue()
+        );
+
+        // for (i, ohlcv) in bar.data.iter().rev().enumerate() {
+        //     println!(å
+        //         "{} {} | Open: {} | High: {} | Low: {} | Close: {} | Volume: {}",
+        //         format!("[{}]", i).blue(),
+        //         format!("{}", ohlcv.datetime()).bright_yellow().bold(),
+        //         format!("{:.2}", ohlcv.open()).green(),
+        //         format!("{:.2}", ohlcv.high()).bright_green(),
+        //         format!("{:.2}", ohlcv.low()).red(),
+        //         format!("{:.2}", ohlcv.close()).bright_cyan().bold(),
+        //         format!("{}", ohlcv.volume()).magenta()
+        //     );
+        // }
     }
 
     println!("{}", "----------------------------------------".dimmed());

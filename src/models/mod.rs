@@ -3,11 +3,10 @@ pub use self::news::*;
 pub use crate::chart::*;
 pub use crate::quote::models::*;
 
-use std::{collections::HashMap, fmt::Display};
-
-use bon::Builder;
 use chrono::Duration;
+use iso_currency::Currency;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::{collections::HashMap, fmt::Display};
 pub mod news;
 pub mod pine_indicator;
 
@@ -105,7 +104,7 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash, Builder)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash)]
 pub struct Symbol {
     pub symbol: String,
     #[serde(default)]
@@ -117,16 +116,32 @@ pub struct Symbol {
     #[serde(default)]
     pub currency_code: String,
     #[serde(default, rename(deserialize = "provider_id"))]
-    #[builder(default)]
     pub data_provider: String,
     #[serde(default, rename(deserialize = "country"))]
     pub country_code: String,
     #[serde(default, rename(deserialize = "typespecs"))]
-    #[builder(default)]
     pub type_specs: Vec<String>,
     #[serde(default, rename(deserialize = "source2"))]
-    #[builder(default)]
     pub exchange_source: ExchangeSource,
+}
+
+#[bon::bon]
+impl Symbol {
+    #[builder]
+    pub fn new<S: Into<String>>(symbol: S, exchange: S, currency: Option<Currency>) -> Self {
+        Self {
+            symbol: symbol.into(),
+            exchange: exchange.into(),
+            currency_code: currency
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "".to_string()),
+            ..Default::default()
+        }
+    }
+
+    pub fn id(&self) -> String {
+        format!("{}:{}", self.exchange, self.symbol)
+    }
 }
 
 #[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash)]
