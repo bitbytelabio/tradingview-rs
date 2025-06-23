@@ -134,7 +134,7 @@ impl Symbol {
             exchange: exchange.into(),
             currency_code: currency
                 .map(|c| c.to_string())
-                .unwrap_or_else(|| "".to_string()),
+                .unwrap_or_default(),
             ..Default::default()
         }
     }

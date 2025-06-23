@@ -708,7 +708,7 @@ impl WebSocketClient {
         message: &[Value],
     ) -> Result<()> {
         for (id, s) in series.iter() {
-            debug!("received raw message - v: {:?}, m: {:?}", s, message);
+            trace!("received raw message - v: {:?}, m: {:?}", s, message);
             match message[1].get(id.as_str()) {
                 Some(resp_data) => {
                     let data = ChartResponseData::deserialize(resp_data)?.series;
@@ -719,7 +719,7 @@ impl WebSocketClient {
                         .write()
                         .await
                         .replace((s.clone(), data.clone()));
-                    debug!(
+                    trace!(
                         "series data extracted: {:?}",
                         self.metadata.read().await.chart.read().await
                     );
