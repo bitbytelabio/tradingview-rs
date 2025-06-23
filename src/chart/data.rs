@@ -101,10 +101,10 @@ fn create_data_callbacks(
                 let completion_sender = Arc::clone(&completion_sender);
                 tracing::debug!("Series completed with message: {:?}", message);
                 spawn(async move {
-                    if let Some(sender) = completion_sender.lock().await.take() {
-                        if let Err(e) = sender.send(()) {
-                            tracing::error!("Failed to send completion signal: {:?}", e);
-                        }
+                    if let Some(sender) = completion_sender.lock().await.take()
+                        && let Err(e) = sender.send(())
+                    {
+                        tracing::error!("Failed to send completion signal: {:?}", e);
                     }
                 });
             }
@@ -128,13 +128,10 @@ fn create_data_callbacks(
                     if is_critical {
                         tracing::error!("Critical error occurred, aborting all operations");
                         // If it's a critical error, we can send the completion signal immediately
-                        if let Some(sender) = completion_sender.lock().await.take() {
-                            if let Err(e) = sender.send(()) {
-                                tracing::error!(
-                                    "Failed to send completion signal on error: {:?}",
-                                    e
-                                );
-                            }
+                        if let Some(sender) = completion_sender.lock().await.take()
+                            && let Err(e) = sender.send(())
+                        {
+                            tracing::error!("Failed to send completion signal on error: {:?}", e);
                         }
                     }
                 });
@@ -239,6 +236,7 @@ fn create_batch_data_callbacks(
     completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
     symbols_count: Arc<Mutex<usize>>, // Add counter for tracking symbols
+    with_replay: bool,
 ) -> EventCallback {
     EventCallback::default()
         .on_chart_data(
@@ -279,10 +277,10 @@ fn create_batch_data_callbacks(
                     // If all symbols are processed, send completion signal
                     if *count == 0 {
                         tracing::debug!("All symbols processed, sending completion signal");
-                        if let Some(sender) = completion_sender.lock().await.take() {
-                            if let Err(e) = sender.send(()) {
-                                tracing::error!("Failed to send completion signal: {:?}", e);
-                            }
+                        if let Some(sender) = completion_sender.lock().await.take()
+                            && let Err(e) = sender.send(())
+                        {
+                            tracing::error!("Failed to send completion signal: {:?}", e);
                         }
                     }
                 });
@@ -312,13 +310,10 @@ fn create_batch_data_callbacks(
                     if is_critical {
                         tracing::error!("Critical error occurred, aborting all operations");
                         // If it's a critical error, we can send the completion signal immediately
-                        if let Some(sender) = completion_sender.lock().await.take() {
-                            if let Err(e) = sender.send(()) {
-                                tracing::error!(
-                                    "Failed to send completion signal on error: {:?}",
-                                    e
-                                );
-                            }
+                        if let Some(sender) = completion_sender.lock().await.take()
+                            && let Err(e) = sender.send(())
+                        {
+                            tracing::error!("Failed to send completion signal on error: {:?}", e);
                         }
                     }
                 });
@@ -410,6 +405,7 @@ pub async fn fetch_chart_data_batch(
         Arc::clone(&completion_sender),
         Arc::new(Mutex::new(info_sender)),
         Arc::clone(&symbols_counter),
+        with_replay,
     );
 
     // Initialize and configure WebSocket connection
@@ -528,7 +524,7 @@ mod tests {
     use super::*;
     use crate::{Country, Interval, MarketType, StocksType, chart::data, list_symbols};
     use anyhow::Ok;
-    use std::sync::Once;
+    use std::{sync::Once, vec};
 
     fn init() {
         static INIT: Once = Once::new();

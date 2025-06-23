@@ -182,7 +182,7 @@ pub fn graphics_parser(data: &Value) -> GraphicData {
     let indexes = data
         .get("indexes")
         .and_then(|v| v.as_array().cloned())
-        .unwrap_or(Vec::new());
+        .unwrap_or_default();
 
     let raw_graphic = data.get("graphic").unwrap_or(&Value::Null);
 
