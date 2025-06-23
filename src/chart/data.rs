@@ -15,27 +15,74 @@ use tokio::{
     time::{sleep, timeout},
 };
 
+#[derive(Debug, Clone)]
+struct CallbackSender {
+    pub datapoint: Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>,
+    pub info: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
+    pub completion: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub options: Arc<Mutex<oneshot::Sender<ChartOptions>>>,
+}
+
+#[derive(Debug, Clone)]
+struct CallbackReceiver {
+    pub datapoint: Arc<Mutex<mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>>>,
+    pub info: Arc<Mutex<mpsc::Receiver<SymbolInfo>>>,
+    pub completion: Arc<Mutex<oneshot::Receiver<()>>>,
+    pub options: Arc<Mutex<oneshot::Receiver<ChartOptions>>>,
+}
+
+#[derive(Debug, Clone)]
+struct DataHandlers {
+    pub sender: CallbackSender,
+    pub receiver: CallbackReceiver,
+}
+
+impl DataHandlers {
+    pub fn new() -> Self {
+        let (data_sender, data_receiver) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(100);
+        let (info_sender, info_receiver) = mpsc::channel::<SymbolInfo>(100);
+        let (completion_sender, completion_receiver) = oneshot::channel::<()>();
+        let (options_sender, options_receiver) = oneshot::channel::<ChartOptions>();
+
+        Self {
+            sender: CallbackSender {
+                datapoint: Arc::new(Mutex::new(data_sender)),
+                info: Arc::new(Mutex::new(info_sender)),
+                completion: Arc::new(Mutex::new(Some(completion_sender))),
+                options: Arc::new(Mutex::new(options_sender)),
+            },
+            receiver: CallbackReceiver {
+                datapoint: Arc::new(Mutex::new(data_receiver)),
+                info: Arc::new(Mutex::new(info_receiver)),
+                completion: Arc::new(Mutex::new(completion_receiver)),
+                options: Arc::new(Mutex::new(options_receiver)),
+            },
+        }
+    }
+}
+
 /// Fetch historical chart data from TradingView
+#[builder]
 pub async fn fetch_chart_data(
-    auth_token: &str,
+    auth_token: Option<&str>,
     options: ChartOptions,
     server: Option<DataServer>,
+    #[builder(default = false)] with_replay: bool,
 ) -> Result<ChartHistoricalData> {
-    // Create communication channels with appropriate buffer sizes
-    let (data_sender, mut data_receiver) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(100);
-    let (info_sender, mut info_receiver) = mpsc::channel::<SymbolInfo>(100);
-    let (completion_sender, completion_receiver) = oneshot::channel::<()>();
+    let auth_token = if auth_token.is_some() {
+        auth_token.unwrap()
+    } else {
+        tracing::warn!("No auth token provided, using environment variable");
+        &std::env::var("TV_AUTH_TOKEN").unwrap_or_else(|_| {
+            tracing::error!("TV_AUTH_TOKEN environment variable is not set");
+            panic!("TV_AUTH_TOKEN is required for data fetching");
+        })
+    };
 
-    // Wrap channels in thread-safe containers
-    let data_sender = Arc::new(Mutex::new(data_sender));
-    let completion_sender = Arc::new(Mutex::new(Some(completion_sender)));
+    let data_handlers = DataHandlers::new();
 
     // Create callback handlers
-    let callbacks = create_data_callbacks(
-        Arc::clone(&data_sender),
-        Arc::clone(&completion_sender),
-        Arc::new(Mutex::new(info_sender)),
-    );
+    let callbacks = create_data_callbacks(data_handlers.sender.clone());
 
     // Initialize and configure WebSocket connection
     let websocket =
@@ -49,8 +96,7 @@ pub async fn fetch_chart_data(
     });
 
     // Collect and process incoming data
-    let result =
-        collect_historical_data(&mut data_receiver, &mut info_receiver, completion_receiver).await;
+    let result = collect_historical_data(data_handlers.receiver.clone()).await;
 
     // Cleanup resources
     if let Err(e) = websocket_shared.delete().await {
@@ -66,17 +112,12 @@ pub async fn fetch_chart_data(
 }
 
 /// Create callback handlers for processing incoming WebSocket data
-#[allow(clippy::type_complexity)]
-fn create_data_callbacks(
-    data_sender: Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>,
-    completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-    info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
-) -> EventCallback {
+fn create_data_callbacks(sender: CallbackSender) -> EventCallback {
     EventCallback::default()
         .on_chart_data(
             move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
                 tracing::debug!("Received data batch with {} points", data_points.len());
-                let sender = Arc::clone(&data_sender);
+                let sender = Arc::clone(&sender.datapoint);
                 spawn(async move {
                     let tx = sender.lock().await;
                     if let Err(e) = tx.send((series_info, data_points)).await {
@@ -87,7 +128,7 @@ fn create_data_callbacks(
         )
         .on_symbol_info(move |symbol_info| {
             tracing::debug!("Received symbol info: {:?}", symbol_info);
-            let sender = Arc::clone(&info_sender);
+            let sender = Arc::clone(&sender.info);
             spawn(async move {
                 let tx = sender.lock().await;
                 if let Err(e) = tx.send(symbol_info).await {
@@ -96,7 +137,7 @@ fn create_data_callbacks(
             });
         })
         .on_series_completed({
-            let completion_sender = Arc::clone(&completion_sender);
+            let completion_sender = Arc::clone(&sender.completion);
             move |message: Vec<Value>| {
                 let completion_sender = Arc::clone(&completion_sender);
                 tracing::debug!("Series completed with message: {:?}", message);
@@ -122,7 +163,7 @@ fn create_data_callbacks(
                     }
                     _ => false,
                 };
-                let completion_sender = Arc::clone(&completion_sender);
+                let completion_sender = Arc::clone(&sender.completion);
                 // Decrement the counter on error as well
                 spawn(async move {
                     if is_critical {
@@ -162,15 +203,13 @@ async fn setup_websocket_connection(
 }
 
 /// Collect and accumulate incoming historical data from channels
-async fn collect_historical_data(
-    data_receiver: &mut mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
-    info_receiver: &mut mpsc::Receiver<SymbolInfo>,
-    completion_receiver: oneshot::Receiver<()>,
-) -> ChartHistoricalData {
+async fn collect_historical_data(receiver: CallbackReceiver) -> ChartHistoricalData {
     let mut historical_data = ChartHistoricalData::new();
-    let mut completion_future = Box::pin(completion_receiver);
+    let mut completion_receiver = receiver.completion.lock().await;
 
     // Process incoming data until completion signal or channel closure
+    let mut data_receiver = receiver.datapoint.lock().await;
+    let mut info_receiver = receiver.info.lock().await;
     loop {
         tokio::select! {
             Some((series_info, data_points)) = data_receiver.recv() => {
@@ -178,11 +217,11 @@ async fn collect_historical_data(
                 historical_data.series_info = series_info;
                 historical_data.data.extend(data_points);
             }
-            _ = &mut completion_future => {
+            _ = &mut *completion_receiver => {
                 tracing::debug!("Completion signal received");
                 // Process any remaining data points with timeout
-                process_remaining_data_points(data_receiver, &mut historical_data).await;
-                process_remaining_symbol_info(info_receiver, &mut historical_data).await;
+                process_remaining_data_points(&mut data_receiver, &mut historical_data).await;
+                process_remaining_symbol_info(&mut info_receiver, &mut historical_data).await;
                 break;
             }
             Some(symbol_info) = info_receiver.recv() => {
@@ -381,13 +420,23 @@ async fn setup_batch_websocket_connection(
 
 #[builder]
 pub async fn fetch_chart_data_batch(
-    auth_token: &str,
+    auth_token: Option<&str>,
     symbols: &[impl MarketSymbol],
     interval: &[Interval],
     #[builder(default = false)] with_replay: bool,
     server: Option<DataServer>,
     #[builder(default = 40)] batch_size: usize,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
+    let auth_token = if auth_token.is_some() {
+        auth_token.unwrap()
+    } else {
+        tracing::warn!("No auth token provided, using environment variable");
+        &std::env::var("TV_AUTH_TOKEN").unwrap_or_else(|_| {
+            tracing::error!("TV_AUTH_TOKEN environment variable is not set");
+            panic!("TV_AUTH_TOKEN is required for data fetching");
+        })
+    };
+
     let symbols_count = symbols.len();
     // Create communication channels with appropriate buffer sizes
     let (data_sender, mut data_receiver) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(100);
@@ -544,8 +593,12 @@ mod tests {
         let exchange = "HOSE";
         let interval = Interval::OneDay;
         let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(10);
-        let server = Some(DataServer::ProData);
-        let data = fetch_chart_data(&auth_token, option, server).await?;
+        let data = fetch_chart_data()
+            .auth_token(&auth_token)
+            .options(option)
+            .server(DataServer::ProData)
+            .call()
+            .await?;
         assert!(!data.data.is_empty(), "Data should not be empty");
         assert_eq!(data.data.len(), 10, "Data length should be 10");
         assert_eq!(data.symbol_info.id, "HOSE:VCB", "Symbol should match");

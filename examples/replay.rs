@@ -24,7 +24,11 @@ async fn main() -> anyhow::Result<()> {
 
     let option = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneHour);
 
-    let mut data = fetch_chart_data(&auth_token, option, Some(DataServer::ProData))
+    let mut data = fetch_chart_data()
+        .auth_token(&auth_token)
+        .options(option)
+        .server(DataServer::ProData)
+        .call()
         .await?
         .data;
 
