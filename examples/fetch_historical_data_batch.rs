@@ -30,36 +30,34 @@ async fn main() -> anyhow::Result<()> {
 
     let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    // let symbols = list_symbols()
-    //     .exchange("UPCOM")
-    //     .market_type(MarketType::Stocks(StocksType::Common))
-    //     .country(Country::VN)
-    //     .call()
-    //     .await?[0..10]
-    //     .to_vec();
-    let symbols = vec![
-        Symbol::builder().symbol("XAUUSD").exchange("OANDA").build(),
-        Symbol::builder()
-            .symbol("SOLUSDT.P")
-            .exchange("OKX")
-            .build(),
-        Symbol::builder()
-            .symbol("DOGEUSDT.P")
-            .exchange("OKX")
-            .build(),
-        Symbol::builder()
-            .symbol("BNBUSDT.P")
-            .exchange("OKX")
-            .build(),
-    ];
+    let symbols = list_symbols()
+        .market_type(MarketType::Stocks(StocksType::Common))
+        .country(Country::VN)
+        .call()
+        .await?[0..100]
+        .to_vec();
+    // let symbols = vec![
+    //     Symbol::builder().symbol("XAUUSD").exchange("OANDA").build(),
+    //     Symbol::builder()
+    //         .symbol("SOLUSDT.P")
+    //         .exchange("OKX")
+    //         .build(),
+    //     Symbol::builder()
+    //         .symbol("DOGEUSDT.P")
+    //         .exchange("OKX")
+    //         .build(),
+    //     Symbol::builder()
+    //         .symbol("BNBUSDT.P")
+    //         .exchange("OKX")
+    //         .build(),
+    // ];
 
     assert!(!symbols.is_empty(), "No symbols found");
 
     let datamap = fetch_chart_data_batch()
         .auth_token(&auth_token)
         .symbols(&symbols)
-        .interval(&[Interval::OneHour])
-        .with_replay(true)
+        .interval(&[Interval::OneDay, Interval::OneHour, Interval::OneWeek])
         .call()
         .await?;
 
@@ -83,9 +81,10 @@ async fn main() -> anyhow::Result<()> {
         data.dedup_by_key(|point| point.timestamp());
         data.sort_by(|a, b| a.timestamp().cmp(&b.timestamp()));
         println!(
-            "{} Total data points: {}",
+            "{} Total data points: {}, intervals: {}",
             "📊".bright_yellow(),
-            data.len().to_string().bright_blue()
+            data.len().to_string().bright_blue(),
+            ticker_data.series_info.options.interval
         );
 
         // for (i, ohlcv) in bar.data.iter().rev().enumerate() {

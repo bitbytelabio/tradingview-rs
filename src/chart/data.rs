@@ -8,11 +8,7 @@ use crate::{
 };
 use bon::builder;
 use serde_json::Value;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
     spawn,
     sync::{Mutex, mpsc, oneshot},
@@ -164,19 +160,19 @@ fn create_data_callbacks(sender: CallbackSender, with_replay: bool) -> EventCall
                 tracing::debug!("Series completed with message: {:?}", message);
                 spawn(async move {
                     if !with_replay {
-                        if let Some(sender) = completion_sender.lock().await.take()
-                            && let Err(e) = sender.send(())
-                        {
-                            tracing::error!("Failed to send completion signal: {:?}", e);
+                        if let Some(sender) = completion_sender.lock().await.take() {
+                            if let Err(e) = sender.send(()) {
+                                tracing::error!("Failed to send completion signal: {:?}", e);
+                            }
                         }
                     } else if message_json.contains("replay")
                         && message_json.contains("data_completed")
                     {
                         tracing::debug!("Replay data completed, sending completion signal");
-                        if let Some(sender) = completion_sender.lock().await.take()
-                            && let Err(e) = sender.send(())
-                        {
-                            tracing::error!("Failed to send completion signal: {:?}", e);
+                        if let Some(sender) = completion_sender.lock().await.take() {
+                            if let Err(e) = sender.send(()) {
+                                tracing::error!("Failed to send completion signal: {:?}", e);
+                            }
                         }
                     }
                 });
@@ -188,22 +184,45 @@ fn create_data_callbacks(sender: CallbackSender, with_replay: bool) -> EventCall
                 tracing::error!("WebSocket error: {:?}", message);
                 // Check if this is a critical error that should abort the operation
                 let is_critical = match &error {
-                    Error::LoginError(_) => true,
-                    Error::NoChartTokenFound => true,
-                    Error::WebSocketError(_) => true,
-                    Error::TradingViewError(e) => {
-                        matches!(e, TradingViewError::CriticalError)
+                    Error::LoginError(_) => {
+                        tracing::error!("Authentication failed - stopping operation");
+                        true
                     }
+                    Error::NoChartTokenFound => {
+                        tracing::error!("No chart token found - stopping operation");
+                        true
+                    }
+                    Error::WebSocketError(_) => {
+                        tracing::error!(
+                            "WebSocket connection failed - stopping operation gracefully"
+                        );
+                        true // Changed from exit(1) and panic! to graceful handling
+                    }
+                    Error::TradingViewError(e) => match e {
+                        TradingViewError::CriticalError => {
+                            tracing::error!("Critical TradingView error - stopping operation");
+                            true
+                        }
+                        TradingViewError::ProtocolError => {
+                            tracing::error!("Protocol error - stopping operation");
+                            true
+                        }
+                        _ => false,
+                    },
                     _ => false,
                 };
+
                 let completion_sender = Arc::clone(&completion_sender);
                 spawn(async move {
                     if is_critical {
-                        tracing::error!("Critical error occurred, aborting all operations");
-                        if let Some(sender) = completion_sender.lock().await.take()
-                            && let Err(e) = sender.send(())
-                        {
-                            tracing::error!("Failed to send completion signal on error: {:?}", e);
+                        tracing::error!("Critical error occurred, sending completion signal");
+                        if let Some(sender) = completion_sender.lock().await.take() {
+                            if let Err(e) = sender.send(()) {
+                                tracing::error!(
+                                    "Failed to send completion signal on error: {:?}",
+                                    e
+                                );
+                            }
                         }
                     }
                 });
@@ -328,143 +347,55 @@ async fn process_remaining_data_points(
     }
 }
 
-#[derive(Debug, Clone)]
-struct BatchDataHandlers {
-    pub sender: CallbackSender,
-    pub receiver: CallbackReceiver,
-    pub symbols_count: Arc<Mutex<usize>>,
-    pub symbols_replay_count: Arc<Mutex<usize>>,
-}
-
-impl BatchDataHandlers {
-    pub fn new(total_symbols: usize) -> Self {
-        let (data_sender, data_receiver) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(100);
-        let (info_sender, info_receiver) = mpsc::channel::<SymbolInfo>(100);
-        let (completion_sender, completion_receiver) = oneshot::channel::<()>();
-
-        Self {
-            sender: CallbackSender {
-                datapoint: Arc::new(Mutex::new(data_sender)),
-                info: Arc::new(Mutex::new(info_sender)),
-                completion: Arc::new(Mutex::new(Some(completion_sender))),
-            },
-            receiver: CallbackReceiver {
-                datapoint: Arc::new(Mutex::new(data_receiver)),
-                info: Arc::new(Mutex::new(info_receiver)),
-                completion: Arc::new(Mutex::new(completion_receiver)),
-            },
-            symbols_count: Arc::new(Mutex::new(total_symbols)),
-            symbols_replay_count: Arc::new(Mutex::new(total_symbols)),
-        }
-    }
-}
-
-/// Create callback handlers for batch processing with improved replay logic
-fn create_batch_data_callbacks(handlers: BatchDataHandlers, with_replay: bool) -> EventCallback {
-    let datapoint_sender = Arc::clone(&handlers.sender.datapoint);
-    let info_sender = Arc::clone(&handlers.sender.info);
-    let completion_sender = Arc::clone(&handlers.sender.completion);
-    let symbols_count = Arc::clone(&handlers.symbols_count);
-    let symbols_replay_count = Arc::clone(&handlers.symbols_replay_count);
-
+#[allow(clippy::type_complexity)]
+fn create_batch_data_callbacks(
+    data_sender: Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>,
+    completion_sender: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    info_sender: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
+    symbols_count: Arc<Mutex<usize>>, // Add counter for tracking symbols
+) -> EventCallback {
     EventCallback::default()
-        .on_chart_data({
-            let datapoint_sender = Arc::clone(&datapoint_sender);
+        .on_chart_data(
             move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
-                tracing::debug!(
-                    "Received data batch with {} points for {}:{}",
-                    data_points.len(),
-                    series_info.options.exchange,
-                    series_info.options.symbol
-                );
-                let sender = Arc::clone(&datapoint_sender);
+                tracing::debug!("Received data batch with {} points", data_points.len());
+                let sender = Arc::clone(&data_sender);
                 spawn(async move {
                     let tx = sender.lock().await;
                     if let Err(e) = tx.send((series_info, data_points)).await {
                         tracing::error!("Failed to send data points to processing channel: {}", e);
                     }
                 });
-            }
-        })
-        .on_symbol_info({
-            let info_sender = Arc::clone(&info_sender);
-            move |symbol_info| {
-                tracing::debug!(
-                    "Received symbol info: {} - {}",
-                    symbol_info.id,
-                    symbol_info.description
-                );
-                let sender = Arc::clone(&info_sender);
-                spawn(async move {
-                    let tx = sender.lock().await;
-                    if let Err(e) = tx.send(symbol_info).await {
-                        tracing::error!("Failed to send symbol info to processing channel: {}", e);
-                    }
-                });
-            }
+            },
+        )
+        .on_symbol_info(move |symbol_info| {
+            tracing::debug!("Received symbol info: {:?}", symbol_info);
+            let sender = Arc::clone(&info_sender);
+            spawn(async move {
+                let tx = sender.lock().await;
+                if let Err(e) = tx.send(symbol_info).await {
+                    tracing::error!("Failed to send symbol info to processing channel: {}", e);
+                }
+            });
         })
         .on_series_completed({
             let completion_sender = Arc::clone(&completion_sender);
             let symbols_count = Arc::clone(&symbols_count);
-            let symbols_replay_count = Arc::clone(&symbols_replay_count);
             move |message: Vec<Value>| {
                 let completion_sender = Arc::clone(&completion_sender);
                 let symbols_count = Arc::clone(&symbols_count);
-                let symbols_replay_count = Arc::clone(&symbols_replay_count);
-
                 tracing::debug!("Series completed with message: {:?}", message);
                 spawn(async move {
-                    let message_json = serde_json::to_string(&message)
-                        .unwrap_or_else(|_| "Failed to serialize message".to_string());
+                    // Decrement the counter when a series completes
+                    let mut count = symbols_count.lock().await;
+                    *count -= 1;
+                    tracing::debug!("Series completed, remaining symbols: {}", *count);
 
-                    if with_replay {
-                        if message_json.contains("replay")
-                            && message_json.contains("data_completed")
-                        {
-                            // Handle replay completion
-                            let mut replay_count = symbols_replay_count.lock().await;
-                            *replay_count -= 1;
-                            tracing::debug!(
-                                "Replay data completed, remaining replay symbols: {}",
-                                *replay_count
-                            );
-
-                            if *replay_count == 0 {
-                                tracing::debug!(
-                                    "All replay symbols processed, sending completion signal"
-                                );
-                                if let Some(sender) = completion_sender.lock().await.take() {
-                                    if let Err(e) = sender.send(()) {
-                                        tracing::error!(
-                                            "Failed to send completion signal: {:?}",
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                        } else {
-                            // Handle regular series completion during replay mode
-                            let mut count = symbols_count.lock().await;
-                            *count -= 1;
-                            tracing::debug!(
-                                "Regular series completed during replay, remaining symbols: {}",
-                                *count
-                            );
-
-                            // Don't send completion signal here - wait for replay completion
-                        }
-                    } else {
-                        // Handle regular series completion (no replay)
-                        let mut count = symbols_count.lock().await;
-                        *count -= 1;
-                        tracing::debug!("Series completed, remaining symbols: {}", *count);
-
-                        if *count == 0 {
-                            tracing::debug!("All symbols processed, sending completion signal");
-                            if let Some(sender) = completion_sender.lock().await.take() {
-                                if let Err(e) = sender.send(()) {
-                                    tracing::error!("Failed to send completion signal: {:?}", e);
-                                }
+                    // If all symbols are processed, send completion signal
+                    if *count == 0 {
+                        tracing::debug!("All symbols processed, sending completion signal");
+                        if let Some(sender) = completion_sender.lock().await.take() {
+                            if let Err(e) = sender.send(()) {
+                                tracing::error!("Failed to send completion signal: {:?}", e);
                             }
                         }
                     }
@@ -472,59 +403,27 @@ fn create_batch_data_callbacks(handlers: BatchDataHandlers, with_replay: bool) -
             }
         })
         .on_error({
-            let completion_sender = Arc::clone(&completion_sender);
             let symbols_count = Arc::clone(&symbols_count);
-            move |(error, message)| {
-                tracing::error!("WebSocket error: {:?}", message);
-                let is_critical = match &error {
-                    Error::LoginError(_) => true,
-                    Error::NoChartTokenFound => true,
-                    Error::WebSocketError(_) => true,
-                    Error::TradingViewError(e) => {
-                        matches!(e, TradingViewError::CriticalError)
-                    }
-                    _ => false,
-                };
-
-                let completion_sender = Arc::clone(&completion_sender);
+            move |error| {
+                tracing::error!("WebSocket error: {:?}", error);
                 let symbols_count = Arc::clone(&symbols_count);
-                spawn(async move {
-                    if is_critical {
-                        tracing::error!("Critical error occurred, aborting all operations");
-                        if let Some(sender) = completion_sender.lock().await.take() {
-                            if let Err(e) = sender.send(()) {
-                                tracing::error!(
-                                    "Failed to send completion signal on error: {:?}",
-                                    e
-                                );
-                            }
-                        }
-                    } else {
-                        // Decrement counter on non-critical errors
-                        let mut count = symbols_count.lock().await;
-                        *count -= 1;
-                        tracing::debug!("Error occurred, remaining symbols: {}", *count);
 
-                        if *count == 0 {
-                            if let Some(sender) = completion_sender.lock().await.take() {
-                                if let Err(e) = sender.send(()) {
-                                    tracing::error!("Failed to send completion signal: {:?}", e);
-                                }
-                            }
-                        }
-                    }
+                // Decrement the counter on error as well
+                spawn(async move {
+                    let mut count = symbols_count.lock().await;
+                    *count -= 1;
+                    tracing::debug!("Error occurred, remaining symbols: {}", *count);
                 });
             }
         })
 }
 
-/// Setup WebSocket connection for batch processing with sequential market configuration
 async fn setup_batch_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
     callbacks: EventCallback,
     symbols: &[impl MarketSymbol],
-    intervals: &[Interval],
+    base_options: ChartOptions,
     batch_size: usize,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
@@ -537,150 +436,123 @@ async fn setup_batch_websocket_connection(
         .await?;
 
     // Prepare all market options
-    let mut options_list = Vec::new();
+    let mut opts = Vec::new();
     for symbol in symbols {
-        for &interval in intervals {
-            let opt = ChartOptions::new_with(symbol.symbol(), symbol.exchange(), interval);
-            options_list.push(opt);
-        }
+        let mut opt = base_options.clone();
+        opt.symbol = symbol.symbol().to_string();
+        opt.exchange = symbol.exchange().to_string();
+        opts.push(opt);
     }
 
-    // Process market settings sequentially in batches
-    for chunk in options_list.chunks(batch_size) {
-        for opt in chunk {
-            if let Err(e) = websocket.set_market(opt.clone()).await {
-                tracing::error!(
-                    "Failed to set market for {}:{}: {}",
-                    opt.exchange,
-                    opt.symbol,
-                    e
-                );
-            }
-        }
+    // Clone websocket for the background task
+    let websocket_clone = websocket.clone();
 
-        // Wait between batches to avoid overwhelming the server
-        if chunk.len() == batch_size {
-            sleep(Duration::from_secs(2)).await;
+    // Process market settings in background with batching
+    spawn(async move {
+        for chunk in opts.chunks(batch_size) {
+            // Process one batch
+            for opt in chunk {
+                if let Err(e) = websocket_clone.set_market(opt.clone()).await {
+                    tracing::error!("Failed to set market for {}: {}", opt.symbol, e);
+                }
+            }
+
+            // Wait 5 seconds before processing the next batch
+            sleep(Duration::from_secs(5)).await;
             tracing::debug!(
                 "Processed batch of {} markets, waiting before next batch",
                 chunk.len()
             );
         }
-    }
 
-    tracing::debug!("Finished setting all {} markets", options_list.len());
+        tracing::debug!("Finished setting all {} markets", opts.len());
+    });
+
     Ok(websocket)
 }
 
-/// Collect and process batch historical data with sequential replay handling
-async fn collect_batch_historical_data(
-    handlers: BatchDataHandlers,
-    websocket: &WebSocket,
-    with_replay: bool,
-) -> HashMap<String, ChartHistoricalData> {
-    let mut results = HashMap::new();
-    let mut symbol_info_cache: HashMap<String, SymbolInfo> = HashMap::new();
-    let mut replay_set_for_symbols = HashSet::new();
-    let mut completion_receiver = handlers.receiver.completion.lock().await;
-    let mut data_receiver = handlers.receiver.datapoint.lock().await;
-    let mut info_receiver = handlers.receiver.info.lock().await;
-    let mut replay_symbols_with_data = 0; // Track symbols that actually triggered replay
+pub async fn fetch_chart_data_batch_inner(
+    auth_token: &str,
+    symbols: &[impl MarketSymbol],
+    base_options: ChartOptions,
+    server: Option<DataServer>,
+    batch_size: usize,
+) -> Result<HashMap<String, ChartHistoricalData>> {
+    let symbols_count = symbols.len();
+    // Create communication channels with appropriate buffer sizes
+    let (data_sender, mut data_receiver) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(100);
+    let (info_sender, mut info_receiver) = mpsc::channel::<SymbolInfo>(100);
+    let (completion_sender, completion_receiver) = oneshot::channel::<()>();
 
+    // Wrap channels in thread-safe containers
+    let data_sender = Arc::new(Mutex::new(data_sender));
+    let completion_sender = Arc::new(Mutex::new(Some(completion_sender)));
+    let symbols_counter = Arc::new(Mutex::new(symbols_count));
+
+    // Create callback handlers
+    let callbacks = create_batch_data_callbacks(
+        Arc::clone(&data_sender),
+        Arc::clone(&completion_sender),
+        Arc::new(Mutex::new(info_sender)),
+        Arc::clone(&symbols_counter),
+    );
+
+    // Initialize and configure WebSocket connection
+    let websocket = setup_batch_websocket_connection(
+        auth_token,
+        server,
+        callbacks,
+        symbols,
+        base_options.clone(),
+        batch_size,
+    )
+    .await?;
+    let websocket_shared = Arc::new(websocket);
+    let websocket_shared_for_loop = Arc::clone(&websocket_shared);
+
+    // Start the subscription process in a background task
+    let subscription_task = spawn(async move {
+        Arc::clone(&websocket_shared_for_loop).subscribe().await;
+    });
+
+    // Collect results for multiple symbols
+    let mut results = HashMap::new();
+
+    // Box and pin the completion receiver to prevent moves
+    let mut completion_future = Box::pin(completion_receiver);
+
+    // Process incoming data until completion signal
     loop {
         tokio::select! {
             Some((series_info, data_points)) = data_receiver.recv() => {
-                let symbol_key = format!("{}:{}:{}",
-                    series_info.options.exchange,
-                    series_info.options.symbol,
-                    series_info.options.interval
-                );
-
+                let symbol_key = format!("{}:{}", series_info.options.exchange, series_info.options.symbol);
                 tracing::debug!("Processing batch for symbol {}: {} points", symbol_key, data_points.len());
 
-                // Only create entry if we have actual data points
-                if !data_points.is_empty() {
-                    let historical_data = results.entry(symbol_key.clone())
-                        .or_insert_with(ChartHistoricalData::new);
-
-                    historical_data.series_info = series_info.clone();
-                    historical_data.data.extend(data_points);
-
-                    // Check if we have cached symbol info for this symbol
-                    if let Some(symbol_info) = symbol_info_cache.remove(&symbol_key) {
-                        historical_data.symbol_info = symbol_info;
-                    } else {
-                        // Try to match by partial key (symbol ID might be different format)
-                        for (cached_key, cached_info) in symbol_info_cache.iter() {
-                            if cached_key.contains(&series_info.options.symbol) ||
-                               cached_info.id.contains(&series_info.options.symbol) {
-                                historical_data.symbol_info = cached_info.clone();
-                                break;
-                            }
-                        }
-                    }
-
-                    // Handle replay mode setup - similar to single symbol logic
-                    if with_replay && !historical_data.data.is_empty() && !replay_set_for_symbols.contains(&symbol_key) {
-                        let mut options = series_info.options.clone();
-                        historical_data.data.sort_by_key(|a| a.timestamp());
-
-                        let earliest_timestamp = historical_data
-                            .data
-                            .first()
-                            .map(|point| point.timestamp())
-                            .unwrap_or(0);
-
-                        options.replay_mode = true;
-                        options.replay_from = earliest_timestamp;
-                        replay_set_for_symbols.insert(symbol_key.clone());
-                        replay_symbols_with_data += 1;
-
-                        // Update the replay count to only count symbols that actually have data
-                        {
-                            let mut replay_count = handlers.symbols_replay_count.lock().await;
-                            *replay_count = replay_symbols_with_data;
-                        }
-
-                        tracing::debug!(
-                            "Setting replay mode for {} with earliest timestamp: {} (replay symbols with data: {})",
-                            symbol_key,
-                            earliest_timestamp,
-                            replay_symbols_with_data
-                        );
-
-                        if let Err(e) = websocket.set_market(options).await {
-                            tracing::error!("Failed to set options for replay on {}: {}", symbol_key, e);
-                        }
-                    }
-                } else {
-                    tracing::debug!("Skipping symbol {} - no data points received", symbol_key);
+                if data_points.is_empty() {
+                    tracing::warn!("Received empty data points for symbol {}", symbol_key);
+                    continue; // Skip empty batches
                 }
+                // Get or create entry for this symbol
+                let historical_data = results.entry(symbol_key.clone())
+                .or_insert_with(ChartHistoricalData::new);
+
+                // Update data for this symbol
+                historical_data.series_info = series_info;
+                historical_data.data.extend(data_points);
             }
             Some(symbol_info) = info_receiver.recv() => {
-                tracing::debug!("Processing symbol info: {:?}", symbol_info);
+                let symbol_key = symbol_info.id.clone();
+                tracing::debug!("Processing symbol info for {}: {:?}", symbol_key, symbol_info);
 
-                // Try to find existing entry with data
-                let mut matched = false;
-                for (key, historical_data) in results.iter_mut() {
-                    if key.contains(&symbol_info.id) ||
-                       symbol_info.id.contains(&extract_symbol_from_key(key)) {
-                        historical_data.symbol_info = symbol_info.clone();
-                        matched = true;
-                        break;
-                    }
-                }
+                // Get or create entry for this symbol
+                let historical_data = results.entry(symbol_key)
+                    .or_insert_with(ChartHistoricalData::new);
 
-                // If no existing entry with data, cache the symbol info
-                if !matched {
-                    let potential_key = symbol_info.id.clone();
-                    symbol_info_cache.insert(potential_key, symbol_info);
-                }
+                // Update symbol info
+                historical_data.symbol_info = symbol_info;
             }
-            _ = &mut *completion_receiver => {
-                tracing::debug!("Completion signal received for batch processing");
-
-                // Process any remaining data points with timeout
-                process_remaining_batch_data(&mut data_receiver, &mut info_receiver, &mut results, &mut symbol_info_cache).await;
+            _ = &mut completion_future => {
+                tracing::debug!("All symbols completed, finishing data collection");
                 break;
             }
             else => {
@@ -690,90 +562,56 @@ async fn collect_batch_historical_data(
         }
     }
 
-    // Log symbols that had info but no data
-    if !symbol_info_cache.is_empty() {
-        tracing::warn!(
-            "Found {} symbols with info but no data points:",
-            symbol_info_cache.len()
-        );
-        for (key, info) in &symbol_info_cache {
-            tracing::warn!("  - {}: {} ({})", key, info.description, info.exchange);
-        }
-    }
-
-    tracing::debug!(
-        "Batch processing completed. Results: {}, Replay symbols: {}",
-        results.len(),
-        replay_symbols_with_data
-    );
-    results
-}
-
-/// Extract symbol name from the composite key
-fn extract_symbol_from_key(key: &str) -> &str {
-    // Key format is "exchange:symbol:interval"
-    key.split(':').nth(1).unwrap_or(key)
-}
-
-/// Process remaining data in batch channels after completion
-async fn process_remaining_batch_data(
-    data_receiver: &mut mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
-    info_receiver: &mut mpsc::Receiver<SymbolInfo>,
-    results: &mut HashMap<String, ChartHistoricalData>,
-    symbol_info_cache: &mut HashMap<String, SymbolInfo>,
-) {
-    // Process remaining data points
+    // Process any remaining data with timeout
     while let Ok(Some((series_info, data_points))) =
         timeout(Duration::from_millis(100), data_receiver.recv()).await
     {
         let symbol_key = format!(
-            "{}:{}:{}",
-            series_info.options.exchange, series_info.options.symbol, series_info.options.interval
+            "{}:{}",
+            series_info.options.exchange, series_info.options.symbol
         );
-
         tracing::debug!(
             "Processing final batch for {}: {} points",
             symbol_key,
             data_points.len()
         );
 
-        // Only create entry if we have actual data points
-        if !data_points.is_empty() {
-            let historical_data = results.entry(symbol_key.clone()).or_default();
-
-            historical_data.series_info = series_info;
-            historical_data.data.extend(data_points);
-
-            // Check if we have cached symbol info for this symbol
-            if let Some(symbol_info) = symbol_info_cache.remove(&symbol_key) {
-                historical_data.symbol_info = symbol_info;
-            }
+        if data_points.is_empty() {
+            tracing::warn!("Received empty data points for symbol {}", symbol_key);
+            continue; // Skip empty batches
         }
+
+        let historical_data = results
+            .entry(symbol_key)
+            .or_insert_with(ChartHistoricalData::new);
+
+        historical_data.series_info = series_info;
+        historical_data.data.extend(data_points);
     }
 
-    // Process remaining symbol info - only cache, don't create entries without data
+    // Process any remaining symbol info with timeout
     while let Ok(Some(symbol_info)) =
         timeout(Duration::from_millis(100), info_receiver.recv()).await
     {
-        tracing::debug!("Processing final symbol info: {:?}", symbol_info);
+        let symbol_key = symbol_info.id.clone();
+        tracing::debug!("Processing final symbol info for {}", symbol_key);
 
-        // Try to match with existing data entries
-        let mut matched = false;
-        for (key, historical_data) in results.iter_mut() {
-            if key.contains(&symbol_info.id)
-                || symbol_info.id.contains(extract_symbol_from_key(key))
-            {
-                historical_data.symbol_info = symbol_info.clone();
-                matched = true;
-                break;
-            }
-        }
+        let historical_data = results
+            .entry(symbol_key)
+            .or_insert_with(ChartHistoricalData::new);
 
-        // Cache if no match found
-        if !matched {
-            symbol_info_cache.insert(symbol_info.id.clone(), symbol_info);
-        }
+        historical_data.symbol_info = symbol_info;
     }
+
+    // Cleanup resources
+    if let Err(e) = websocket_shared.delete().await {
+        tracing::error!("Failed to close WebSocket connection: {}", e);
+    }
+    subscription_task.abort();
+
+    tracing::debug!("Data collection completed with {} symbols", results.len());
+
+    Ok(results)
 }
 
 #[builder]
@@ -781,10 +619,10 @@ pub async fn fetch_chart_data_batch(
     auth_token: Option<&str>,
     symbols: &[impl MarketSymbol],
     interval: &[Interval],
-    #[builder(default = false)] with_replay: bool,
     server: Option<DataServer>,
-    #[builder(default = 10)] batch_size: usize,
+    #[builder(default = 30)] batch_size: usize,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
+    let mut final_data = HashMap::new();
     let auth_token = if let Some(token) = auth_token {
         token
     } else {
@@ -794,42 +632,36 @@ pub async fn fetch_chart_data_batch(
             panic!("TV_AUTH_TOKEN is required for data fetching");
         })
     };
+    // split symbols into batches, each batch will be processed separately and interval will be sent separately
+    for chunk in symbols.chunks(batch_size) {
+        tracing::debug!(
+            "Processing batch of {} symbols with intervals: {:?}",
+            chunk.len(),
+            interval
+        );
+        for interval in interval {
+            let opt = ChartOptions::builder().interval(*interval).build();
+            tracing::debug!("Processing interval: {:?}", interval);
+            let batch_data =
+                fetch_chart_data_batch_inner(auth_token, chunk, opt, server, 15).await?;
+            tracing::debug!(
+                "Batch data collected for {} symbols with interval {:?}",
+                batch_data.len(),
+                interval
+            );
+            final_data.extend(batch_data);
 
-    let total_symbols = symbols.len() * interval.len();
-    let data_handlers = BatchDataHandlers::new(total_symbols);
-
-    // Create callback handlers using the improved logic
-    let callbacks = create_batch_data_callbacks(data_handlers.clone(), with_replay);
-
-    // Setup WebSocket connection with sequential processing
-    let websocket = setup_batch_websocket_connection(
-        auth_token, server, callbacks, symbols, interval, batch_size,
-    )
-    .await?;
-
-    let websocket_shared = Arc::new(websocket);
-    let websocket_shared_for_loop = Arc::clone(&websocket_shared);
-
-    // Start the subscription process in a background task
-    let subscription_task = spawn(async move {
-        websocket_shared_for_loop.subscribe().await;
-    });
-
-    // Collect and process incoming data using improved logic
-    let results =
-        collect_batch_historical_data(data_handlers, &websocket_shared, with_replay).await;
-
-    // Cleanup resources
-    if let Err(e) = websocket_shared.delete().await {
-        tracing::error!("Failed to close WebSocket connection: {}", e);
+            tokio::time::sleep(Duration::from_secs(2)).await; // Sleep to avoid overwhelming the server
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await; // Sleep between batches
     }
-    subscription_task.abort();
 
-    tracing::debug!(
-        "Batch data collection completed with {} symbols",
-        results.len()
-    );
-    Ok(results)
+    tracing::debug!("All batches processed, total symbols: {}", final_data.len());
+    if final_data.is_empty() {
+        tracing::warn!("No data collected for the provided symbols");
+        return Err(Error::NoChartTokenFound);
+    }
+    Ok(final_data)
 }
 
 #[cfg(test)]
@@ -905,7 +737,6 @@ mod tests {
             .symbols(&symbols)
             .interval(&[Interval::OneDay])
             .batch_size(40)
-            .with_replay(false)
             .call()
             .await?;
 
