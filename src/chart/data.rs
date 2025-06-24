@@ -576,7 +576,12 @@ async fn collect_batch_results(
         tokio::select! {
             Some((series_info, data_points)) = data_rx.recv() => {
                 if !data_points.is_empty() {
-                    let symbol_key = format!("{}:{}", series_info.options.exchange, series_info.options.symbol);
+                    // Include interval in the key to prevent overwriting
+                    let symbol_key = format!("{}:{}:{}",
+                        series_info.options.exchange,
+                        series_info.options.symbol,
+                        series_info.options.interval
+                    );
                     let historical_data = results.entry(symbol_key)
                         .or_insert_with(ChartHistoricalData::new);
 
@@ -585,10 +590,23 @@ async fn collect_batch_results(
                 }
             }
             Some(symbol_info) = info_rx.recv() => {
-                let symbol_key = symbol_info.id.clone();
-                let historical_data = results.entry(symbol_key)
-                    .or_insert_with(ChartHistoricalData::new);
-                historical_data.symbol_info = symbol_info;
+                // For symbol_info, we might need to match it to existing entries
+                // or create entries for all intervals
+                let base_key = symbol_info.id.clone();
+
+                // Find all entries that match this symbol and update them
+                for (key, historical_data) in results.iter_mut() {
+                    if key.starts_with(&base_key) {
+                        historical_data.symbol_info = symbol_info.clone();
+                    }
+                }
+
+                // If no matching entries found, create a new one
+                if !results.keys().any(|k| k.starts_with(&base_key)) {
+                    let historical_data = results.entry(base_key)
+                        .or_insert_with(ChartHistoricalData::new);
+                    historical_data.symbol_info = symbol_info;
+                }
             }
             _ = &mut completion_future => {
                 tracing::debug!("All symbols completed");
@@ -617,9 +635,12 @@ async fn process_remaining_batch_data(
         timeout(REMAINING_DATA_TIMEOUT, data_rx.recv()).await
     {
         if !data_points.is_empty() {
+            // Include interval in the key to prevent overwriting
             let symbol_key = format!(
-                "{}:{}",
-                series_info.options.exchange, series_info.options.symbol
+                "{}:{}:{}",
+                series_info.options.exchange,
+                series_info.options.symbol,
+                series_info.options.interval
             );
             let historical_data = results
                 .entry(symbol_key)
@@ -630,11 +651,22 @@ async fn process_remaining_batch_data(
     }
 
     while let Ok(Some(symbol_info)) = timeout(REMAINING_DATA_TIMEOUT, info_rx.recv()).await {
-        let symbol_key = symbol_info.id.clone();
-        let historical_data = results
-            .entry(symbol_key)
-            .or_insert_with(ChartHistoricalData::new);
-        historical_data.symbol_info = symbol_info;
+        let base_key = symbol_info.id.clone();
+
+        // Update all matching entries
+        for (key, historical_data) in results.iter_mut() {
+            if key.starts_with(&base_key) {
+                historical_data.symbol_info = symbol_info.clone();
+            }
+        }
+
+        // If no matching entries found, create a new one
+        if !results.keys().any(|k| k.starts_with(&base_key)) {
+            let historical_data = results
+                .entry(base_key)
+                .or_insert_with(ChartHistoricalData::new);
+            historical_data.symbol_info = symbol_info;
+        }
     }
 }
 
