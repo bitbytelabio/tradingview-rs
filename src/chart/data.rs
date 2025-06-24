@@ -566,7 +566,7 @@ fn create_batch_completion_handler(
                 let should_complete = completion_ratio >= 0.8 // 80% of symbols have data
                     || message_json.contains("series_completed")
                     || message_json.contains("data_completed")
-                    || (message.is_empty() && completed.len() > 0); // Empty message with some data
+                    || (message.is_empty() && !completed.is_empty()); // Empty message with some data
 
                 if should_complete {
                     tracing::debug!(
@@ -834,7 +834,7 @@ async fn process_remaining_batch_data(
 
             let historical_data = results
                 .entry(symbol_key)
-                .or_insert_with(ChartHistoricalData::new);
+                .or_default();
             historical_data.series_info = series_info;
             historical_data.data.extend(data_points);
         }
@@ -857,7 +857,7 @@ async fn process_remaining_batch_data(
         if !matched {
             let historical_data = results
                 .entry(base_key)
-                .or_insert_with(ChartHistoricalData::new);
+                .or_default();
             historical_data.symbol_info = symbol_info;
         }
     }
