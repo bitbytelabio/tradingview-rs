@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
         .data;
 
     // Sort data points by timestamp (ascending order - earliest first)
-    data.sort_by(|a, b| a.timestamp().cmp(&b.timestamp()));
+    data.sort_by_key(|a| a.timestamp());
 
     // Get the earliest timestamp for replay_from
     let earliest_timestamp = data.first().map(|point| point.timestamp()).unwrap_or(0);
@@ -69,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
                 data.extend(data_points);
 
                 // sort the data points by timestamp
-                data.sort_by(|a, b| a.timestamp().cmp(&b.timestamp()));
+                data.sort_by_key(|a| a.timestamp());
                 // Remove duplicates based on timestamp
                 data.dedup_by_key(|point| point.timestamp());
                 tracing::debug!("Total data points after update: {}", data.len());

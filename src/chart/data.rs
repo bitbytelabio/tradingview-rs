@@ -29,6 +29,7 @@ const INTERVAL_PROCESSING_DELAY: Duration = Duration::from_secs(2);
 const DEFAULT_BATCH_SIZE: usize = 15;
 
 /// Handles for managing data communication channels
+#[allow(clippy::type_complexity)]
 #[derive(Debug)]
 struct DataChannels {
     data_tx: Arc<Mutex<DataChannel>>,
@@ -312,7 +313,7 @@ async fn send_completion_signal(
     if let Ok(mut tx_opt) = completion_tx.try_lock() {
         if let Some(tx) = tx_opt.take() {
             tracing::debug!("{}, sending completion signal", reason);
-            if let Err(_) = tx.send(()) {
+            if tx.send(()).is_err() {
                 tracing::warn!("Completion receiver was dropped");
             }
         }
@@ -642,9 +643,7 @@ async fn process_remaining_batch_data(
                 series_info.options.symbol,
                 series_info.options.interval
             );
-            let historical_data = results
-                .entry(symbol_key)
-                .or_insert_with(ChartHistoricalData::new);
+            let historical_data = results.entry(symbol_key).or_default();
             historical_data.series_info = series_info;
             historical_data.data.extend(data_points);
         }
@@ -662,9 +661,7 @@ async fn process_remaining_batch_data(
 
         // If no matching entries found, create a new one
         if !results.keys().any(|k| k.starts_with(&base_key)) {
-            let historical_data = results
-                .entry(base_key)
-                .or_insert_with(ChartHistoricalData::new);
+            let historical_data = results.entry(base_key).or_default();
             historical_data.symbol_info = symbol_info;
         }
     }

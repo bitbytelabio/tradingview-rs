@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "----------------------------------------".dimmed());
 
     data.dedup_by_key(|point| point.timestamp());
-    data.sort_by(|a, b| a.timestamp().cmp(&b.timestamp()));
+    data.sort_by_key(|a| a.timestamp());
     println!(
         "{} Total data points: {}",
         "📊".bright_yellow(),
