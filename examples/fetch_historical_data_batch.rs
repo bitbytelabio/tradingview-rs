@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
     let datamap = fetch_chart_data_batch()
         .auth_token(&auth_token)
         .symbols(&symbols)
-        .interval(&[Interval::OneHour, Interval::FifteenMinutes])
+        .interval(&[Interval::OneHour])
         .with_replay(true)
         .call()
         .await?;

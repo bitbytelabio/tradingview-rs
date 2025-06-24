@@ -417,40 +417,54 @@ fn create_batch_data_callbacks(handlers: BatchDataHandlers, with_replay: bool) -
                     let message_json = serde_json::to_string(&message)
                         .unwrap_or_else(|_| "Failed to serialize message".to_string());
 
-                    if with_replay
-                        && message_json.contains("replay")
-                        && message_json.contains("data_completed")
-                    {
-                        // Handle replay completion
-                        let mut replay_count = symbols_replay_count.lock().await;
-                        *replay_count -= 1;
-                        tracing::debug!(
-                            "Replay data completed, remaining replay symbols: {}",
-                            *replay_count
-                        );
-
-                        if *replay_count == 0 {
+                    if with_replay {
+                        if message_json.contains("replay")
+                            && message_json.contains("data_completed")
+                        {
+                            // Handle replay completion
+                            let mut replay_count = symbols_replay_count.lock().await;
+                            *replay_count -= 1;
                             tracing::debug!(
-                                "All replay symbols processed, sending completion signal"
+                                "Replay data completed, remaining replay symbols: {}",
+                                *replay_count
                             );
-                            if let Some(sender) = completion_sender.lock().await.take()
-                                && let Err(e) = sender.send(())
-                            {
-                                tracing::error!("Failed to send completion signal: {:?}", e);
+
+                            if *replay_count == 0 {
+                                tracing::debug!(
+                                    "All replay symbols processed, sending completion signal"
+                                );
+                                if let Some(sender) = completion_sender.lock().await.take() {
+                                    if let Err(e) = sender.send(()) {
+                                        tracing::error!(
+                                            "Failed to send completion signal: {:?}",
+                                            e
+                                        );
+                                    }
+                                }
                             }
+                        } else {
+                            // Handle regular series completion during replay mode
+                            let mut count = symbols_count.lock().await;
+                            *count -= 1;
+                            tracing::debug!(
+                                "Regular series completed during replay, remaining symbols: {}",
+                                *count
+                            );
+
+                            // Don't send completion signal here - wait for replay completion
                         }
                     } else {
-                        // Handle regular series completion
+                        // Handle regular series completion (no replay)
                         let mut count = symbols_count.lock().await;
                         *count -= 1;
                         tracing::debug!("Series completed, remaining symbols: {}", *count);
 
-                        if !with_replay && *count == 0 {
+                        if *count == 0 {
                             tracing::debug!("All symbols processed, sending completion signal");
-                            if let Some(sender) = completion_sender.lock().await.take()
-                                && let Err(e) = sender.send(())
-                            {
-                                tracing::error!("Failed to send completion signal: {:?}", e);
+                            if let Some(sender) = completion_sender.lock().await.take() {
+                                if let Err(e) = sender.send(()) {
+                                    tracing::error!("Failed to send completion signal: {:?}", e);
+                                }
                             }
                         }
                     }
@@ -477,20 +491,26 @@ fn create_batch_data_callbacks(handlers: BatchDataHandlers, with_replay: bool) -
                 spawn(async move {
                     if is_critical {
                         tracing::error!("Critical error occurred, aborting all operations");
-                        if let Some(sender) = completion_sender.lock().await.take()
-                            && let Err(e) = sender.send(())
-                        {
-                            tracing::error!("Failed to send completion signal on error: {:?}", e);
+                        if let Some(sender) = completion_sender.lock().await.take() {
+                            if let Err(e) = sender.send(()) {
+                                tracing::error!(
+                                    "Failed to send completion signal on error: {:?}",
+                                    e
+                                );
+                            }
                         }
                     } else {
                         // Decrement counter on non-critical errors
                         let mut count = symbols_count.lock().await;
                         *count -= 1;
-                        if *count == 0
-                            && let Some(sender) = completion_sender.lock().await.take()
-                            && let Err(e) = sender.send(())
-                        {
-                            tracing::error!("Failed to send completion signal: {:?}", e);
+                        tracing::debug!("Error occurred, remaining symbols: {}", *count);
+
+                        if *count == 0 {
+                            if let Some(sender) = completion_sender.lock().await.take() {
+                                if let Err(e) = sender.send(()) {
+                                    tracing::error!("Failed to send completion signal: {:?}", e);
+                                }
+                            }
                         }
                     }
                 });
@@ -559,11 +579,12 @@ async fn collect_batch_historical_data(
     with_replay: bool,
 ) -> HashMap<String, ChartHistoricalData> {
     let mut results = HashMap::new();
-    let mut symbol_info_cache: HashMap<String, SymbolInfo> = HashMap::new(); // Cache symbol info until we get data
+    let mut symbol_info_cache: HashMap<String, SymbolInfo> = HashMap::new();
     let mut replay_set_for_symbols = HashSet::new();
     let mut completion_receiver = handlers.receiver.completion.lock().await;
     let mut data_receiver = handlers.receiver.datapoint.lock().await;
     let mut info_receiver = handlers.receiver.info.lock().await;
+    let mut replay_symbols_with_data = 0; // Track symbols that actually triggered replay
 
     loop {
         tokio::select! {
@@ -612,11 +633,19 @@ async fn collect_batch_historical_data(
                         options.replay_mode = true;
                         options.replay_from = earliest_timestamp;
                         replay_set_for_symbols.insert(symbol_key.clone());
+                        replay_symbols_with_data += 1;
+
+                        // Update the replay count to only count symbols that actually have data
+                        {
+                            let mut replay_count = handlers.symbols_replay_count.lock().await;
+                            *replay_count = replay_symbols_with_data;
+                        }
 
                         tracing::debug!(
-                            "Setting replay mode for {} with earliest timestamp: {}",
+                            "Setting replay mode for {} with earliest timestamp: {} (replay symbols with data: {})",
                             symbol_key,
-                            earliest_timestamp
+                            earliest_timestamp,
+                            replay_symbols_with_data
                         );
 
                         if let Err(e) = websocket.set_market(options).await {
@@ -634,7 +663,7 @@ async fn collect_batch_historical_data(
                 let mut matched = false;
                 for (key, historical_data) in results.iter_mut() {
                     if key.contains(&symbol_info.id) ||
-                       symbol_info.id.contains(extract_symbol_from_key(key)) {
+                       symbol_info.id.contains(&extract_symbol_from_key(key)) {
                         historical_data.symbol_info = symbol_info.clone();
                         matched = true;
                         break;
@@ -643,7 +672,6 @@ async fn collect_batch_historical_data(
 
                 // If no existing entry with data, cache the symbol info
                 if !matched {
-                    // Create a potential key format to cache against
                     let potential_key = symbol_info.id.clone();
                     symbol_info_cache.insert(potential_key, symbol_info);
                 }
@@ -673,8 +701,14 @@ async fn collect_batch_historical_data(
         }
     }
 
+    tracing::debug!(
+        "Batch processing completed. Results: {}, Replay symbols: {}",
+        results.len(),
+        replay_symbols_with_data
+    );
     results
 }
+
 /// Extract symbol name from the composite key
 fn extract_symbol_from_key(key: &str) -> &str {
     // Key format is "exchange:symbol:interval"
