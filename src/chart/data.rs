@@ -356,13 +356,13 @@ async fn collect_historical_data(
     let mut completion_rx = channels.completion_rx.lock().await;
     let mut data_rx = channels.data_rx.lock().await;
     let mut info_rx = channels.info_rx.lock().await;
-    let mut set_replay = false;
+    let mut is_replayed = false;
 
     loop {
         tokio::select! {
             Some((series_info, data_points)) = data_rx.recv() => {
                 handle_data_batch(&mut historical_data, series_info, data_points,
-                    websocket, with_replay, &mut set_replay).await?;
+                    websocket, with_replay, &mut is_replayed).await?;
             }
             Some(symbol_info) = info_rx.recv() => {
                 tracing::debug!("Processing symbol info: {:?}", symbol_info);
@@ -390,7 +390,7 @@ async fn handle_data_batch(
     data_points: Vec<DataPoint>,
     websocket: &Arc<WebSocket>,
     with_replay: bool,
-    set_replay: &mut bool,
+    is_replayed: &mut bool,
 ) -> Result<()> {
     tracing::debug!("Processing batch of {} data points", data_points.len());
 
@@ -398,9 +398,9 @@ async fn handle_data_batch(
     historical_data.data.extend(data_points);
 
     // Handle replay mode setup
-    if with_replay && !historical_data.data.is_empty() && !*set_replay {
+    if with_replay && !historical_data.data.is_empty() && !*is_replayed {
         setup_replay_mode(historical_data, websocket).await?;
-        *set_replay = true;
+        *is_replayed = true;
     }
 
     Ok(())
