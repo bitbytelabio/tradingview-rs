@@ -1,6 +1,6 @@
 use colored::*;
 use std::sync::Once;
-use tradingview::{Interval, OHLCV, chart::ChartOptions, history, socket::DataServer};
+use tradingview::{Interval, OHLCV, history, socket::DataServer};
 
 fn init() {
     static INIT: Once = Once::new();
@@ -29,23 +29,21 @@ async fn main() -> anyhow::Result<()> {
     let symbol = "VCB";
     let exchange = "HOSE";
     let interval = Interval::OneHour;
-    let bars = 500_000;
 
     println!(
-        "{} Fetching data for {} {} ({}), {} bars",
+        "{} Fetching data for {} {} ({})",
         "→".bright_blue().bold(),
         symbol.yellow().bold(),
         exchange.cyan(),
         format!("{:?}", interval).magenta(),
-        bars.to_string().bright_blue()
     );
-
-    let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(bars);
 
     let mut data = history::single::retrieve()
         .auth_token(&auth_token)
-        .options(option)
-        .with_replay(true)
+        .symbol(symbol)
+        .exchange(exchange)
+        .interval(interval)
+        .with_replay(false)
         .server(DataServer::ProData)
         .call()
         .await?

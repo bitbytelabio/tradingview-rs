@@ -11,6 +11,7 @@ pub mod news;
 pub mod pine_indicator;
 
 pub trait MarketSymbol {
+    fn new<S: Into<String>>(symbol: S, exchange: S) -> Self;
     fn symbol(&self) -> &str;
     fn exchange(&self) -> &str;
     fn currency(&self) -> &str;
@@ -35,6 +36,14 @@ impl MarketSymbol for Symbol {
 
     fn market_type(&self) -> MarketType {
         MarketType::from(self.market_type.as_str())
+    }
+
+    fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {
+        Self {
+            symbol: symbol.into(),
+            exchange: exchange.into(),
+            ..Default::default()
+        }
     }
 }
 
@@ -132,9 +141,7 @@ impl Symbol {
         Self {
             symbol: symbol.into(),
             exchange: exchange.into(),
-            currency_code: currency
-                .map(|c| c.to_string())
-                .unwrap_or_default(),
+            currency_code: currency.map(|c| c.to_string()).unwrap_or_default(),
             ..Default::default()
         }
     }
