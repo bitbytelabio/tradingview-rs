@@ -14,13 +14,15 @@ async fn main() -> anyhow::Result<()> {
     let mut data = history::single::retrieve()
         .auth_token(&auth_token)
         .symbol("BTCUSDT")
-        .exchange("BINANCE")
+        .exchange("OKX")
         .interval(Interval::OneHour)
         .server(DataServer::ProData)
         .with_replay(true)
         .call()
         .await?
         .data;
+
+    println!("Data length before deduplication: {}", data.len());
 
     data.dedup_by_key(|point| point.timestamp());
     data.sort_by_key(|a| a.timestamp());

@@ -77,7 +77,6 @@ pub enum TradingViewError {
 
     #[error("Configuration error, missing exchange")]
     MissingExchange,
-
     #[error("Configuration error, missing symbol")]
     MissingSymbol,
 }
