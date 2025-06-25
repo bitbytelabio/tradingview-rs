@@ -78,23 +78,12 @@ impl Channels {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct ReplayState {
     pub enabled: bool,
     pub configured: bool,
     pub earliest_ts: Option<i64>,
     pub data_received: bool,
-}
-
-impl Default for ReplayState {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            configured: false,
-            earliest_ts: None,
-            data_received: false,
-        }
-    }
 }
 
 /// Fetch historical chart data from TradingView
@@ -302,10 +291,10 @@ fn is_critical_error(error: &Error) -> bool {
         Error::LoginError(_) => true,
         Error::NoChartTokenFound => true,
         Error::WebSocketError(_) => true,
-        Error::TradingViewError(e) => match e {
-            TradingViewError::CriticalError | TradingViewError::ProtocolError => true,
-            _ => false,
-        },
+        Error::TradingViewError(e) => matches!(
+            e,
+            TradingViewError::CriticalError | TradingViewError::ProtocolError
+        ),
         _ => false,
     }
 }
