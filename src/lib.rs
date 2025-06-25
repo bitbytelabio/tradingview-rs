@@ -19,6 +19,8 @@ pub use crate::client::misc::{
     search_indicator, search_symbols,
 };
 
+pub use chart::history;
+
 pub mod websocket {
     pub use crate::client::websocket::*;
 }

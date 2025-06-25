@@ -8,7 +8,7 @@ use tradingview::{
     Interval, OHLCV,
     callback::EventCallback,
     chart::ChartOptions,
-    fetch_chart_data,
+    history,
     socket::DataServer,
     websocket::{WebSocket, WebSocketClient},
 };
@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
 
     let option = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneHour);
 
-    let mut data = fetch_chart_data()
+    let mut data = history::single::retrieve()
         .auth_token(&auth_token)
         .options(option)
         .server(DataServer::ProData)

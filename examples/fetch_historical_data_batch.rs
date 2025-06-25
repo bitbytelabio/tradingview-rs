@@ -3,7 +3,7 @@
 use colored::*;
 use std::sync::Once;
 use tradingview::{
-    Country, Interval, MarketType, OHLCV, StocksType, Symbol, fetch_chart_data_batch, list_symbols,
+    Country, Interval, MarketType, OHLCV, StocksType, Symbol, history, list_symbols,
 };
 
 fn init() {
@@ -54,10 +54,10 @@ async fn main() -> anyhow::Result<()> {
 
     assert!(!symbols.is_empty(), "No symbols found");
 
-    let datamap = fetch_chart_data_batch()
+    let datamap = history::batch::retrieve()
         .auth_token(&auth_token)
         .symbols(&symbols)
-        .interval(&[Interval::OneDay, Interval::OneHour, Interval::OneWeek])
+        .interval(Interval::OneHour)
         .call()
         .await?;
 
