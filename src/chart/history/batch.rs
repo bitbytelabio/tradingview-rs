@@ -205,7 +205,7 @@ fn create_callbacks(
                         }
                         
                         if let Some(tx) = done_tx.lock().await.take() {
-                            if let Err(_) = tx.send(()) {
+                            if tx.send(()).is_err() {
                                 tracing::error!("Failed to send completion signal");
                             }
                         }
@@ -292,7 +292,7 @@ async fn setup_websocket(
             }
 
             // Wait between batches (except last)
-            if idx < (opts.len() + batch_size - 1) / batch_size - 1 {
+            if idx < opts.len().div_ceil(batch_size) - 1 {
                 sleep(Duration::from_secs(5)).await;
                 tracing::debug!("Batch {} done, waiting", idx + 1);
             }
