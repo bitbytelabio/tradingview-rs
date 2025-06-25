@@ -18,10 +18,10 @@ use tokio::{
     time::{sleep, timeout},
 };
 
-pub type DataPointSender = Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>;
-pub type DataPointReceiver = Arc<Mutex<mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>>>;
-pub type SymbolInfoSender = Arc<Mutex<mpsc::Sender<SymbolInfo>>>;
-pub type SymbolInfoReceiver = Arc<Mutex<mpsc::Receiver<SymbolInfo>>>;
+pub type DataSender = Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>;
+pub type DataReceiver = Arc<Mutex<mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>>>;
+pub type InfoSender = Arc<Mutex<mpsc::Sender<SymbolInfo>>>;
+pub type InfoReceiver = Arc<Mutex<mpsc::Receiver<SymbolInfo>>>;
 pub type ErrorSender = Arc<Mutex<mpsc::Sender<(Error, Vec<Value>)>>>;
 pub type ErrorReceiver = Arc<Mutex<mpsc::Receiver<(Error, Vec<Value>)>>>;
 
@@ -33,46 +33,46 @@ pub enum CompletionSignal {
 }
 
 #[derive(Debug, Clone)]
-struct CallbackSender {
-    pub datapoint: DataPointSender,
-    pub info: SymbolInfoSender,
+struct Senders {
+    pub data: DataSender,
+    pub info: InfoSender,
     pub error: ErrorSender,
     pub completion: Arc<Mutex<Option<oneshot::Sender<CompletionSignal>>>>,
 }
 
 #[derive(Debug, Clone)]
-struct CallbackReceiver {
-    pub datapoint: DataPointReceiver,
-    pub info: SymbolInfoReceiver,
+struct Receivers {
+    pub data: DataReceiver,
+    pub info: InfoReceiver,
     pub error: ErrorReceiver,
     pub completion: Arc<Mutex<oneshot::Receiver<CompletionSignal>>>,
 }
 
 #[derive(Debug, Clone)]
-struct DataHandlers {
-    pub sender: CallbackSender,
-    pub receiver: CallbackReceiver,
+struct Channels {
+    pub senders: Senders,
+    pub receivers: Receivers,
 }
 
-impl DataHandlers {
+impl Channels {
     pub fn new() -> Self {
-        let (data_sender, data_receiver) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(2000);
-        let (info_sender, info_receiver) = mpsc::channel::<SymbolInfo>(2000);
-        let (error_sender, error_receiver) = mpsc::channel::<(Error, Vec<Value>)>(2000);
-        let (completion_sender, completion_receiver) = oneshot::channel::<CompletionSignal>();
+        let (data_tx, data_rx) = mpsc::channel::<(SeriesInfo, Vec<DataPoint>)>(2000);
+        let (info_tx, info_rx) = mpsc::channel::<SymbolInfo>(2000);
+        let (error_tx, error_rx) = mpsc::channel::<(Error, Vec<Value>)>(2000);
+        let (completion_tx, completion_rx) = oneshot::channel::<CompletionSignal>();
 
         Self {
-            sender: CallbackSender {
-                datapoint: Arc::new(Mutex::new(data_sender)),
-                info: Arc::new(Mutex::new(info_sender)),
-                error: Arc::new(Mutex::new(error_sender)),
-                completion: Arc::new(Mutex::new(Some(completion_sender))),
+            senders: Senders {
+                data: Arc::new(Mutex::new(data_tx)),
+                info: Arc::new(Mutex::new(info_tx)),
+                error: Arc::new(Mutex::new(error_tx)),
+                completion: Arc::new(Mutex::new(Some(completion_tx))),
             },
-            receiver: CallbackReceiver {
-                datapoint: Arc::new(Mutex::new(data_receiver)),
-                info: Arc::new(Mutex::new(info_receiver)),
-                error: Arc::new(Mutex::new(error_receiver)),
-                completion: Arc::new(Mutex::new(completion_receiver)),
+            receivers: Receivers {
+                data: Arc::new(Mutex::new(data_rx)),
+                info: Arc::new(Mutex::new(info_rx)),
+                error: Arc::new(Mutex::new(error_rx)),
+                completion: Arc::new(Mutex::new(completion_rx)),
             },
         }
     }
@@ -82,7 +82,7 @@ impl DataHandlers {
 struct ReplayState {
     pub enabled: bool,
     pub configured: bool,
-    pub earliest_timestamp: Option<i64>,
+    pub earliest_ts: Option<i64>,
     pub data_received: bool,
 }
 
@@ -91,7 +91,7 @@ impl Default for ReplayState {
         Self {
             enabled: false,
             configured: false,
-            earliest_timestamp: None,
+            earliest_ts: None,
             data_received: false,
         }
     }
@@ -114,7 +114,7 @@ pub async fn retrieve(
     let auth_token = resolve_auth_token(auth_token)?;
     let range = range.map(String::from);
 
-    let (symbol, exchange) = validate_and_extract_symbol_exchange(ticker, symbol, exchange)?;
+    let (symbol, exchange) = extract_symbol_exchange(ticker, symbol, exchange)?;
 
     let options = ChartOptions::builder()
         .symbol(symbol)
@@ -125,34 +125,34 @@ pub async fn retrieve(
         .replay_mode(false) // Start without replay mode
         .build();
 
-    let data_handlers = DataHandlers::new();
+    let channels = Channels::new();
     let replay_state = Arc::new(Mutex::new(ReplayState {
         enabled: with_replay,
         ..Default::default()
     }));
 
     // Create callback handlers
-    let callbacks = create_data_callbacks(data_handlers.sender.clone(), Arc::clone(&replay_state));
+    let callbacks = create_callbacks(channels.senders.clone(), Arc::clone(&replay_state));
 
     // Initialize and configure WebSocket connection
-    let websocket = setup_websocket_connection(&auth_token, server, callbacks, options).await?;
+    let websocket = setup_websocket(&auth_token, server, callbacks, options).await?;
     let websocket_shared = Arc::new(websocket);
 
     // Start the subscription process in a background task
-    let websocket_for_subscription = Arc::clone(&websocket_shared);
-    let subscription_task = spawn(async move { websocket_for_subscription.subscribe().await });
+    let ws_for_sub = Arc::clone(&websocket_shared);
+    let sub_task = spawn(async move { ws_for_sub.subscribe().await });
 
     // Collect and process incoming data with timeout
-    let collection_result = timeout(
+    let result = timeout(
         timeout_duration,
-        collect_historical_data(data_handlers.receiver, &websocket_shared, replay_state),
+        collect_data(channels.receivers, &websocket_shared, replay_state),
     )
     .await;
 
     // Cleanup resources
-    cleanup_resources(websocket_shared, subscription_task).await;
+    cleanup(websocket_shared, sub_task).await;
 
-    match collection_result {
+    match result {
         Ok(Ok(result)) => {
             tracing::debug!(
                 "Data collection completed with {} points",
@@ -165,7 +165,7 @@ pub async fn retrieve(
     }
 }
 
-fn validate_and_extract_symbol_exchange(
+fn extract_symbol_exchange(
     ticker: Option<&MarketTicker>,
     symbol: Option<&str>,
     exchange: Option<&str>,
@@ -184,22 +184,19 @@ fn validate_and_extract_symbol_exchange(
 }
 
 /// Create callback handlers for processing incoming WebSocket data
-fn create_data_callbacks(
-    sender: CallbackSender,
-    replay_state: Arc<Mutex<ReplayState>>,
-) -> EventCallback {
-    let datapoint_sender = Arc::clone(&sender.datapoint);
-    let info_sender = Arc::clone(&sender.info);
-    let error_sender = Arc::clone(&sender.error);
-    let completion_sender = Arc::clone(&sender.completion);
+fn create_callbacks(senders: Senders, replay_state: Arc<Mutex<ReplayState>>) -> EventCallback {
+    let data_tx = Arc::clone(&senders.data);
+    let info_tx = Arc::clone(&senders.info);
+    let error_tx = Arc::clone(&senders.error);
+    let completion_tx = Arc::clone(&senders.completion);
 
     EventCallback::default()
         .on_chart_data({
-            let datapoint_sender = Arc::clone(&datapoint_sender);
+            let data_tx = Arc::clone(&data_tx);
             let replay_state = Arc::clone(&replay_state);
             move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
                 tracing::debug!("Received data batch with {} points", data_points.len());
-                let sender = Arc::clone(&datapoint_sender);
+                let tx = Arc::clone(&data_tx);
                 let replay_state = Arc::clone(&replay_state);
                 spawn(async move {
                     // Update replay state
@@ -209,56 +206,55 @@ fn create_data_callbacks(
                         if state.enabled && !data_points.is_empty() {
                             let earliest =
                                 data_points.iter().map(|p| p.timestamp()).min().unwrap_or(0);
-
-                            state.earliest_timestamp = Some(
+                            state.earliest_ts = Some(
                                 state
-                                    .earliest_timestamp
+                                    .earliest_ts
                                     .map(|existing| existing.min(earliest))
                                     .unwrap_or(earliest),
                             );
                         }
                     }
 
-                    let tx = sender.lock().await;
-                    if let Err(e) = tx.send((series_info, data_points)).await {
-                        tracing::error!("Failed to send data points to processing channel: {}", e);
+                    let sender = tx.lock().await;
+                    if let Err(e) = sender.send((series_info, data_points)).await {
+                        tracing::error!("Failed to send data points: {}", e);
                     }
                 });
             }
         })
         .on_symbol_info({
-            let info_sender = Arc::clone(&info_sender);
+            let info_tx = Arc::clone(&info_tx);
             move |symbol_info| {
                 tracing::debug!("Received symbol info: {:?}", symbol_info);
-                let sender = Arc::clone(&info_sender);
+                let tx = Arc::clone(&info_tx);
                 spawn(async move {
-                    let tx = sender.lock().await;
-                    if let Err(e) = tx.send(symbol_info).await {
-                        tracing::error!("Failed to send symbol info to processing channel: {}", e);
+                    let sender = tx.lock().await;
+                    if let Err(e) = sender.send(symbol_info).await {
+                        tracing::error!("Failed to send symbol info: {}", e);
                     }
                 });
             }
         })
         .on_series_completed({
-            let completion_sender = Arc::clone(&completion_sender);
+            let completion_tx = Arc::clone(&completion_tx);
             let replay_state = Arc::clone(&replay_state);
             move |message: Vec<Value>| {
-                let message_json = serde_json::to_string(&message)
+                let msg_json = serde_json::to_string(&message)
                     .unwrap_or_else(|_| "Failed to serialize message".to_string());
-                let completion_sender = Arc::clone(&completion_sender);
+                let completion_tx = Arc::clone(&completion_tx);
                 let replay_state = Arc::clone(&replay_state);
 
                 tracing::debug!("Series completed with message: {:?}", message);
                 spawn(async move {
                     let state = replay_state.lock().await;
                     let should_complete = if state.enabled {
-                        message_json.contains("replay") && message_json.contains("data_completed")
+                        msg_json.contains("replay") && msg_json.contains("data_completed")
                     } else {
                         true
                     };
 
                     if should_complete {
-                        if let Some(sender) = completion_sender.lock().await.take() {
+                        if let Some(sender) = completion_tx.lock().await.take() {
                             if let Err(e) = sender.send(CompletionSignal::Success) {
                                 tracing::error!("Failed to send completion signal: {:?}", e);
                             }
@@ -268,30 +264,30 @@ fn create_data_callbacks(
             }
         })
         .on_error({
-            let completion_sender = Arc::clone(&completion_sender);
-            let error_sender = Arc::clone(&error_sender);
+            let completion_tx = Arc::clone(&completion_tx);
+            let error_tx = Arc::clone(&error_tx);
             move |(error, message)| {
                 tracing::error!("WebSocket error: {:?} - {:?}", error, message);
 
-                let completion_sender = Arc::clone(&completion_sender);
-                let error_sender = Arc::clone(&error_sender);
+                let completion_tx = Arc::clone(&completion_tx);
+                let error_tx = Arc::clone(&error_tx);
 
                 spawn(async move {
                     let is_critical = is_critical_error(&error);
-                    let err_message = serde_json::to_string(&message)
+                    let err_msg = serde_json::to_string(&message)
                         .unwrap_or_else(|_| "Failed to serialize error message".to_string());
 
                     {
-                        let tx = error_sender.lock().await;
-                        if let Err(e) = tx.send((error, message)).await {
-                            tracing::error!("Failed to send error to processing channel: {}", e);
+                        let sender = error_tx.lock().await;
+                        if let Err(e) = sender.send((error, message)).await {
+                            tracing::error!("Failed to send error: {}", e);
                         }
                     }
 
                     if is_critical {
                         tracing::error!("Critical error occurred, aborting all operations");
-                        if let Some(sender) = completion_sender.lock().await.take() {
-                            if let Err(e) = sender.send(CompletionSignal::Error(err_message)) {
+                        if let Some(sender) = completion_tx.lock().await.take() {
+                            if let Err(e) = sender.send(CompletionSignal::Error(err_msg)) {
                                 tracing::error!("Failed to send error completion signal: {:?}", e);
                             }
                         }
@@ -306,13 +302,16 @@ fn is_critical_error(error: &Error) -> bool {
         Error::LoginError(_) => true,
         Error::NoChartTokenFound => true,
         Error::WebSocketError(_) => true,
-        Error::TradingViewError(e) => matches!(e, TradingViewError::CriticalError),
+        Error::TradingViewError(e) => match e {
+            TradingViewError::CriticalError | TradingViewError::ProtocolError => true,
+            _ => false,
+        },
         _ => false,
     }
 }
 
 /// Set up and initialize WebSocket connection with appropriate configuration
-async fn setup_websocket_connection(
+async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
     callbacks: EventCallback,
@@ -334,32 +333,32 @@ async fn setup_websocket_connection(
 }
 
 /// Collect and accumulate incoming historical data from channels
-async fn collect_historical_data(
-    receiver: CallbackReceiver,
+async fn collect_data(
+    receivers: Receivers,
     websocket: &WebSocket,
     replay_state: Arc<Mutex<ReplayState>>,
 ) -> Result<ChartHistoricalData> {
-    let mut historical_data = ChartHistoricalData::new();
-    let mut completion_receiver = receiver.completion.lock().await;
-    let mut data_receiver = receiver.datapoint.lock().await;
-    let mut info_receiver = receiver.info.lock().await;
-    let mut error_receiver = receiver.error.lock().await;
+    let mut data = ChartHistoricalData::new();
+    let mut completion_rx = receivers.completion.lock().await;
+    let mut data_rx = receivers.data.lock().await;
+    let mut info_rx = receivers.info.lock().await;
+    let mut error_rx = receivers.error.lock().await;
 
-    let mut replay_setup_attempted = false;
+    let mut replay_attempted = false;
     let mut last_error: Option<Error> = None;
 
     loop {
         tokio::select! {
-            Some((series_info, data_points)) = data_receiver.recv() => {
+            Some((series_info, data_points)) = data_rx.recv() => {
                 tracing::debug!("Processing batch of {} data points", data_points.len());
-                historical_data.series_info = series_info;
-                historical_data.data.extend(data_points);
+                data.series_info = series_info;
+                data.data.extend(data_points);
 
                 // Handle replay mode setup
-                if let Err(e) = handle_replay_setup(
+                if let Err(e) = handle_replay(
                     &replay_state,
-                    &mut replay_setup_attempted,
-                    &historical_data,
+                    &mut replay_attempted,
+                    &data,
                     websocket
                 ).await {
                     tracing::error!("Failed to setup replay mode: {}", e);
@@ -367,7 +366,7 @@ async fn collect_historical_data(
                 }
             }
 
-            completion_signal = &mut *completion_receiver => {
+            completion_signal = &mut *completion_rx => {
                 match completion_signal {
                     Ok(CompletionSignal::Success) => {
                         tracing::debug!("Completion signal received successfully");
@@ -388,12 +387,12 @@ async fn collect_historical_data(
                 }
             }
 
-            Some(symbol_info) = info_receiver.recv() => {
+            Some(symbol_info) = info_rx.recv() => {
                 tracing::debug!("Processing symbol info: {:?}", symbol_info);
-                historical_data.symbol_info = symbol_info;
+                data.symbol_info = symbol_info;
             }
 
-            Some((error, message)) = error_receiver.recv() => {
+            Some((error, message)) = error_rx.recv() => {
                 tracing::warn!("Non-critical error received: {:?} - {:?}", error, message);
                 last_error = Some(error);
             }
@@ -406,51 +405,50 @@ async fn collect_historical_data(
     }
 
     // Process any remaining data points with timeout
-    process_remaining_data(&mut data_receiver, &mut info_receiver, &mut historical_data).await;
+    process_remaining(&mut data_rx, &mut info_rx, &mut data).await;
 
     // Return error if we had a critical issue and no data
-    if historical_data.data.is_empty() {
+    if data.data.is_empty() {
         if let Some(error) = last_error {
             return Err(error);
         }
     }
 
-    Ok(historical_data)
+    Ok(data)
 }
 
-async fn handle_replay_setup(
+async fn handle_replay(
     replay_state: &Arc<Mutex<ReplayState>>,
-    replay_setup_attempted: &mut bool,
-    historical_data: &ChartHistoricalData,
+    replay_attempted: &mut bool,
+    data: &ChartHistoricalData,
     websocket: &WebSocket,
 ) -> Result<()> {
     let mut state = replay_state.lock().await;
 
     if state.enabled
         && !state.configured
-        && !*replay_setup_attempted
+        && !*replay_attempted
         && state.data_received
-        && !historical_data.data.is_empty()
+        && !data.data.is_empty()
     {
         tracing::debug!("Setting up replay mode");
-        *replay_setup_attempted = true;
+        *replay_attempted = true;
 
-        let earliest_timestamp: i64 = state.earliest_timestamp.unwrap_or_else(|| {
-            historical_data
-                .data
+        let earliest_ts: i64 = state.earliest_ts.unwrap_or_else(|| {
+            data.data
                 .iter()
                 .map(|point| point.timestamp())
                 .min()
                 .unwrap_or(0)
         });
 
-        let mut options = historical_data.series_info.options.clone();
+        let mut options = data.series_info.options.clone();
         options.replay_mode = true;
-        options.replay_from = earliest_timestamp;
+        options.replay_from = earliest_ts;
 
         tracing::debug!(
             "Setting replay mode with earliest timestamp: {}",
-            earliest_timestamp
+            earliest_ts
         );
 
         // Small delay to ensure data processing is complete
@@ -468,41 +466,36 @@ async fn handle_replay_setup(
     Ok(())
 }
 
-async fn process_remaining_data(
-    data_receiver: &mut mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
-    info_receiver: &mut mpsc::Receiver<SymbolInfo>,
-    historical_data: &mut ChartHistoricalData,
+async fn process_remaining(
+    data_rx: &mut mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
+    info_rx: &mut mpsc::Receiver<SymbolInfo>,
+    data: &mut ChartHistoricalData,
 ) {
-    let processing_timeout = Duration::from_millis(200);
+    let timeout_dur = Duration::from_millis(200);
 
     // Process remaining data points
-    while let Ok(Some((series_info, data_points))) =
-        timeout(processing_timeout, data_receiver.recv()).await
-    {
+    while let Ok(Some((series_info, data_points))) = timeout(timeout_dur, data_rx.recv()).await {
         tracing::debug!(
             "Processing final batch of {} data points",
             data_points.len()
         );
-        historical_data.series_info = series_info;
-        historical_data.data.extend(data_points);
+        data.series_info = series_info;
+        data.data.extend(data_points);
     }
 
     // Process remaining symbol info
-    while let Ok(Some(symbol_info)) = timeout(processing_timeout, info_receiver.recv()).await {
+    while let Ok(Some(symbol_info)) = timeout(timeout_dur, info_rx.recv()).await {
         tracing::debug!("Processing final symbol info: {:?}", symbol_info);
-        historical_data.symbol_info = symbol_info;
+        data.symbol_info = symbol_info;
     }
 }
 
-async fn cleanup_resources(
-    websocket: Arc<WebSocket>,
-    subscription_task: tokio::task::JoinHandle<()>,
-) {
+async fn cleanup(websocket: Arc<WebSocket>, sub_task: tokio::task::JoinHandle<()>) {
     // Cancel subscription task
-    subscription_task.abort();
+    sub_task.abort();
 
     // Give a moment for graceful shutdown
-    if let Err(e) = timeout(Duration::from_millis(500), subscription_task).await {
+    if let Err(e) = timeout(Duration::from_millis(500), sub_task).await {
         tracing::debug!("Subscription task cleanup timeout: {:?}", e);
     }
 
