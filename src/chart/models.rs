@@ -1,6 +1,7 @@
 use crate::{MarketSymbol, MarketType, websocket::SeriesInfo};
 use bon::Builder;
 use chrono::{DateTime, Utc};
+use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -273,6 +274,77 @@ pub struct SeriesCompletedMessage {
     pub update_mode: String,
 }
 
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default, Builder)]
+pub struct MarketTicker {
+    pub symbol: String,
+    pub exchange: String,
+    pub currency: Option<Currency>,
+    pub country: Option<Currency>,
+    pub market_type: Option<MarketType>,
+}
+
+impl MarketTicker {
+    pub fn new(symbol: &str, exchange: &str) -> Self {
+        Self {
+            symbol: symbol.to_string(),
+            exchange: exchange.to_string(),
+            currency: None,
+            country: None,
+            market_type: None,
+        }
+    }
+}
+
+impl MarketSymbol for MarketTicker {
+    fn symbol(&self) -> &str {
+        &self.symbol
+    }
+
+    fn exchange(&self) -> &str {
+        &self.exchange
+    }
+
+    fn currency(&self) -> &str {
+        self.currency.as_ref().map_or("USD", |c| c.code())
+    }
+
+    fn id(&self) -> String {
+        format!("{}:{}", self.exchange, self.symbol)
+    }
+
+    fn market_type(&self) -> MarketType {
+        self.market_type.unwrap_or(MarketType::All)
+    }
+
+    fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {
+        Self {
+            symbol: symbol.into(),
+            exchange: exchange.into(),
+            currency: None,
+            country: None,
+            market_type: None,
+        }
+    }
+}
+
+impl From<&SymbolInfo> for MarketTicker {
+    fn from(symbol_info: &SymbolInfo) -> Self {
+        Self {
+            symbol: symbol_info.name.clone(),
+            exchange: symbol_info.exchange.clone(),
+            currency: Currency::from_code(symbol_info.currency_id.as_str()),
+            country: None,
+            market_type: Some(MarketType::from(symbol_info.market_type.as_str())),
+        }
+    }
+}
+
+impl Into<MarketTicker> for SymbolInfo {
+    fn into(self) -> MarketTicker {
+        MarketTicker::from(&self)
+    }
+}
+
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
 #[serde(default)]
 pub struct SymbolInfo {
@@ -366,6 +438,14 @@ impl MarketSymbol for SymbolInfo {
 
     fn market_type(&self) -> MarketType {
         MarketType::from(self.market_type.as_str())
+    }
+
+    fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {
+        Self {
+            name: symbol.into(),
+            exchange: exchange.into(),
+            ..Default::default()
+        }
     }
 }
 

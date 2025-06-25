@@ -27,6 +27,37 @@ pub struct ChartOptions {
     pub study_config: Option<StudyOptions>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum Range {
+    FromTo(u64, u64),
+    OneDay,
+    FiveDays,
+    OneMonth,
+    ThreeMonths,
+    SixMonths,
+    YearToDate,
+    OneYear,
+    FiveYears,
+    All,
+}
+
+impl From<Range> for String {
+    fn from(range: Range) -> Self {
+        match range {
+            Range::FromTo(from, to) => format!("r,{from}:{to}"),
+            Range::OneDay => "1D".to_string(),
+            Range::FiveDays => "5d".to_string(),
+            Range::OneMonth => "1M".to_string(),
+            Range::ThreeMonths => "3M".to_string(),
+            Range::SixMonths => "6M".to_string(),
+            Range::YearToDate => "YTD".to_string(),
+            Range::OneYear => "12M".to_string(),
+            Range::FiveYears => "60M".to_string(),
+            Range::All => "ALL".to_string(),
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, Deserialize, Serialize, Builder)]
 pub struct StudyOptions {
     pub script_id: String,

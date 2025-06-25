@@ -1,5 +1,6 @@
 use crate::{
-    ChartHistoricalData, DataPoint, Error, OHLCV as _, Result, SymbolInfo,
+    ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, MarketTicker, OHLCV as _,
+    Result, SymbolInfo,
     callback::EventCallback,
     chart::ChartOptions,
     error::TradingViewError,
@@ -7,6 +8,7 @@ use crate::{
         CompletionChannel, DataChannel, DataChannels, InfoChannel, REMAINING_DATA_TIMEOUT,
         resolve_auth_token,
     },
+    options::Range,
     socket::DataServer,
     websocket::{SeriesInfo, WebSocket, WebSocketClient},
 };
@@ -23,12 +25,44 @@ use tokio::{
 #[builder]
 pub async fn retrieve(
     auth_token: Option<&str>,
-    options: ChartOptions,
+    ticker: Option<&MarketTicker>,
+    symbol: Option<&str>,
+    exchange: Option<&str>,
+    interval: Interval,
+    range: Option<Range>,
     server: Option<DataServer>,
+    num_bars: Option<u64>,
     #[builder(default = false)] with_replay: bool,
 ) -> Result<ChartHistoricalData> {
     let auth_token = resolve_auth_token(auth_token)?;
     let channels = DataChannels::new();
+
+    let range = if let Some(range) = range {
+        Some(String::from(range))
+    } else {
+        None
+    };
+
+    let (symbol, exchange) = if let Some(ticker) = ticker {
+        (ticker.symbol().to_string(), ticker.exchange().to_string())
+    } else if let Some(symbol) = symbol {
+        if let Some(exchange) = exchange {
+            (symbol.to_string(), exchange.to_string())
+        } else {
+            return Err(Error::TradingViewError(TradingViewError::MissingExchange));
+        }
+    } else {
+        return Err(Error::TradingViewError(TradingViewError::MissingSymbol));
+    };
+
+    let options = ChartOptions::builder()
+        .symbol(symbol)
+        .exchange(exchange)
+        .interval(interval)
+        .maybe_range(range)
+        .maybe_bar_count(num_bars)
+        .replay_mode(with_replay)
+        .build();
 
     // Create and configure WebSocket connection
     let callbacks = create_callbacks(&channels, with_replay);
@@ -319,7 +353,7 @@ async fn cleanup_resources(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Interval;
+    use crate::{Interval, MarketTicker};
     use std::sync::Once;
 
     fn init() {
@@ -338,12 +372,13 @@ mod tests {
 
         let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-        let options = ChartOptions::new_with("VCB", "HOSE", Interval::OneDay).bar_count(10);
-
+        let ticker = MarketTicker::new("VCB", "HOSE");
         let data = retrieve()
             .auth_token(&auth_token)
-            .options(options)
+            .ticker(&ticker)
+            .interval(Interval::OneDay)
             .server(DataServer::ProData)
+            .num_bars(10)
             .call()
             .await?;
 

@@ -74,6 +74,12 @@ pub enum TradingViewError {
     QuoteDataStatusError,
     #[error("replay_error")]
     ReplayError,
+
+    #[error("Configuration error, missing exchange")]
+    MissingExchange,
+
+    #[error("Configuration error, missing symbol")]
+    MissingSymbol,
 }
 
 #[derive(Debug, Clone, Error)]
