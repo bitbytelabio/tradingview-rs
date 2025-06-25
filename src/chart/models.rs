@@ -273,51 +273,78 @@ pub struct SeriesCompletedMessage {
     pub update_mode: String,
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
-#[serde(rename_all = "camelCase", default)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default)]
+#[serde(default)]
 pub struct SymbolInfo {
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     #[serde(rename(deserialize = "pro_name"))]
     pub id: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
+
+    #[serde(rename(deserialize = "original_name"))]
+    pub original_name: String,
+
     pub name: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
-    pub description: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub exchange: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
+    pub description: String,
+
+    #[serde(rename = "business_description")]
+    pub business_description: String,
+
     #[serde(rename = "listed_exchange")]
     pub listed_exchange: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
+
     #[serde(rename = "provider_id")]
     pub provider_id: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
+
     #[serde(rename = "base_currency")]
     pub base_currency: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "8"))]
+
     #[serde(rename = "base_currency_id")]
     pub base_currency_id: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "9"))]
+
+    #[serde(rename = "total_revenue")]
+    pub total_revenue: f64,
+
+    #[serde(rename = "price_earnings_ttm")]
+    pub price_earnings_ttm: f64,
+
     #[serde(rename = "currency_id")]
     pub currency_id: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "10"))]
+
     #[serde(rename = "currency_code")]
     pub currency_code: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "11"))]
+
     pub session_holidays: String,
-    #[cfg_attr(feature = "protobuf", prost(message, repeated, tag = "12"))]
+
     pub subsessions: Vec<Subsession>,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "13"))]
+
     pub timezone: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "14"))]
+
     #[serde(rename(deserialize = "type"))]
     pub market_type: String,
-    #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "15"))]
+
     pub typespecs: Vec<String>,
-    #[cfg_attr(feature = "protobuf", prost(string, repeated, tag = "16"))]
+
     pub aliases: Vec<String>,
+
+    pub total_shares_outstanding_calculated: f64,
+
+    pub market_cap_basic: f64,
+
+    pub earnings_release_date: i64,
+
+    pub base_name: Vec<String>,
+
+    pub sector: String,
+
+    pub current_session: String,
+
+    pub founded: u16,
+
+    pub last_annual_eps: f64,
+
+    pub fractional: bool,
+
+    pub industry: String,
 }
 
 impl MarketSymbol for SymbolInfo {

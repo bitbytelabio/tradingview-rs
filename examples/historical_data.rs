@@ -26,8 +26,8 @@ async fn main() -> anyhow::Result<()> {
 
     let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    let symbol = "AAPL";
-    let exchange = "NASDAQ";
+    let symbol = "VCB";
+    let exchange = "HOSE";
     let interval = Interval::OneHour;
     let bars = 500_000;
 
