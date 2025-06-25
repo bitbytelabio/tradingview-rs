@@ -25,7 +25,7 @@ type InfoChannel = mpsc::Sender<SymbolInfo>;
 type CompletionChannel = oneshot::Sender<()>;
 
 // Configuration constants
-const DATA_CHANNEL_BUFFER: usize = 1000;
+const DATA_CHANNEL_BUFFER: usize = 2000;
 const INFO_CHANNEL_BUFFER: usize = 100;
 const REMAINING_DATA_TIMEOUT: Duration = Duration::from_millis(100);
 const BATCH_PROCESSING_DELAY: Duration = Duration::from_secs(5);
@@ -137,9 +137,7 @@ pub async fn fetch_chart_data_batch(
         tracing::debug!("Processing batch of {} symbols", symbol_chunk.len());
 
         for &interval_val in interval {
-            match process_batch_interval(&auth_token, symbol_chunk, interval_val, server, &config)
-                .await
-            {
+            match process_batch_interval(&auth_token, symbol_chunk, interval_val, server).await {
                 Ok(batch_data) => {
                     tracing::debug!(
                         "Successfully processed {} symbols for interval {:?}",
@@ -197,7 +195,6 @@ async fn process_batch_interval(
     symbols: &[impl MarketSymbol],
     interval: Interval,
     server: Option<DataServer>,
-    config: &BatchConfig,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
     let options = ChartOptions::builder().interval(interval).build();
 
@@ -207,7 +204,7 @@ async fn process_batch_interval(
         interval
     );
 
-    fetch_chart_data_batch_inner(auth_token, symbols, options, server, config.batch_size).await
+    fetch_chart_data_batch_inner(auth_token, symbols, options, server).await
 }
 
 /// Create callbacks for single symbol data fetching
@@ -534,7 +531,7 @@ fn create_batch_data_handler(
     }
 }
 
-/// Create batch completion handler with symbol tracking
+/// Create batch completion handler with better tracking
 fn create_batch_completion_handler(
     completion_tx: Arc<Mutex<Option<CompletionChannel>>>,
     expected_symbols: Arc<Mutex<HashSet<String>>>,
@@ -549,33 +546,22 @@ fn create_batch_completion_handler(
         tracing::debug!("Series completion message: {}", message_json);
 
         spawn(async move {
-            // Check if we have received data for all expected symbols
-            if let (Ok(completed), Ok(expected)) =
-                (completed_symbols.try_lock(), expected_symbols.try_lock())
-            {
-                let completion_ratio = completed.len() as f64 / expected.len() as f64;
-                tracing::debug!(
-                    "Completion status: {}/{} symbols ({}%)",
-                    completed.len(),
-                    expected.len(),
-                    (completion_ratio * 100.0) as u32
-                );
+            // Only trigger completion on explicit completion signals, not ratio-based
+            let should_complete = message_json.contains("series_completed")
+                || message_json.contains("data_completed")
+                || message_json.contains("series_loading_finished");
 
-                // Complete when we have data for most symbols (allowing for some symbols to have no data)
-                // or when we receive a specific completion signal
-                let should_complete = completion_ratio >= 0.8 // 80% of symbols have data
-                    || message_json.contains("series_completed")
-                    || message_json.contains("data_completed")
-                    || (message.is_empty() && !completed.is_empty()); // Empty message with some data
-
-                if should_complete {
+            if should_complete {
+                if let (Ok(completed), Ok(expected)) =
+                    (completed_symbols.try_lock(), expected_symbols.try_lock())
+                {
                     tracing::debug!(
-                        "Triggering batch completion: {}/{} symbols completed",
+                        "Explicit completion signal received: {}/{} symbols completed",
                         completed.len(),
                         expected.len()
                     );
-                    send_completion_signal(completion_tx, "Batch symbols processed").await;
                 }
+                send_completion_signal(completion_tx, "Explicit completion signal received").await;
             }
         });
     }
@@ -606,14 +592,15 @@ fn create_batch_error_handler(
     }
 }
 
-/// Internal batch fetching implementation with symbol tracking
+/// Internal batch fetching with better error handling
 async fn fetch_chart_data_batch_inner(
     auth_token: &str,
     symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
     server: Option<DataServer>,
-    batch_size: usize,
 ) -> Result<HashMap<String, ChartHistoricalData>> {
+    tracing::info!("Starting batch fetch for {} symbols", symbols.len());
+
     let (data_tx, data_rx) = mpsc::channel(DATA_CHANNEL_BUFFER);
     let (info_tx, info_rx) = mpsc::channel(INFO_CHANNEL_BUFFER);
     let (completion_tx, completion_rx) = oneshot::channel();
@@ -641,22 +628,20 @@ async fn fetch_chart_data_batch_inner(
         completed_symbols.clone(),
     );
 
-    let websocket = setup_batch_websocket_connection(
-        auth_token,
-        server,
-        callbacks,
-        symbols,
-        base_options,
-        batch_size,
-    )
-    .await?;
+    // Setup WebSocket connection
+    let websocket =
+        setup_batch_websocket_connection(auth_token, server, callbacks, symbols, base_options)
+            .await?;
 
     let websocket = Arc::new(websocket);
     let subscription_handle = start_subscription_task(Arc::clone(&websocket));
 
-    // Add a safety timeout for the entire operation
+    // Give some time for subscription to establish
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // Collect results with extended timeout
     let collection_result = tokio::time::timeout(
-        Duration::from_secs(180), // 3 minutes total timeout
+        Duration::from_secs(600), // 10 minutes total timeout
         collect_batch_results_with_tracking(
             data_rx,
             info_rx,
@@ -667,24 +652,25 @@ async fn fetch_chart_data_batch_inner(
     )
     .await;
 
+    // Cleanup resources
     cleanup_resources(websocket, subscription_handle).await;
 
     match collection_result {
         Ok(results) => {
             let results = results?;
-            tracing::debug!("Batch collection completed with {} symbols", results.len());
+            tracing::info!("Batch collection completed with {} symbols", results.len());
             Ok(results)
         }
         Err(_) => {
-            tracing::error!("Batch collection timed out");
+            tracing::error!("Batch collection timed out after 10 minutes");
             Err(Error::TimeoutError(
-                "Batch collection timed out after 3 minutes".to_string(),
+                "Batch collection timed out after 10 minutes".to_string(),
             ))
         }
     }
 }
 
-/// Collect results for batch processing with symbol tracking
+/// Collect results with improved timeout and completion logic
 async fn collect_batch_results_with_tracking(
     mut data_rx: mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
     mut info_rx: mpsc::Receiver<SymbolInfo>,
@@ -695,17 +681,20 @@ async fn collect_batch_results_with_tracking(
     let mut results = HashMap::new();
     let mut completion_future = Box::pin(completion_rx);
 
-    // Add a timeout to prevent hanging indefinitely
-    let timeout_duration = Duration::from_secs(120); // 2 minutes timeout
+    // Longer timeout to allow for all data to arrive
+    let timeout_duration = Duration::from_secs(300); // 5 minutes
     let collection_timeout = tokio::time::sleep(timeout_duration);
     tokio::pin!(collection_timeout);
 
-    // Add a periodic check for completion
-    let mut completion_check = tokio::time::interval(Duration::from_secs(5));
+    // Track when we last received data
+    let mut last_data_received = tokio::time::Instant::now();
+    let mut completion_check = tokio::time::interval(Duration::from_secs(10));
 
     loop {
         tokio::select! {
             Some((series_info, data_points)) = data_rx.recv() => {
+                last_data_received = tokio::time::Instant::now();
+
                 if !data_points.is_empty() {
                     // Include interval in the key to prevent overwriting
                     let symbol_key = format!("{}:{}:{:?}",
@@ -748,16 +737,24 @@ async fn collect_batch_results_with_tracking(
                 break;
             }
             _ = completion_check.tick() => {
-                // Periodic check: if we have received data for most symbols, consider completing
+                let time_since_last_data = last_data_received.elapsed();
+
                 if let (Ok(completed), Ok(expected)) = (completed_symbols.try_lock(), expected_symbols.try_lock()) {
                     let completion_ratio = if expected.is_empty() { 1.0 } else { completed.len() as f64 / expected.len() as f64 };
 
-                    tracing::debug!("Periodic check: {}/{} symbols completed ({}%)",
-                        completed.len(), expected.len(), (completion_ratio * 100.0) as u32);
+                    tracing::debug!("Periodic check: {}/{} symbols completed ({}%), last data: {}s ago",
+                        completed.len(), expected.len(), (completion_ratio * 100.0) as u32,
+                        time_since_last_data.as_secs());
 
-                    // If we have data for 90% of symbols and waited long enough, complete
-                    if completion_ratio >= 0.9 {
-                        tracing::debug!("Sufficient data collected, completing batch");
+                    // Complete if no data received for a long time and we have reasonable completion
+                    if time_since_last_data > Duration::from_secs(60) && completion_ratio >= 0.5 {
+                        tracing::info!("No recent data and reasonable completion ratio, finishing batch");
+                        break;
+                    }
+
+                    // Complete if we have very high completion ratio
+                    if completion_ratio >= 0.95 {
+                        tracing::info!("High completion ratio achieved, finishing batch");
                         break;
                     }
                 }
@@ -773,7 +770,7 @@ async fn collect_batch_results_with_tracking(
         }
     }
 
-    // Process any remaining data
+    // Process any remaining data with extended timeout
     process_remaining_batch_data(&mut data_rx, &mut info_rx, &mut results).await;
 
     // Log completion statistics
@@ -786,14 +783,17 @@ async fn collect_batch_results_with_tracking(
             expected.len()
         );
 
-        // Log missing symbols
+        // Log missing symbols for debugging
         let missing: Vec<_> = expected.difference(&completed).collect();
-        if !missing.is_empty() {
+        if !missing.is_empty() && missing.len() <= 10 {
             tracing::warn!("Symbols without data: {:?}", missing);
+        } else if !missing.is_empty() {
+            tracing::warn!("{} symbols without data", missing.len());
         }
     }
 
     // Filter out entries with no data
+    let initial_count = results.len();
     results.retain(|key, data| {
         let has_data = !data.data.is_empty();
         if !has_data {
@@ -802,26 +802,31 @@ async fn collect_batch_results_with_tracking(
         has_data
     });
 
-    tracing::info!("Collected {} datasets with data", results.len());
+    tracing::info!(
+        "Collected {} datasets with data (filtered {} empty)",
+        results.len(),
+        initial_count - results.len()
+    );
     Ok(results)
 }
 
-/// Process remaining batch data with better filtering
+/// Process remaining batch data with extended timeout
 async fn process_remaining_batch_data(
     data_rx: &mut mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>,
     info_rx: &mut mpsc::Receiver<SymbolInfo>,
     results: &mut HashMap<String, ChartHistoricalData>,
 ) {
-    // Use a shorter timeout for remaining data
-    let remaining_timeout = Duration::from_millis(500);
+    // Use longer timeout for remaining data to catch stragglers
+    let remaining_timeout = Duration::from_secs(5);
+
+    tracing::debug!("Processing remaining data...");
 
     while let Ok(Some((series_info, data_points))) =
         timeout(remaining_timeout, data_rx.recv()).await
     {
         if !data_points.is_empty() {
-            // Include interval in the key to prevent overwriting
             let symbol_key = format!(
-                "{}:{}:{}",
+                "{}:{}:{:?}",
                 series_info.options.exchange,
                 series_info.options.symbol,
                 series_info.options.interval
@@ -832,9 +837,7 @@ async fn process_remaining_batch_data(
                 data_points.len()
             );
 
-            let historical_data = results
-                .entry(symbol_key)
-                .or_default();
+            let historical_data = results.entry(symbol_key).or_default();
             historical_data.series_info = series_info;
             historical_data.data.extend(data_points);
         }
@@ -855,22 +858,21 @@ async fn process_remaining_batch_data(
 
         // If no matching entries found, create a new one
         if !matched {
-            let historical_data = results
-                .entry(base_key)
-                .or_default();
+            let historical_data = results.entry(base_key).or_default();
             historical_data.symbol_info = symbol_info;
         }
     }
+
+    tracing::debug!("Finished processing remaining data");
 }
 
-/// Setup batch WebSocket connection
+/// Setup batch WebSocket connection with sequential processing
 async fn setup_batch_websocket_connection(
     auth_token: &str,
     server: Option<DataServer>,
     callbacks: EventCallback,
     symbols: &[impl MarketSymbol],
     base_options: ChartOptions,
-    batch_size: usize,
 ) -> Result<WebSocket> {
     let client = WebSocketClient::default().set_callbacks(callbacks);
 
@@ -881,31 +883,41 @@ async fn setup_batch_websocket_connection(
         .build()
         .await?;
 
-    // Prepare market options for all symbols
-    let market_options: Vec<_> = symbols
-        .iter()
-        .map(|symbol| {
-            let mut opt = base_options.clone();
-            opt.symbol = symbol.symbol().to_string();
-            opt.exchange = symbol.exchange().to_string();
-            opt
-        })
-        .collect();
+    // Set up markets sequentially to avoid overwhelming the connection
+    tracing::debug!("Setting up markets for {} symbols", symbols.len());
 
-    // Process markets in batches
-    let websocket_clone = websocket.clone();
-    spawn(async move {
-        for chunk in market_options.chunks(batch_size) {
-            for opt in chunk {
-                if let Err(e) = websocket_clone.set_market(opt.clone()).await {
-                    tracing::error!("Failed to set market for {}: {}", opt.symbol, e);
-                }
+    for (index, symbol) in symbols.iter().enumerate() {
+        let mut opt = base_options.clone();
+        opt.symbol = symbol.symbol().to_string();
+        opt.exchange = symbol.exchange().to_string();
+
+        match websocket.set_market(opt.clone()).await {
+            Ok(_) => {
+                tracing::debug!(
+                    "Successfully set market {}/{}: {}:{}",
+                    index + 1,
+                    symbols.len(),
+                    opt.exchange,
+                    opt.symbol
+                );
             }
-            sleep(BATCH_PROCESSING_DELAY).await;
+            Err(e) => {
+                tracing::error!(
+                    "Failed to set market for {}:{}: {}",
+                    opt.exchange,
+                    opt.symbol,
+                    e
+                );
+            }
         }
-        tracing::debug!("Finished setting all {} markets", market_options.len());
-    });
 
+        // Small delay between market setups to prevent rate limiting
+        if index < symbols.len() - 1 {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
+
+    tracing::debug!("Finished setting up all {} markets", symbols.len());
     Ok(websocket)
 }
 
