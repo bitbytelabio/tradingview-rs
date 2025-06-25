@@ -1,10 +1,6 @@
 use colored::*;
 use std::sync::Once;
-use tradingview::{
-    Interval, OHLCV,
-    chart::{ChartOptions, fetch_chart_data},
-    socket::DataServer,
-};
+use tradingview::{Interval, OHLCV, chart::ChartOptions, history, socket::DataServer};
 
 fn init() {
     static INIT: Once = Once::new();
@@ -30,9 +26,9 @@ async fn main() -> anyhow::Result<()> {
 
     let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    let symbol = "AAPL";
-    let exchange = "NASDAQ";
-    let interval = Interval::OneDay;
+    let symbol = "VCB";
+    let exchange = "HOSE";
+    let interval = Interval::OneHour;
     let bars = 500_000;
 
     println!(
@@ -45,24 +41,40 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let option = ChartOptions::new_with(symbol, exchange, interval).bar_count(bars);
-    let data = fetch_chart_data(&auth_token, option, Some(DataServer::ProData)).await?;
+
+    let mut data = history::single::retrieve()
+        .auth_token(&auth_token)
+        .options(option)
+        .with_replay(true)
+        .server(DataServer::ProData)
+        .call()
+        .await?
+        .data;
 
     println!("{}", "✅ Data retrieved successfully!".green());
     println!("{}", "----------------------------------------".dimmed());
 
-    // Print each data point with different colors
-    for (i, bar) in data.data.iter().rev().enumerate() {
-        println!(
-            "{} {} | Open: {} | High: {} | Low: {} | Close: {} | Volume: {}",
-            format!("[{}]", i).blue(),
-            format!("{}", bar.datetime()).bright_yellow().bold(),
-            format!("{:.2}", bar.open()).green(),
-            format!("{:.2}", bar.high()).bright_green(),
-            format!("{:.2}", bar.low()).red(),
-            format!("{:.2}", bar.close()).bright_cyan().bold(),
-            format!("{}", bar.volume()).magenta()
-        );
-    }
+    data.dedup_by_key(|point| point.timestamp());
+    data.sort_by_key(|a| a.timestamp());
+    println!(
+        "{} Total data points: {}",
+        "📊".bright_yellow(),
+        data.len().to_string().bright_blue()
+    );
+
+    // // Print each data point with different colors
+    // for (i, bar) in data.iter().rev().enumerate() {
+    //     println!(
+    //         "{} {} | Open: {} | High: {} | Low: {} | Close: {} | Volume: {}",
+    //         format!("[{}]", i).blue(),
+    //         format!("{}", bar.datetime()).bright_yellow().bold(),
+    //         format!("{:.2}", bar.open()).green(),
+    //         format!("{:.2}", bar.high()).bright_green(),
+    //         format!("{:.2}", bar.low()).red(),
+    //         format!("{:.2}", bar.close()).bright_cyan().bold(),
+    //         format!("{}", bar.volume()).magenta()
+    //     );
+    // }
 
     println!("{}", "----------------------------------------".dimmed());
     println!("{}", "Done!".bright_green().bold());

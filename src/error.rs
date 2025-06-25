@@ -48,6 +48,9 @@ pub enum Error {
     #[error("chrono out of range error")]
     ChronoOutOfRangeError(#[from] chrono::OutOfRangeError),
 
+    #[error("Timeout: {0}")]
+    TimeoutError(String),
+
     #[error("I/O error")]
     IoError(#[from] std::io::Error),
 

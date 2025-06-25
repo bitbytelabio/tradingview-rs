@@ -11,8 +11,49 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::debug;
+use urlencoding::encode;
 
 static SEARCH_BASE_URL: &str = "https://symbol-search.tradingview.com/symbol_search/v3/";
+static DEFAULT_LANGUAGE: &str = "en";
+static DEFAULT_HIGHLIGHT: &str = "0";
+
+#[derive(Debug, Clone)]
+struct ParameterBuilder {
+    params: Vec<(String, String)>,
+}
+
+impl ParameterBuilder {
+    fn new() -> Self {
+        Self { params: Vec::new() }
+    }
+
+    fn add<T: ToString>(&mut self, key: &str, value: T) -> &mut Self {
+        self.params.push((key.to_string(), value.to_string()));
+        self
+    }
+
+    fn add_optional<T: ToString>(&mut self, key: &str, value: Option<T>) -> &mut Self {
+        if let Some(v) = value {
+            self.add(key, v);
+        }
+        self
+    }
+
+    fn add_if_not_empty(&mut self, key: &str, value: &str) -> &mut Self {
+        if !value.is_empty() {
+            self.add(key, value);
+        }
+        self
+    }
+
+    fn build(&self) -> String {
+        self.params
+            .iter()
+            .map(|(k, v)| format!("{}={}", encode(k), encode(v)))
+            .collect::<Vec<String>>()
+            .join("&")
+    }
+}
 
 /// Sends an HTTP GET request to the specified URL using the provided client and returns the response.
 ///
@@ -78,80 +119,104 @@ pub async fn search_symbols(search: &str, exchange: &str) -> Result<Vec<Symbol>>
 /// # Returns
 ///
 /// A `Result` containing a `SymbolSearchResponse` struct representing the search results, or an error if the search failed.
-#[allow(clippy::too_many_arguments)]
 #[builder]
 pub async fn advanced_search_symbol(
     search: Option<&str>,
     exchange: Option<&str>,
-    #[builder(default= MarketType::All)] market_type: MarketType,
+    #[builder(default = MarketType::All)] market_type: MarketType,
     #[builder(default = 0)] start: u64,
     country: Option<Country>,
     #[builder(default = "production")] domain: &str,
-    futures_type: Option<&FuturesProductType>, // For Futures Only
-    stock_sector: Option<&StockSector>,        // For Stock Only
-    crypto_centralization: Option<&CryptoCentralization>, // For Crypto Only
-    economic_source: Option<&EconomicSource>,  // For Economy Only
-    economic_category: Option<&EconomicCategory>, // For Economy Only
+    futures_type: Option<FuturesProductType>, // For Futures Only
+    stock_sector: Option<StockSector>,        // For Stock Only
+    crypto_centralization: Option<CryptoCentralization>, // For Crypto Only
+    economic_source: Option<EconomicSource>,  // For Economy Only
+    economic_category: Option<EconomicCategory>, // For Economy Only
+    search_type: Option<&str>, // For Advanced Search Only, disabled market_type if is Some
 ) -> Result<SymbolSearchResponse> {
-    let mut params: Vec<(String, String)> =
-        vec![("text".to_string(), search.unwrap_or_default().to_string())];
-    params.push((
-        "exchange".to_string(),
-        exchange.unwrap_or_default().to_string(),
-    ));
-    params.push(("search_type".to_string(), market_type.to_string()));
-    params.push(("domain".to_string(), domain.to_string()));
-    if let Some(country) = country {
-        params.push(("country".to_string(), country.to_string()));
-        params.push(("sort_by_country".to_string(), country.to_string()));
+    let mut builder = ParameterBuilder::new();
+
+    // Add basic parameters
+    builder
+        .add("text", search.unwrap_or_default())
+        .add("exchange", exchange.unwrap_or_default())
+        .add("domain", domain)
+        .add("hl", DEFAULT_HIGHLIGHT)
+        .add("lang", DEFAULT_LANGUAGE)
+        .add("start", start);
+
+    // Handle search_type vs market_type logic
+    if let Some(search_type) = search_type {
+        builder.add_if_not_empty("search_type", search_type);
+    } else {
+        builder.add("search_type", market_type.to_string());
     }
+
+    // Add country parameters
+    if let Some(country) = country {
+        let country_str = country.to_string();
+        builder
+            .add("country", &country_str)
+            .add("sort_by_country", &country_str);
+    }
+
+    // Add market-specific parameters
+    add_market_specific_params(
+        &mut builder,
+        market_type,
+        futures_type,
+        stock_sector,
+        crypto_centralization,
+        economic_source,
+        economic_category,
+    );
+
+    let params_str = builder.build();
+    let url = format!("{SEARCH_BASE_URL}?{params_str}");
+
+    // Validate URL length (most browsers/servers have ~8KB limit)
+    if url.len() > 8000 {
+        return Err(Error::Generic(
+            "URL too long - please reduce search parameters".to_string(),
+        ));
+    }
+
+    let search_data: SymbolSearchResponse = get(None, &url)
+        .await
+        .map_err(|e| Error::Generic(format!("Failed to fetch symbol search: {}", e)))?
+        .json()
+        .await
+        .map_err(|e| Error::Generic(format!("Failed to parse symbol search response: {}", e)))?;
+
+    Ok(search_data)
+}
+
+fn add_market_specific_params(
+    builder: &mut ParameterBuilder,
+    market_type: MarketType,
+    futures_type: Option<FuturesProductType>,
+    stock_sector: Option<StockSector>,
+    crypto_centralization: Option<CryptoCentralization>,
+    economic_source: Option<EconomicSource>,
+    economic_category: Option<EconomicCategory>,
+) {
     match market_type {
         MarketType::Futures => {
-            if let Some(futures_type) = futures_type {
-                params.push(("product".to_string(), futures_type.to_string()));
-            }
+            builder.add_optional("product", futures_type);
         }
         MarketType::Stocks(_) => {
-            if let Some(stock_sector) = stock_sector {
-                params.push(("sector".to_string(), stock_sector.to_string()));
-            }
+            builder.add_optional("sector", stock_sector);
         }
         MarketType::Crypto(_) => {
-            if let Some(crypto_centralization) = crypto_centralization {
-                params.push((
-                    "centralization".to_string(),
-                    crypto_centralization.to_string(),
-                ));
-            }
+            builder.add_optional("centralization", crypto_centralization);
         }
         MarketType::Economy => {
-            if let Some(economic_source) = economic_source {
-                params.push(("source_id".to_string(), economic_source.to_string()));
-            }
-            if let Some(economic_category) = economic_category {
-                params.push((
-                    "economic_category".to_string(),
-                    economic_category.to_string(),
-                ));
-            }
+            builder
+                .add_optional("source_id", economic_source)
+                .add_optional("economic_category", economic_category);
         }
         _ => {}
-    };
-
-    let params_str = params
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<String>>()
-        .join("&");
-
-    let search_data: SymbolSearchResponse = get(
-        None,
-        &format!("{SEARCH_BASE_URL}?{params_str}&hl=0&lang=en&start={start}"),
-    )
-    .await?
-    .json()
-    .await?;
-    Ok(search_data)
+    }
 }
 
 /// Lists symbols based on the specified search parameters.
@@ -171,15 +236,19 @@ pub async fn list_symbols(
     exchange: Option<&str>,
     #[builder(default = MarketType::All)] market_type: MarketType,
     country: Option<Country>,
+    search_type: Option<&str>, // For Advanced Search Only, disabled market_type if is Some
     domain: Option<&str>,
 ) -> Result<Vec<Symbol>> {
-    let exchange: Arc<String> = Arc::new(exchange.unwrap_or("").to_string());
-    let domain = Arc::new(domain.unwrap_or("production").to_string());
+    let exchange = exchange.unwrap_or("").to_string();
+    let domain = domain.unwrap_or("production").to_string();
+    let search_type = search_type.unwrap_or("").to_string();
 
+    // Get initial batch of symbols
     let search_symbol_reps = advanced_search_symbol()
         .exchange(&exchange)
         .market_type(market_type)
         .maybe_country(country)
+        .search_type(&search_type)
         .domain(&domain)
         .call()
         .await?;
@@ -187,37 +256,58 @@ pub async fn list_symbols(
     let remaining = search_symbol_reps.remaining;
     let mut symbols = search_symbol_reps.symbols;
 
+    // Early return if we already have all symbols
+    if remaining <= 50 {
+        return Ok(symbols);
+    }
+
     let max_concurrent_tasks = 30;
     let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
-
     let mut tasks = Vec::new();
 
+    // Create tasks for remaining batches
     for i in (50..remaining).step_by(50) {
-        let exchange = Arc::clone(&exchange);
-        let domain = Arc::clone(&domain);
+        let exchange = exchange.clone();
+        let domain = domain.clone();
+        let search_type = search_type.clone();
         let semaphore = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
             let _permit = semaphore
                 .acquire()
                 .await
-                .expect("Failed to acquire semaphore");
+                .map_err(|e| Error::Generic(format!("Failed to acquire semaphore: {}", e)))?;
+
             advanced_search_symbol()
                 .exchange(&exchange)
                 .maybe_country(country)
                 .market_type(market_type)
+                .search_type(&search_type)
                 .domain(&domain)
                 .start(i)
                 .call()
                 .await
                 .map(|resp| resp.symbols)
+                .map_err(|e| {
+                    Error::Generic(format!("Failed to fetch symbols at offset {}: {}", i, e))
+                })
         });
 
         tasks.push(task);
     }
 
-    for handler in tasks {
-        symbols.extend(handler.await??);
+    // Collect results from all tasks
+    for (index, task) in tasks.into_iter().enumerate() {
+        match task.await {
+            Ok(Ok(batch_symbols)) => symbols.extend(batch_symbols),
+            Ok(Err(e)) => return Err(e),
+            Err(join_err) => {
+                return Err(Error::Generic(format!(
+                    "Task {} panicked: {}",
+                    index, join_err
+                )));
+            }
+        }
     }
 
     Ok(symbols)
