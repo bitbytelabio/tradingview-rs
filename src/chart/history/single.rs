@@ -37,11 +37,7 @@ pub async fn retrieve(
     let auth_token = resolve_auth_token(auth_token)?;
     let channels = DataChannels::new();
 
-    let range = if let Some(range) = range {
-        Some(String::from(range))
-    } else {
-        None
-    };
+    let range = range.map(String::from);
 
     let (symbol, exchange) = if let Some(ticker) = ticker {
         (ticker.symbol().to_string(), ticker.exchange().to_string())

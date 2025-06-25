@@ -339,9 +339,9 @@ impl From<&SymbolInfo> for MarketTicker {
     }
 }
 
-impl Into<MarketTicker> for SymbolInfo {
-    fn into(self) -> MarketTicker {
-        MarketTicker::from(&self)
+impl From<SymbolInfo> for MarketTicker {
+    fn from(val: SymbolInfo) -> Self {
+        MarketTicker::from(&val)
     }
 }
 
