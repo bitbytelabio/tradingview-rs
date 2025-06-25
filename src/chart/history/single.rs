@@ -31,8 +31,8 @@ pub async fn retrieve(
     let channels = DataChannels::new();
 
     // Create and configure WebSocket connection
-    let callbacks = create_single_data_callbacks(&channels, with_replay);
-    let websocket = setup_websocket_connection(&auth_token, server, callbacks, options).await?;
+    let callbacks = create_callbacks(&channels, with_replay);
+    let websocket = setup_connection(&auth_token, server, callbacks, options).await?;
     let websocket = Arc::new(websocket);
 
     // Start subscription in background
@@ -57,20 +57,20 @@ pub async fn retrieve(
 }
 
 /// Create callbacks for single symbol data fetching
-fn create_single_data_callbacks(channels: &DataChannels, with_replay: bool) -> EventCallback {
+fn create_callbacks(channels: &DataChannels, with_replay: bool) -> EventCallback {
     let data_tx = Arc::clone(&channels.data_tx);
     let info_tx = Arc::clone(&channels.info_tx);
     let completion_tx = Arc::clone(&channels.completion_tx);
 
     EventCallback::default()
-        .on_chart_data(create_chart_data_handler(data_tx))
-        .on_symbol_info(create_symbol_info_handler(info_tx))
-        .on_series_completed(create_series_completion_handler(completion_tx, with_replay))
+        .on_chart_data(create_data_handler(data_tx))
+        .on_symbol_info(create_symbol_handler(info_tx))
+        .on_series_completed(create_completion_handler(completion_tx, with_replay))
         .on_error(create_error_handler(Arc::clone(&channels.completion_tx)))
 }
 
 /// Create chart data handler
-fn create_chart_data_handler(
+fn create_data_handler(
     data_tx: Arc<Mutex<DataChannel>>,
 ) -> impl Fn((SeriesInfo, Vec<DataPoint>)) + Send + Sync + 'static {
     move |(series_info, data_points): (SeriesInfo, Vec<DataPoint>)| {
@@ -89,7 +89,7 @@ fn create_chart_data_handler(
 }
 
 /// Create symbol info handler
-fn create_symbol_info_handler(
+fn create_symbol_handler(
     info_tx: Arc<Mutex<InfoChannel>>,
 ) -> impl Fn(SymbolInfo) + Send + Sync + 'static {
     move |symbol_info| {
@@ -108,7 +108,7 @@ fn create_symbol_info_handler(
 }
 
 /// Create series completion handler
-fn create_series_completion_handler(
+fn create_completion_handler(
     completion_tx: Arc<Mutex<Option<CompletionChannel>>>,
     with_replay: bool,
 ) -> impl Fn(Vec<Value>) + Send + Sync + 'static {
@@ -171,7 +171,7 @@ async fn send_completion_signal(
 }
 
 /// Set up WebSocket connection
-async fn setup_websocket_connection(
+async fn setup_connection(
     auth_token: &str,
     server: Option<DataServer>,
     callbacks: EventCallback,
