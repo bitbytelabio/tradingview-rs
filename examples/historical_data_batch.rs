@@ -88,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
         );
 
         // for (i, ohlcv) in bar.data.iter().rev().enumerate() {
-        //     println!(å
+        //     println!(
         //         "{} {} | Open: {} | High: {} | Low: {} | Close: {} | Volume: {}",
         //         format!("[{}]", i).blue(),
         //         format!("{}", ohlcv.datetime()).bright_yellow().bold(),

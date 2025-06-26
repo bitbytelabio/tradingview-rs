@@ -8,11 +8,11 @@ async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let username = std::env::var("TV_USERNAME").expect("TV_USERNAME is not set");
     let password = std::env::var("TV_PASSWORD").expect("TV_PASSWORD is not set");
-    let auth_token = std::env::var("TV_TOTP_SECRET").expect("TV_TOTP_SECRET is not set");
+    let totp = std::env::var("TV_TOTP_SECRET").expect("TV_TOTP_SECRET is not set");
 
     tracing_subscriber::fmt::init();
     let user = UserCookies::default()
-        .login(&username, &password, Some(&auth_token))
+        .login(&username, &password, Some(&totp))
         .await?;
 
     tracing::info!("User: {:?}", user);
