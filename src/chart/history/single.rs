@@ -99,7 +99,7 @@ pub async fn retrieve(
     num_bars: Option<u64>,
     #[builder(default = false)] with_replay: bool,
     #[builder(default = Duration::from_secs(30))] timeout_duration: Duration,
-) -> Result<ChartHistoricalData> {
+) -> Result<(SymbolInfo, Vec<DataPoint>)> {
     let auth_token = resolve_auth_token(auth_token)?;
     let range = range.map(String::from);
 
@@ -147,7 +147,12 @@ pub async fn retrieve(
                 "Data collection completed with {} points",
                 result.data.len()
             );
-            Ok(result)
+
+            let mut data = result.data;
+            data.dedup_by_key(|point| point.timestamp());
+            data.sort_by_key(|a| a.timestamp());
+
+            Ok((result.symbol_info, data))
         }
         Ok(Err(error)) => Err(error),
         Err(_) => Err(Error::TimeoutError("Data collection timed out".to_string())),

@@ -64,27 +64,23 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "✅ Data retrieved successfully!".green());
     println!("{}", "----------------------------------------".dimmed());
 
-    for ticker_data in datamap.values() {
+    for (symbol_info, interval, ticker_data) in datamap.values() {
         println!(
             "{} | {} | {} | {} | {}",
-            format!("Symbol: {}", ticker_data.symbol_info.name)
-                .bright_cyan()
-                .bold(),
-            format!("Exchange: {}", ticker_data.symbol_info.exchange).green(),
-            format!("Description: {}", ticker_data.symbol_info.description).yellow(),
-            format!("Currency: {}", ticker_data.symbol_info.currency_code).blue(),
-            format!("Country: {}", ticker_data.symbol_info.currency_code).magenta(),
+            format!("Symbol: {}", symbol_info.name).bright_cyan().bold(),
+            format!("Exchange: {}", symbol_info.exchange).green(),
+            format!("Description: {}", symbol_info.description).yellow(),
+            format!("Currency: {}", symbol_info.currency_code).blue(),
+            format!("Country: {}", symbol_info.currency_code).magenta(),
         );
 
         println!("{}", "----------------------------------------".dimmed());
-        let mut data = ticker_data.data.clone();
-        data.dedup_by_key(|point| point.timestamp());
-        data.sort_by_key(|a| a.timestamp());
+
         println!(
             "{} Total data points: {}, intervals: {}",
             "📊".bright_yellow(),
-            data.len().to_string().bright_blue(),
-            ticker_data.series_info.options.interval
+            ticker_data.len().to_string().bright_blue(),
+            interval
         );
 
         // for (i, ohlcv) in bar.data.iter().rev().enumerate() {

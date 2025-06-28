@@ -1,5 +1,5 @@
 use crate::{
-    callback::EventCallback, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocket, WebSocketClient}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo
+    callback::EventCallback, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocket, WebSocketClient}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
 };
 use bon::builder;
 use serde_json::Value;
@@ -311,7 +311,7 @@ pub async fn retrieve(
     interval: Interval,
     server: Option<DataServer>,
     #[builder(default = 40)] batch_size: usize,
-) -> Result<HashMap<String, ChartHistoricalData>> {
+) -> Result<HashMap<String, (SymbolInfo, Interval, Vec<DataPoint>)>> {
     if symbols.is_empty() {
         return Err(Error::Generic("No symbols provided".to_string()));
     }
@@ -466,5 +466,14 @@ pub async fn retrieve(
         tracing::warn!("Errors occurred: {:?}", errors);
     }
 
-    Ok(results)
+    let mut final_results = HashMap::new();
+    for (symbol, result) in &results {
+        tracing::debug!("Symbol: {}, Data points: {}", symbol, result.data.len());
+        let mut data = result.data.clone();
+        data.dedup_by_key(|point| point.timestamp());
+        data.sort_by_key(|a| a.timestamp());
+        final_results.insert(symbol.clone(), (result.symbol_info.clone(), result.series_info.options.interval, data));
+    }
+
+    Ok(final_results)
 }
