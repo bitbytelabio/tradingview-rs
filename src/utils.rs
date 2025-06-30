@@ -183,9 +183,9 @@ mod tests {
     #[test]
     fn test_parse_packet() {
         let current_dir = std::env::current_dir().unwrap().display().to_string();
-        println!("Current dir: {}", current_dir);
+        println!("Current dir: {current_dir}");
         let messages =
-            std::fs::read_to_string(format!("{}/tests/data/socket_messages.txt", current_dir))
+            std::fs::read_to_string(format!("{current_dir}/tests/data/socket_messages.txt"))
                 .unwrap();
         let result = parse_packet(messages.as_str());
 

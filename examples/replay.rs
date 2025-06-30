@@ -1,6 +1,6 @@
 use dotenv::dotenv;
 use std::env;
-use tradingview::{Interval, OHLCV, history, socket::DataServer};
+use tradingview::{Interval, history, socket::DataServer};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
 
     let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
-    let mut data = history::single::retrieve()
+    let (_info, data) = history::single::retrieve()
         .auth_token(&auth_token)
         .symbol("BTCUSDT")
         .exchange("OKX")
@@ -19,14 +19,9 @@ async fn main() -> anyhow::Result<()> {
         .server(DataServer::ProData)
         .with_replay(true)
         .call()
-        .await?
-        .data;
+        .await?;
 
-    println!("Data length before deduplication: {}", data.len());
-
-    data.dedup_by_key(|point| point.timestamp());
-    data.sort_by_key(|a| a.timestamp());
-    println!("Total data points: {}", data.len());
+    println!("Data length: {}", data.len());
 
     Ok(())
 }

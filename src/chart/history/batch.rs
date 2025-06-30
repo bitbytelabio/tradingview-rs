@@ -1,5 +1,5 @@
 use crate::{
-    callback::EventCallback, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocket, WebSocketClient}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo
+    callback::EventCallback, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocket, WebSocketClient}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
 };
 use bon::builder;
 use serde_json::Value;
@@ -58,7 +58,7 @@ impl BatchTracker {
         // Get symbol for this series
         let symbol = map.get(series_id)
             .cloned()
-            .unwrap_or_else(|| format!("unknown_{}", series_id));
+            .unwrap_or_else(|| format!("unknown_{series_id}"));
 
         *remaining = remaining.saturating_sub(1);
         completed.push(symbol.clone());
@@ -135,8 +135,7 @@ fn create_callbacks(
                     
                     let tx = data_tx.lock().await;
                     if let Err(e) = tx.send((info, points)).await {
-                        let error = format!("Failed to send data for series {} (symbol {}): {}", 
-                                           series_id, symbol, e);
+                        let error = format!("Failed to send data for series {series_id} (symbol {symbol}): {e}");
                         tracker.add_error(error).await;
                     }
                 });
@@ -218,7 +217,7 @@ fn create_callbacks(
             move |error| {
                 let tracker = tracker.clone();
                 spawn(async move {
-                    let error_msg = format!("WebSocket error: {:?}", error);
+                    let error_msg = format!("WebSocket error: {error:?}");
                     tracker.add_error(error_msg).await;
                     
                     if tracker.is_done().await {
@@ -311,7 +310,7 @@ pub async fn retrieve(
     interval: Interval,
     server: Option<DataServer>,
     #[builder(default = 40)] batch_size: usize,
-) -> Result<HashMap<String, ChartHistoricalData>> {
+) -> Result<HashMap<String, (SymbolInfo, Interval, Vec<DataPoint>)>> {
     if symbols.is_empty() {
         return Err(Error::Generic("No symbols provided".to_string()));
     }
@@ -466,5 +465,14 @@ pub async fn retrieve(
         tracing::warn!("Errors occurred: {:?}", errors);
     }
 
-    Ok(results)
+    let mut final_results = HashMap::new();
+    for (symbol, mut result) in results {
+        tracing::debug!("Symbol: {}, Data points: {}", symbol, result.data.len());
+        let mut data = std::mem::take(&mut result.data);
+        data.dedup_by_key(|point| point.timestamp());
+        data.sort_by_key(|a| a.timestamp());
+        final_results.insert(symbol.clone(), (result.symbol_info.clone(), result.series_info.options.interval, data));
+    }
+
+    Ok(final_results)
 }

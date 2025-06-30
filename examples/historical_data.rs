@@ -1,6 +1,6 @@
 use colored::*;
 use std::sync::Once;
-use tradingview::{Interval, OHLCV, history, socket::DataServer};
+use tradingview::{Interval, history, socket::DataServer};
 
 fn init() {
     static INIT: Once = Once::new();
@@ -35,10 +35,10 @@ async fn main() -> anyhow::Result<()> {
         "→".bright_blue().bold(),
         symbol.yellow().bold(),
         exchange.cyan(),
-        format!("{:?}", interval).magenta(),
+        format!("{interval:?}").magenta(),
     );
 
-    let mut data = history::single::retrieve()
+    let (_info, data) = history::single::retrieve()
         .auth_token(&auth_token)
         .symbol(symbol)
         .exchange(exchange)
@@ -46,14 +46,10 @@ async fn main() -> anyhow::Result<()> {
         .with_replay(false)
         .server(DataServer::ProData)
         .call()
-        .await?
-        .data;
+        .await?;
 
     println!("{}", "✅ Data retrieved successfully!".green());
     println!("{}", "----------------------------------------".dimmed());
-
-    data.dedup_by_key(|point| point.timestamp());
-    data.sort_by_key(|a| a.timestamp());
     println!(
         "{} Total data points: {}",
         "📊".bright_yellow(),
