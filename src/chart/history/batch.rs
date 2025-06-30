@@ -467,9 +467,9 @@ pub async fn retrieve(
     }
 
     let mut final_results = HashMap::new();
-    for (symbol, result) in &results {
+    for (symbol, mut result) in results {
         tracing::debug!("Symbol: {}, Data points: {}", symbol, result.data.len());
-        let mut data = result.data.clone();
+        let mut data = std::mem::take(&mut result.data);
         data.dedup_by_key(|point| point.timestamp());
         data.sort_by_key(|a| a.timestamp());
         final_results.insert(symbol.clone(), (result.symbol_info.clone(), result.series_info.options.interval, data));
