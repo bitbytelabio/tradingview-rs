@@ -119,7 +119,7 @@ impl News {
 #[tokio::test]
 async fn test_list_news() -> Result<()> {
     let res = list_news().section(NewsSection::AnalysisAll).call().await?;
-    println!("{:#?}", res);
+    println!("{res:#?}");
     Ok(())
 }
 
@@ -131,7 +131,7 @@ async fn test_fetch_news() -> Result<()> {
 
     for item in res.items[0..2].iter() {
         let content = item.get_content().await?;
-        println!("{:#?}", content);
+        println!("{content:#?}");
     }
 
     Ok(())
@@ -143,7 +143,7 @@ async fn test_get_source_html() -> Result<()> {
 
     for item in res.items[0..1].iter() {
         let html = item.get_source_html().await?;
-        println!("{:#?}", html);
+        println!("{html:#?}");
     }
 
     Ok(())

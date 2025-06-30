@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
         "→".bright_blue().bold(),
         symbol.yellow().bold(),
         exchange.cyan(),
-        format!("{:?}", interval).magenta(),
+        format!("{interval:?}").magenta(),
     );
 
     let (_info, data) = history::single::retrieve()

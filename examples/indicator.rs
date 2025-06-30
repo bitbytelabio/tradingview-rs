@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
     let buildins = get_builtin_indicators(BuiltinIndicators::Fundamental).await?;
     println!("{:#?}", buildins[0]);
     let study_callback = |data| {
-        println!("{:#?}", data);
+        println!("{data:#?}");
     };
     let callbacks: EventCallback = EventCallback::default().on_study_data(study_callback);
 

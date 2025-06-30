@@ -22,5 +22,5 @@ async fn main() {
     info!("{:#?}", test);
 
     let json_string = serde_json::to_string(&test).unwrap();
-    println!("{}", json_string);
+    println!("{json_string}");
 }

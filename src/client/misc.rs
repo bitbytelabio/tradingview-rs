@@ -183,10 +183,10 @@ pub async fn advanced_search_symbol(
 
     let search_data: SymbolSearchResponse = get(None, &url)
         .await
-        .map_err(|e| Error::Generic(format!("Failed to fetch symbol search: {}", e)))?
+        .map_err(|e| Error::Generic(format!("Failed to fetch symbol search: {e}")))?
         .json()
         .await
-        .map_err(|e| Error::Generic(format!("Failed to parse symbol search response: {}", e)))?;
+        .map_err(|e| Error::Generic(format!("Failed to parse symbol search response: {e}")))?;
 
     Ok(search_data)
 }
@@ -276,7 +276,7 @@ pub async fn list_symbols(
             let _permit = semaphore
                 .acquire()
                 .await
-                .map_err(|e| Error::Generic(format!("Failed to acquire semaphore: {}", e)))?;
+                .map_err(|e| Error::Generic(format!("Failed to acquire semaphore: {e}")))?;
 
             advanced_search_symbol()
                 .exchange(&exchange)
@@ -289,7 +289,7 @@ pub async fn list_symbols(
                 .await
                 .map(|resp| resp.symbols)
                 .map_err(|e| {
-                    Error::Generic(format!("Failed to fetch symbols at offset {}: {}", i, e))
+                    Error::Generic(format!("Failed to fetch symbols at offset {i}: {e}"))
                 })
         });
 
@@ -303,8 +303,7 @@ pub async fn list_symbols(
             Ok(Err(e)) => return Err(e),
             Err(join_err) => {
                 return Err(Error::Generic(format!(
-                    "Task {} panicked: {}",
-                    index, join_err
+                    "Task {index} panicked: {join_err}"
                 )));
             }
         }

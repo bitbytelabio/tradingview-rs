@@ -10,7 +10,7 @@ mod tests {
             .await
             .unwrap();
 
-        println!("{:#?}", res);
+        println!("{res:#?}");
         assert!(!res.symbols.is_empty());
     }
 
@@ -27,7 +27,7 @@ mod tests {
         let indicators = get_builtin_indicators(pine_indicator::BuiltinIndicators::All)
             .await
             .unwrap();
-        println!("{:#?}", indicators);
+        println!("{indicators:#?}");
         assert!(!indicators.is_empty());
     }
 
@@ -40,7 +40,7 @@ mod tests {
         )
         .await
         .unwrap();
-        println!("{:#?}", metadata);
+        println!("{metadata:#?}");
         assert_eq!(
             metadata.data.id,
             "Script$STD;Candlestick%1Pattern%1Bullish%1Upside%1Tasuki%1Gap@tv-scripting-101"

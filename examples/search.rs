@@ -5,6 +5,6 @@ use tradingview::{list_symbols, prelude::*};
 async fn main() -> Result<()> {
     let symbols = list_symbols().market_type(MarketType::All).call().await?;
 
-    println!("{:?}", symbols);
+    println!("{symbols:?}");
     Ok(())
 }

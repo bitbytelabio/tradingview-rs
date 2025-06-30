@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
     let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
     let quote_callback = |data: QuoteValue| {
-        println!("{:#?}", data);
+        println!("{data:#?}");
     };
 
     let callbacks: EventCallback = EventCallback::default().on_quote_data(quote_callback);

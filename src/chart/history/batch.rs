@@ -58,7 +58,7 @@ impl BatchTracker {
         // Get symbol for this series
         let symbol = map.get(series_id)
             .cloned()
-            .unwrap_or_else(|| format!("unknown_{}", series_id));
+            .unwrap_or_else(|| format!("unknown_{series_id}"));
 
         *remaining = remaining.saturating_sub(1);
         completed.push(symbol.clone());
@@ -135,8 +135,7 @@ fn create_callbacks(
                     
                     let tx = data_tx.lock().await;
                     if let Err(e) = tx.send((info, points)).await {
-                        let error = format!("Failed to send data for series {} (symbol {}): {}", 
-                                           series_id, symbol, e);
+                        let error = format!("Failed to send data for series {series_id} (symbol {symbol}): {e}");
                         tracker.add_error(error).await;
                     }
                 });
@@ -218,7 +217,7 @@ fn create_callbacks(
             move |error| {
                 let tracker = tracker.clone();
                 spawn(async move {
-                    let error_msg = format!("WebSocket error: {:?}", error);
+                    let error_msg = format!("WebSocket error: {error:?}");
                     tracker.add_error(error_msg).await;
                     
                     if tracker.is_done().await {
