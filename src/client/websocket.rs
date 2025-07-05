@@ -96,6 +96,10 @@ impl WebSocket {
         Self { client, socket }
     }
 
+    pub async fn is_closed(&self) -> bool {
+        self.socket.is_closed().await
+    }
+
     // Begin TradingView WebSocket Quote methods
     pub async fn create_quote_session(&self) -> Result<&Self> {
         let quote_session = gen_session_id("qs");

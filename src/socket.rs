@@ -11,7 +11,10 @@ use futures_util::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
@@ -167,6 +170,7 @@ impl std::fmt::Display for DataServer {
 pub struct SocketSession {
     server: Arc<DataServer>,
     auth_token: Arc<String>,
+    is_closed: Arc<AtomicBool>,
     read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
 }
@@ -222,6 +226,10 @@ impl SocketSession {
         Ok((write, read))
     }
 
+    pub async fn is_closed(&self) -> bool {
+        self.is_closed.load(Ordering::Relaxed)
+    }
+
     pub async fn reconnect(&mut self) -> Result<()> {
         let (write, read) = SocketSession::connect(
             self.server.clone().as_ref(),
@@ -230,6 +238,7 @@ impl SocketSession {
         .await?;
         self.write = Arc::from(RwLock::new(write));
         self.read = Arc::from(RwLock::new(read));
+        self.is_closed.store(false, Ordering::Relaxed);
         Ok(())
     }
 
@@ -246,12 +255,14 @@ impl SocketSession {
         let read = Arc::from(RwLock::new(read_stream));
         let server = Arc::new(server);
         let auth_token = Arc::new(auth_token);
+        let is_closed = Arc::new(AtomicBool::new(false));
 
         Ok(SocketSession {
             server,
             auth_token,
             write,
             read,
+            is_closed,
         })
     }
 
@@ -271,6 +282,7 @@ impl SocketSession {
     }
 
     pub async fn close(&self) -> Result<()> {
+        self.is_closed.store(true, Ordering::Relaxed);
         self.write.write().await.close().await?;
         Ok(())
     }
@@ -296,11 +308,14 @@ pub trait Socket {
                 Some(Ok(message)) => self.handle_raw_messages(session, message).await,
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
+                    session.is_closed.store(true, Ordering::Relaxed);
                     self.handle_error(Error::WebSocketError(Box::new(e))).await;
+                    break;
                 }
                 None => {
-                    trace!("no messages to read");
-                    continue;
+                    trace!("stream ended");
+                    session.is_closed.store(true, Ordering::Relaxed);
+                    break;
                 }
             }
         }
@@ -315,6 +330,7 @@ pub trait Socket {
             }
             Message::Close(msg) => {
                 warn!("connection closed with code: {:?}", msg);
+                session.is_closed.store(true, Ordering::Relaxed);
             }
             Message::Binary(msg) => {
                 debug!("received binary message: {:?}", msg);
