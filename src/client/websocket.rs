@@ -257,7 +257,7 @@ impl WebSocketClient {
         session: &str,
         series_id: &str,
         symbol: &str,
-        config: &ChartOptions,
+        config: ChartOptions,
     ) -> Result<&Self> {
         self.socket
             .send(
@@ -418,7 +418,7 @@ impl WebSocketClient {
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        config: &ChartOptions,
+        config: ChartOptions,
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
@@ -449,7 +449,7 @@ impl WebSocketClient {
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        config: &ChartOptions,
+        config: ChartOptions,
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
@@ -486,8 +486,8 @@ impl WebSocketClient {
         session: &str,
         symbol_series_id: &str,
         symbol: &str,
-        config: &ChartOptions,
-        replay_session: Option<String>,
+        config: ChartOptions,
+        replay_session: Option<&str>,
     ) -> Result<&Self> {
         self.socket
             .send(
@@ -572,7 +572,7 @@ impl WebSocketClient {
     pub async fn set_replay(
         &self,
         symbol: &str,
-        options: &ChartOptions,
+        options: ChartOptions,
         chart_session: &str,
         symbol_series_id: &str,
     ) -> Result<&Self> {
@@ -589,7 +589,7 @@ impl WebSocketClient {
             symbol_series_id,
             &options.symbol,
             options,
-            Some(replay_session.to_string()),
+            Some(&replay_session),
         )
         .await?;
 
@@ -598,7 +598,7 @@ impl WebSocketClient {
 
     pub async fn set_study(
         &self,
-        study: &StudyOptions,
+        study: StudyOptions,
         chart_session: &str,
         series_id: &str,
     ) -> Result<&Self> {
@@ -643,10 +643,10 @@ impl WebSocketClient {
         self.create_chart_session(&chart_session).await?;
 
         if options.replay_mode {
-            self.set_replay(&symbol, &options, &chart_session, &symbol_series_id)
+            self.set_replay(&symbol, options, &chart_session, &symbol_series_id)
                 .await?;
         } else {
-            self.resolve_symbol(&chart_session, &symbol_series_id, &symbol, &options, None)
+            self.resolve_symbol(&chart_session, &symbol_series_id, &symbol, options, None)
                 .await?;
         }
 
@@ -655,11 +655,11 @@ impl WebSocketClient {
             &series_id,
             &series_version,
             &symbol_series_id,
-            &options,
+            options,
         )
         .await?;
 
-        if let Some(study) = &options.study_config {
+        if let Some(study) = options.study_config {
             self.set_study(study, &chart_session, &series_id).await?;
         }
 

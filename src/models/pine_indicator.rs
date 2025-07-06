@@ -101,35 +101,35 @@ pub struct PineSearchExtra {
     pub is_mtf_resolution: Option<bool>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PineSearchAuthor {
     pub id: i64,
-    pub username: String,
+    pub username: Ustr,
     #[serde(rename = "is_broker")]
     pub is_broker: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub struct PineMetadata {
     #[serde(rename(deserialize = "IL"))]
-    pub il: String,
+    pub il: Ustr,
     #[serde(rename(deserialize = "ilTemplate"))]
-    pub il_template: String,
+    pub il_template: Ustr,
     #[serde(rename(deserialize = "metaInfo"))]
     pub data: PineMetadataInfo,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PineMetadataInfo {
-    pub id: String,
+    pub id: Ustr,
     #[serde(rename(deserialize = "scriptIdPart"))]
-    pub script_id: String,
-    pub description: String,
-    pub short_description: String,
+    pub script_id: Ustr,
+    pub description: Ustr,
+    pub short_description: Ustr,
     pub financial_period: Option<FinancialPeriod>,
-    pub grouping_key: String,
+    pub grouping_key: Ustr,
     pub is_fundamental_study: bool,
     pub is_hidden_study: bool,
     pub is_tv_script: bool,
@@ -145,7 +145,7 @@ pub struct PineMetadataInfo {
     pub warnings: Vec<Value>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Plot {
     pub id: String,
@@ -153,7 +153,7 @@ pub struct Plot {
     pub target: Option<String>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PineInput {
     pub name: String,
@@ -211,9 +211,10 @@ impl From<String> for ScriptType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PineIndicator {
-    pub script_id: String,
-    pub script_version: String,
+    pub script_id: Ustr,
+    pub script_version: Ustr,
     pub script_type: ScriptType,
     pub metadata: PineMetadata,
 }
@@ -239,8 +240,8 @@ impl PineIndicatorBuilder {
             None => get_indicator_metadata(None, script_id, script_version).await?,
         };
         Ok(PineIndicator {
-            script_id: script_id.to_string(),
-            script_version: script_version.to_string(),
+            script_id: Ustr::from(script_id),
+            script_version: Ustr::from(script_version),
             script_type,
             metadata,
         })

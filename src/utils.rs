@@ -19,6 +19,7 @@ use std::{
 };
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};
+use ustr::Ustr;
 use zip::ZipArchive;
 
 lazy_static::lazy_static! {
@@ -122,21 +123,21 @@ pub fn symbol_init(
     adjustment: Option<MarketAdjustment>,
     currency: Option<Currency>,
     session_type: Option<SessionType>,
-    replay: Option<String>,
+    replay: Option<&str>,
 ) -> Result<String> {
-    let mut symbol_init: HashMap<String, String> = HashMap::new();
+    let mut symbol_init: HashMap<Ustr, Ustr> = HashMap::new();
     if let Some(s) = replay {
-        symbol_init.insert("replay".to_string(), s);
+        symbol_init.insert(Ustr::from("replay"), Ustr::from(s));
     }
     if let Some(a) = adjustment {
-        symbol_init.insert("adjustment".to_string(), a.to_string());
+        symbol_init.insert(Ustr::from("adjustment"), Ustr::from(&a.to_string()));
     }
-    symbol_init.insert("symbol".to_string(), symbol.to_string());
+    symbol_init.insert(Ustr::from("symbol"), Ustr::from(symbol));
     if let Some(c) = currency {
-        symbol_init.insert("currency-id".to_string(), c.code().to_string());
+        symbol_init.insert(Ustr::from("currency-id"), Ustr::from(c.code()));
     }
     if let Some(s) = session_type {
-        symbol_init.insert("session".to_string(), s.to_string());
+        symbol_init.insert(Ustr::from("session"), Ustr::from(&s.to_string()));
     }
     let symbol_init_json = serde_json::to_value(&symbol_init)?;
     Ok(format!("={symbol_init_json}"))
@@ -212,7 +213,7 @@ mod tests {
             Some(MarketAdjustment::Dividends),
             Some(Currency::USD),
             Some(SessionType::Extended),
-            Some("aaaaaaaaaaaa".to_string()),
+            Some("aaaaaaaaaaaa"),
         );
         assert!(test2.is_ok());
         let test2_json: Value = serde_json::from_str(&test2.unwrap().replace('=', "")).unwrap();
