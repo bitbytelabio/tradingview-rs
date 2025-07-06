@@ -70,27 +70,17 @@ pub struct ChartDrawingSourceStatePoint {
     price: f64,
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct UserCookies {
-    #[cfg_attr(feature = "protobuf", prost(uint32, tag = "1"))]
     pub id: u32,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     pub username: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
     pub private_channel: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub auth_token: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(default)]
     pub session: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
     #[serde(default)]
     pub session_signature: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
     pub session_hash: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "8"))]
     #[serde(default)]
     pub device_token: String,
 }

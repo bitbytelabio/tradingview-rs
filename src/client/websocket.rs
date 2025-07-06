@@ -183,8 +183,8 @@ impl WebSocketClient {
         Ok(self)
     }
 
-    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<&mut Self> {
-        self.socket.update_auth_token(auth_token).await?;
+    pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<&mut Self> {
+        self.socket.set_auth_token(auth_token).await?;
         Ok(self)
     }
 

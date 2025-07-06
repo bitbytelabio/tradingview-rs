@@ -248,7 +248,7 @@ impl SocketSession {
         Ok(())
     }
 
-    pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
+    pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
         self.auth_token = Arc::new(auth_token.into());
         self.send("set_auth_token", &payload!(auth_token)).await?;
         Ok(())

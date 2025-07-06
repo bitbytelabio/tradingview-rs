@@ -85,14 +85,10 @@ pub struct GraphicDataResponse {
     pub indexes: Value,
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Debug, Default)]
 pub struct DataPoint {
-    #[cfg_attr(feature = "protobuf", prost(int64, tag = "1"))]
     #[serde(rename(deserialize = "i"))]
     pub index: i64,
-    #[cfg_attr(feature = "protobuf", prost(double, repeated, tag = "2"))]
     #[serde(rename(deserialize = "v"))]
     pub value: Vec<f64>,
 }
@@ -257,14 +253,10 @@ pub struct ChartDataChanges {
     pub zoffset: i64,
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, PartialEq, Serialize, Hash)]
+#[derive(Clone, PartialEq, Serialize, Hash, Debug, Default)]
 pub struct SeriesCompletedMessage {
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     #[serde(default)]
     pub id: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     #[serde(default)]
     pub update_mode: String,
 }
@@ -428,20 +420,13 @@ impl MarketSymbol for SymbolInfo {
     }
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, PartialEq, Serialize, Deserialize, Hash)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Hash, Debug, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Subsession {
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "1"))]
     pub id: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     pub description: String,
-    #[cfg_attr(feature = "protobuf", prost(bool, tag = "3"))]
     pub private: bool,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub session: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(rename(deserialize = "session-display"))]
     pub session_display: String,
 }

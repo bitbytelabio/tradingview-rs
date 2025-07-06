@@ -169,7 +169,7 @@ pub struct PineInput {
     pub input_type: String,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize, Copy)]
 pub enum ScriptType {
     #[default]
     Script,

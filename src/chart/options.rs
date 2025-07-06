@@ -4,7 +4,7 @@ use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use ustr::Ustr;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Builder)]
+#[derive(Debug, Clone, Deserialize, Serialize, Builder, Copy)]
 pub struct ChartOptions {
     #[builder(default)]
     pub symbol: Ustr,
@@ -21,7 +21,7 @@ pub struct ChartOptions {
     pub replay_mode: bool,
     #[builder(default = 0)]
     pub replay_from: i64,
-    pub replay_session: Option<String>,
+    pub replay_session: Option<Ustr>,
     pub adjustment: Option<MarketAdjustment>,
     pub currency: Option<Currency>,
     pub session_type: Option<SessionType>,
@@ -59,10 +59,10 @@ impl Into<Ustr> for Range {
     }
 }
 
-#[derive(Default, Debug, Clone, Deserialize, Serialize, Builder)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, Builder, Copy)]
 pub struct StudyOptions {
-    pub script_id: String,
-    pub script_version: String,
+    pub script_id: Ustr,
+    pub script_version: Ustr,
     pub script_type: ScriptType,
 }
 
@@ -118,7 +118,7 @@ impl ChartOptions {
     }
 
     pub fn replay_session_id(mut self, replay_session_id: &str) -> Self {
-        self.replay_session = Some(replay_session_id.to_string());
+        self.replay_session = Some(Ustr::from(replay_session_id));
         self
     }
 
@@ -160,8 +160,8 @@ impl ChartOptions {
         script_type: ScriptType,
     ) -> Self {
         self.study_config = Some(StudyOptions {
-            script_id: script_id.to_string(),
-            script_version: script_version.to_string(),
+            script_id: Ustr::from(script_id),
+            script_version: Ustr::from(script_version),
             script_type,
         });
         self

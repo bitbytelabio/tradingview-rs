@@ -16,7 +16,6 @@ path = "src/lib.rs"
 [features]
 default = ["user", "rustls-tls"]
 user = ["dep:google-authenticator"]
-protobuf = ["dep:prost"]
 native-tls = ["reqwest/native-tls", "tokio-tungstenite/native-tls"]
 rustls-tls = ["reqwest/rustls-tls", "tokio-tungstenite/rustls-tls-webpki-roots"]
 
@@ -46,7 +45,6 @@ iso_currency = { version = "0.5", features = ["with-serde"] }
 zip = "4"
 base64 = "0.22"
 google-authenticator = { version = "0.4", optional = true }
-prost = { version = "0.14", optional = true }
 bon = "3"
 dashmap = { version = "6.1.0", features = ["rayon", "serde", "inline"] }
 ustr = { version = "1.1.0", features = ["serde"] }
