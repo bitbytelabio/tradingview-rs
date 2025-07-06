@@ -13,17 +13,40 @@ use crate::{
     socket::{DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
     utils::{gen_id, gen_session_id, symbol_init},
 };
+use dashmap::DashMap;
+use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    sync::{
-        Arc,
-        atomic::{AtomicU16, Ordering},
-    },
+use std::sync::{
+    Arc, OnceLock,
+    atomic::{AtomicU16, Ordering},
 };
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, trace, warn};
+
+// Global object pool for reusing Vec<Value>
+static PAYLOAD_POOL: OnceLock<Mutex<Vec<Vec<Value>>>> = OnceLock::new();
+
+fn get_payload_pool() -> &'static Mutex<Vec<Vec<Value>>> {
+    PAYLOAD_POOL.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+async fn get_pooled_payload() -> Vec<Value> {
+    let mut pool = get_payload_pool().lock().await;
+    pool.pop().unwrap_or_else(|| Vec::with_capacity(8))
+}
+
+async fn return_pooled_payload(mut payload: Vec<Value>) {
+    payload.clear();
+    if payload.capacity() <= 32 {
+        // Prevent memory bloat
+        let mut pool = get_payload_pool().lock().await;
+        if pool.len() < 10 {
+            // Limit pool size
+            pool.push(payload);
+        }
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct WebSocketHandler {
@@ -31,17 +54,23 @@ pub struct WebSocketHandler {
     event_handler: TradingViewEventHandlers,
 }
 
-#[allow(clippy::type_complexity)]
 #[derive(Default, Clone)]
 struct Metadata {
     series_count: Arc<AtomicU16>,
-    series: Arc<RwLock<HashMap<String, SeriesInfo>>>,
     studies_count: Arc<AtomicU16>,
-    studies: Arc<RwLock<HashMap<String, String>>>,
-    quotes: Arc<RwLock<HashMap<String, QuoteValue>>>,
+    // Use DashMap for concurrent access without explicit locking
+    series: Arc<DashMap<String, SeriesInfo>>,
+    studies: Arc<DashMap<String, String>>,
+    quotes: Arc<DashMap<String, QuoteValue>>,
     quote_session: Arc<RwLock<String>>,
-    chart: Arc<RwLock<Option<(SeriesInfo, Vec<DataPoint>)>>>,
-    symbol_info: Arc<RwLock<Option<SymbolInfo>>>,
+    // Combined chart and symbol info to reduce locks
+    chart_state: Arc<RwLock<ChartState>>,
+}
+
+#[derive(Default, Clone)]
+struct ChartState {
+    chart: Option<(SeriesInfo, Vec<DataPoint>)>,
+    symbol_info: Option<SymbolInfo>,
 }
 
 #[derive(Clone)]
@@ -108,6 +137,25 @@ impl WebSocketClient {
         self.socket.is_closed().await
     }
 
+    pub async fn send_batch(&self, messages: Vec<(&str, &Vec<Value>)>) -> Result<&Self> {
+        for (method, payload) in messages {
+            self.socket.send(method, payload).await?;
+        }
+        Ok(self)
+    }
+
+    pub async fn add_symbols(&self, symbols: &[&str]) -> Result<&Self> {
+        let quote_session = self.handler.metadata.quote_session.read().await;
+        let mut payloads = get_pooled_payload().await;
+        payloads.push(Value::from(quote_session.as_str()));
+        payloads.extend(symbols.iter().map(|&s| Value::from(s)));
+
+        let result = self.socket.send("quote_add_symbols", &payloads).await;
+        return_pooled_payload(payloads).await;
+        result?;
+        Ok(self)
+    }
+
     // Begin TradingView WebSocket Quote methods
     pub async fn create_quote_session(&self) -> Result<&Self> {
         let mut quote_session = self.handler.metadata.quote_session.write().await;
@@ -128,17 +176,13 @@ impl WebSocketClient {
 
     pub async fn set_fields(&self) -> Result<&Self> {
         let quote_session = self.handler.metadata.quote_session.read().await;
-        let mut quote_fields = payload![quote_session.to_string()];
+        let mut quote_fields = get_pooled_payload().await;
+        quote_fields.push(Value::from(quote_session.to_string()));
         quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
-        self.socket.send("quote_set_fields", &quote_fields).await?;
-        Ok(self)
-    }
 
-    pub async fn add_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let quote_session = self.handler.metadata.quote_session.read().await;
-        let mut payloads = payload![quote_session.to_string()];
-        payloads.extend(symbols.into_iter().map(Value::from));
-        self.socket.send("quote_add_symbols", &payloads).await?;
+        let result = self.socket.send("quote_set_fields", &quote_fields).await;
+        return_pooled_payload(quote_fields).await;
+        result?;
         Ok(self)
     }
 
@@ -149,17 +193,25 @@ impl WebSocketClient {
 
     pub async fn fast_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
         let quote_session = self.handler.metadata.quote_session.read().await;
-        let mut payloads = payload![quote_session.to_string()];
+        let mut payloads = get_pooled_payload().await;
+        payloads.push(Value::from(quote_session.to_string()));
         payloads.extend(symbols.into_iter().map(Value::from));
-        self.socket.send("quote_fast_symbols", &payloads).await?;
+
+        let result = self.socket.send("quote_fast_symbols", &payloads).await;
+        return_pooled_payload(payloads).await;
+        result?;
         Ok(self)
     }
 
     pub async fn remove_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
         let quote_session = self.handler.metadata.quote_session.read().await;
-        let mut payloads = payload![quote_session.to_string()];
+        let mut payloads = get_pooled_payload().await;
+        payloads.push(Value::from(quote_session.to_string()));
         payloads.extend(symbols.into_iter().map(Value::from));
-        self.socket.send("quote_remove_symbols", &payloads).await?;
+
+        let result = self.socket.send("quote_remove_symbols", &payloads).await;
+        return_pooled_payload(payloads).await;
+        result?;
         Ok(self)
     }
     // End TradingView WebSocket Quote methods
@@ -317,15 +369,19 @@ impl WebSocketClient {
         indicator: PineIndicator,
     ) -> Result<&Self> {
         let inputs = indicator.to_study_inputs()?;
-        let payloads: Vec<Value> = vec![
+        let mut payloads = get_pooled_payload().await;
+        payloads.extend([
             Value::from(session),
             Value::from(study_id),
             Value::from("st1"),
             Value::from(series_id),
             Value::from(indicator.script_type.to_string()),
             inputs,
-        ];
-        self.socket.send("create_study", &payloads).await?;
+        ]);
+
+        let result = self.socket.send("create_study", &payloads).await;
+        return_pooled_payload(payloads).await;
+        result?;
         Ok(self)
     }
 
@@ -337,18 +393,21 @@ impl WebSocketClient {
         indicator: PineIndicator,
     ) -> Result<&Self> {
         let inputs = indicator.to_study_inputs()?;
-        let payloads: Vec<Value> = vec![
+        let mut payloads = get_pooled_payload().await;
+        payloads.extend([
             Value::from(session),
             Value::from(study_id),
             Value::from("st1"),
             Value::from(series_id),
             Value::from(indicator.script_type.to_string()),
             inputs,
-        ];
-        self.socket.send("modify_study", &payloads).await?;
+        ]);
+
+        let result = self.socket.send("modify_study", &payloads).await;
+        return_pooled_payload(payloads).await;
+        result?;
         Ok(self)
     }
-
     pub async fn remove_study(&self, session: &str, study_id: &str) -> Result<&Self> {
         self.socket
             .send("remove_study", &payload!(session, study_id))
@@ -369,20 +428,21 @@ impl WebSocketClient {
             (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
             _ => String::default(),
         };
-        self.socket
-            .send(
-                "create_series",
-                &payload!(
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config.interval.to_string(),
-                    config.bar_count,
-                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
-                ),
-            )
-            .await?;
+
+        let mut payloads = get_pooled_payload().await;
+        payloads.extend([
+            Value::from(session),
+            Value::from(series_id),
+            Value::from(series_version),
+            Value::from(series_symbol_id),
+            Value::from(config.interval.to_string()),
+            Value::from(config.bar_count),
+            Value::from(range),
+        ]);
+
+        let result = self.socket.send("create_series", &payloads).await;
+        return_pooled_payload(payloads).await;
+        result?;
         Ok(self)
     }
 
@@ -399,20 +459,21 @@ impl WebSocketClient {
             (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
             _ => String::default(),
         };
-        self.socket
-            .send(
-                "modify_series",
-                &payload!(
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config.interval.to_string(),
-                    config.bar_count,
-                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
-                ),
-            )
-            .await?;
+
+        let mut payloads = get_pooled_payload().await;
+        payloads.extend([
+            Value::from(session),
+            Value::from(series_id),
+            Value::from(series_version),
+            Value::from(series_symbol_id),
+            Value::from(config.interval.to_string()),
+            Value::from(config.bar_count),
+            Value::from(range),
+        ]);
+
+        let result = self.socket.send("modify_series", &payloads).await;
+        return_pooled_payload(payloads).await;
+        result?;
         Ok(self)
     }
 
@@ -451,11 +512,61 @@ impl WebSocketClient {
     }
 
     pub async fn delete(&self) -> Result<&Self> {
-        for (_, s) in self.handler.metadata.series.read().await.clone() {
-            debug!("delete series: {:?}", s);
-            self.delete_chart_session_id(&s.chart_session).await?;
+        // Collect all sessions first to avoid holding iterator while making async calls
+        let chart_sessions: Vec<String> = self
+            .handler
+            .metadata
+            .series
+            .iter()
+            .map(|entry| entry.value().chart_session.clone())
+            .collect();
+
+        // Delete quote session first
+        if let Err(e) = self.delete_quote_session().await {
+            warn!("Failed to delete quote session: {:?}", e);
         }
-        self.socket.close().await?;
+
+        // Delete all chart sessions in parallel for better performance
+        let delete_futures: Vec<_> = chart_sessions
+            .iter()
+            .map(|session| self.delete_chart_session_id(session))
+            .collect();
+
+        // Execute all deletions concurrently
+        let results = join_all(delete_futures).await;
+
+        // Log any errors but don't fail the entire operation
+        for (i, result) in results.into_iter().enumerate() {
+            if let Err(e) = result {
+                warn!(
+                    "Failed to delete chart session {}: {:?}",
+                    chart_sessions[i], e
+                );
+            }
+        }
+
+        // Clear all metadata
+        self.handler.metadata.series.clear();
+        self.handler.metadata.studies.clear();
+        self.handler.metadata.quotes.clear();
+
+        // Reset counters
+        self.handler
+            .metadata
+            .series_count
+            .store(0, Ordering::SeqCst);
+        self.handler
+            .metadata
+            .studies_count
+            .store(0, Ordering::SeqCst);
+
+        // Close the socket last
+        if let Err(e) = self.socket.close().await {
+            error!("Failed to close socket: {:?}", e);
+            return Err(e);
+        }
+
+        debug!("WebSocket client deleted successfully");
         Ok(self)
     }
 
@@ -514,8 +625,6 @@ impl WebSocketClient {
         self.handler
             .metadata
             .studies
-            .write()
-            .await
             .insert(indicator.metadata.data.id.clone(), study_id.clone());
 
         self.create_study(chart_session, &study_id, series_id, indicator)
@@ -563,12 +672,7 @@ impl WebSocketClient {
             options,
         };
 
-        self.handler
-            .metadata
-            .series
-            .write()
-            .await
-            .insert(series_id, series_info);
+        self.handler.metadata.series.insert(series_id, series_info);
 
         Ok(self)
     }
@@ -601,45 +705,31 @@ impl WebSocketHandler {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 trace!("received raw chart data: {:?}", message);
-                match self
-                    .handle_chart_data(
-                        &self.metadata.series.read().await.clone(),
-                        &self.metadata.studies.read().await.clone(),
-                        message,
-                    )
-                    .await
-                {
-                    Ok(_) => (),
-                    Err(e) => {
-                        error!("chart data parsing error: {:?}", e);
-                        (self.event_handler.on_error)((e, message.to_owned()));
-                    }
-                };
+                // Avoid cloning the entire HashMap
+                if let Err(e) = self.handle_chart_data(message).await {
+                    error!("chart data parsing error: {:?}", e);
+                    (self.event_handler.on_error)((e, message.to_owned()));
+                }
             }
             TradingViewDataEvent::OnQuoteData => self.handle_quote_data(message).await,
             TradingViewDataEvent::OnSymbolResolved => {
-                match SymbolInfo::deserialize(&message[2]) {
-                    Ok(s) => {
-                        debug!("receive symbol info: {:?}", s);
-                        self.metadata.symbol_info.write().await.replace(s.clone());
-                        let info = self
-                            .metadata
-                            .symbol_info
-                            .read()
-                            .await
-                            .clone()
-                            .unwrap_or_default();
-
-                        (self.event_handler.on_symbol_info)(info);
+                if message.len() > 2 {
+                    match SymbolInfo::deserialize(&message[2]) {
+                        Ok(s) => {
+                            debug!("receive symbol info: {:?}", s);
+                            let mut chart_state = self.metadata.chart_state.write().await;
+                            chart_state.symbol_info.replace(s.clone());
+                            (self.event_handler.on_symbol_info)(s);
+                        }
+                        Err(e) => {
+                            error!("symbol resolved parsing error: {:?}", e);
+                            (self.event_handler.on_error)((
+                                Error::JsonParseError(e),
+                                message.to_owned(),
+                            ));
+                        }
                     }
-                    Err(e) => {
-                        error!("symbol resolved parsing error: {:?}", e);
-                        (self.event_handler.on_error)((
-                            Error::JsonParseError(e),
-                            message.to_owned(),
-                        ));
-                    }
-                };
+                }
             }
             TradingViewDataEvent::OnSeriesCompleted => {
                 debug!("series completed: {:?}", message);
@@ -695,51 +785,10 @@ impl WebSocketHandler {
         }
     }
 
-    async fn handle_chart_data(
-        &self,
-        series: &HashMap<String, SeriesInfo>,
-        studies: &HashMap<String, String>,
-        message: &[Value],
-    ) -> Result<()> {
-        for (id, s) in series.iter() {
-            trace!("received raw message - v: {:?}, m: {:?}", s, message);
-            match message[1].get(id.as_str()) {
-                Some(resp_data) => {
-                    let data = ChartResponseData::deserialize(resp_data)?.series;
-                    self.metadata
-                        .chart
-                        .write()
-                        .await
-                        .replace((s.clone(), data.clone()));
-                    trace!(
-                        "series data extracted: {:?}",
-                        self.metadata.chart.read().await
-                    );
-                    (self.event_handler.on_chart_data)(
-                        self.metadata.chart.read().await.clone().unwrap_or_default(),
-                    );
-                }
-                None => {
-                    debug!("receive empty data on series: {:?}", s);
-                }
-            }
-
-            if let Some(study_options) = &s.options.study_config {
-                self.handle_study_data(study_options, studies, message)
-                    .await?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn handle_study_data(
-        &self,
-        options: &StudyOptions,
-        studies: &HashMap<String, String>,
-        message: &[Value],
-    ) -> Result<()> {
-        for (k, v) in studies.iter() {
-            if let Some(resp_data) = message[1].get(v.as_str()) {
+    async fn handle_study_data(&self, options: &StudyOptions, message_data: &Value) -> Result<()> {
+        for study_entry in self.metadata.studies.iter() {
+            let (k, v) = study_entry.pair();
+            if let Some(resp_data) = message_data.get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
                 let data = StudyResponseData::deserialize(resp_data)?;
                 (self.event_handler.on_study_data)((options.clone(), data));
@@ -748,23 +797,79 @@ impl WebSocketHandler {
         Ok(())
     }
 
-    async fn handle_quote_data(&self, message: &[Value]) {
-        debug!("received raw quote data: {:?}", message);
-        let qsd = QuoteData::deserialize(&message[1]).unwrap_or_default();
-        if qsd.status == "ok" {
-            if let Some(prev_quote) = self.metadata.quotes.write().await.get_mut(&qsd.name) {
-                *prev_quote = merge_quotes(prev_quote, &qsd.value);
-            } else {
-                self.metadata
-                    .quotes
-                    .write()
-                    .await
-                    .insert(qsd.name, qsd.value);
-            }
+    async fn handle_chart_data(&self, message: &[Value]) -> Result<()> {
+        if message.len() < 2 {
+            return Ok(());
+        }
 
-            for q in self.metadata.quotes.read().await.values() {
-                debug!("quote data: {:?}", q);
-                (self.event_handler.on_quote_data)(q.to_owned());
+        let message_data = &message[1];
+
+        // Process each series without cloning the entire series map
+        for series_entry in self.metadata.series.iter() {
+            let (id, series_info) = series_entry.pair();
+
+            if let Some(resp_data) = message_data.get(id.as_str()) {
+                let data = ChartResponseData::deserialize(resp_data)?.series;
+
+                // Update chart state
+                {
+                    let mut chart_state = self.metadata.chart_state.write().await;
+                    chart_state
+                        .chart
+                        .replace((series_info.clone(), data.clone()));
+                }
+
+                // Read once for callback
+                let chart_data = self
+                    .metadata
+                    .chart_state
+                    .read()
+                    .await
+                    .chart
+                    .clone()
+                    .unwrap_or_default();
+                (self.event_handler.on_chart_data)(chart_data);
+
+                // Handle study data if present
+                if let Some(study_options) = &series_info.options.study_config {
+                    self.handle_study_data(study_options, message_data).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_quote_data(&self, message: &[Value]) {
+        if message.len() < 2 {
+            return;
+        }
+
+        debug!("received raw quote data: {:?}", message);
+        let qsd = match QuoteData::deserialize(&message[1]) {
+            Ok(data) => data,
+            Err(_) => return,
+        };
+
+        if qsd.status == "ok" {
+            // Use DashMap's efficient upsert
+            self.metadata
+                .quotes
+                .entry(qsd.name)
+                .and_modify(|prev_quote| {
+                    *prev_quote = merge_quotes(prev_quote, &qsd.value);
+                })
+                .or_insert(qsd.value);
+
+            // Collect quotes once to avoid multiple read locks
+            let quotes: Vec<QuoteValue> = self
+                .metadata
+                .quotes
+                .iter()
+                .map(|entry| entry.value().clone())
+                .collect();
+            for quote in quotes {
+                (self.event_handler.on_quote_data)(quote);
             }
         } else {
             error!("quote data status error: {:?}", qsd);

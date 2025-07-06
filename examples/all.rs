@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
         .await?
         .set_fields()
         .await?
-        .add_symbols(vec![
+        .add_symbols(&vec![
             "SP:SPX",
             "BINANCE:BTCUSDT",
             "BINANCE:ETHUSDT",
