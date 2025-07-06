@@ -1,3 +1,5 @@
+// TODO: Implement a more robust error handling strategy
+
 use crate::{
     Error,
     chart::{
@@ -36,7 +38,7 @@ macro_rules! event_setter {
 }
 
 #[derive(Clone, Builder)]
-pub struct TradingViewEventHandlers {
+pub struct TradingViewHandlers {
     #[builder(default= default_callback::<SymbolInfo>("ON_SYMBOL_INFO"))]
     pub on_symbol_info: Arc<CallbackFn<SymbolInfo>>,
 
@@ -86,13 +88,13 @@ pub struct TradingViewEventHandlers {
     pub on_unknown_event: Arc<CallbackFn<(String, Vec<Value>)>>,
 }
 
-impl Default for TradingViewEventHandlers {
+impl Default for TradingViewHandlers {
     fn default() -> Self {
-        TradingViewEventHandlers::builder().build()
+        TradingViewHandlers::builder().build()
     }
 }
 
-impl TradingViewEventHandlers {
+impl TradingViewHandlers {
     event_setter!(on_chart_data, (SeriesInfo, Vec<DataPoint>));
     event_setter!(on_quote_data, QuoteValue);
     event_setter!(on_study_data, (StudyOptions, StudyResponseData));

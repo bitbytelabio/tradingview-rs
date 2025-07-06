@@ -2,7 +2,7 @@ use crate::{
     DataPoint, Error, Interval, Result, Timezone,
     chart::{ChartOptions, ChartResponseData, StudyOptions, StudyResponseData, SymbolInfo},
     error::TradingViewError,
-    handler::event::TradingViewEventHandlers,
+    handler::event::TradingViewHandlers,
     payload,
     pine_indicator::PineIndicator,
     quote::{
@@ -52,7 +52,8 @@ async fn return_pooled_payload(mut payload: Vec<Value>) {
 #[derive(Clone, Default)]
 pub struct WebSocketHandler {
     metadata: Metadata,
-    event_handler: TradingViewEventHandlers,
+    handler: TradingViewHandlers,
+    socket_session: Option<SocketSession>,
 }
 
 #[derive(Default, Clone)]
@@ -123,11 +124,9 @@ impl WebSocketClient {
         WebSocketBuilder::default()
     }
 
-    pub fn new_with_session(client: WebSocketHandler, socket: SocketSession) -> Self {
-        Self {
-            handler: client,
-            socket,
-        }
+    pub fn new_with_session(mut handler: WebSocketHandler, socket: SocketSession) -> Self {
+        handler.socket_session = Some(socket.clone());
+        Self { handler, socket }
     }
 
     pub async fn is_closed(&self) -> bool {
@@ -692,7 +691,7 @@ impl Socket for WebSocketClient {
     }
 
     async fn handle_error(&self, error: Error) {
-        (self.handler.event_handler.on_error)((error, vec![]));
+        (self.handler.handler.on_error)((error, vec![]));
     }
 }
 
@@ -704,7 +703,7 @@ impl WebSocketHandler {
                 // Avoid cloning the entire HashMap
                 if let Err(e) = self.handle_chart_data(message).await {
                     error!("chart data parsing error: {:?}", e);
-                    (self.event_handler.on_error)((e, message.to_owned()));
+                    (self.handler.on_error)((e, message.to_owned()));
                 }
             }
             TradingViewDataEvent::OnQuoteData => self.handle_quote_data(message).await,
@@ -715,12 +714,12 @@ impl WebSocketHandler {
                             debug!("receive symbol info: {:?}", s);
                             let mut chart_state = self.metadata.chart_state.write().await;
                             chart_state.symbol_info.replace(s.clone());
-                            (self.event_handler.on_symbol_info)(s);
+                            (self.handler.on_symbol_info)(s);
                         }
                         Err(e) => {
                             error!("symbol resolved parsing error: {:?}", e);
-                            (self.event_handler.on_error)((
-                                Error::JsonParseError(e),
+                            (self.handler.on_error)((
+                                Error::JsonParse(Ustr::from(&e.to_string())),
                                 message.to_owned(),
                             ));
                         }
@@ -729,54 +728,56 @@ impl WebSocketHandler {
             }
             TradingViewDataEvent::OnSeriesCompleted => {
                 debug!("series completed: {:?}", message);
-                (self.event_handler.on_series_completed)(message.to_owned());
+                (self.handler.on_series_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnSeriesLoading => {
                 debug!("series loading: {:?}", message);
-                (self.event_handler.on_series_loading)(message.to_owned());
+                (self.handler.on_series_loading)(message.to_owned());
             }
             TradingViewDataEvent::OnQuoteCompleted => {
                 debug!("quote completed: {:?}", message);
-                (self.event_handler.on_quote_completed)(message.to_owned());
+                (self.handler.on_quote_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayOk => {
                 debug!("replay ok: {:?}", message);
-                (self.event_handler.on_replay_ok)(message.to_owned());
+                (self.handler.on_replay_ok)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayPoint => {
                 debug!("replay point: {:?}", message);
-                (self.event_handler.on_replay_point)(message.to_owned());
+                (self.handler.on_replay_point)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayInstanceId => {
                 debug!("replay instance id: {:?}", message);
-                (self.event_handler.on_replay_instance_id)(message.to_owned());
+                (self.handler.on_replay_instance_id)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayResolutions => {
                 debug!("replay resolutions: {:?}", message);
-                (self.event_handler.on_replay_resolutions)(message.to_owned());
+                (self.handler.on_replay_resolutions)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayDataEnd => {
                 debug!("replay data end: {:?}", message);
-                (self.event_handler.on_replay_data_end)(message.to_owned());
+                (self.handler.on_replay_data_end)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyLoading => {
                 debug!("study loading: {:?}", message);
-                (self.event_handler.on_study_loading)(message.to_owned());
+                (self.handler.on_study_loading)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyCompleted => {
                 debug!("study completed: {:?}", message);
-                (self.event_handler.on_study_completed)(message.to_owned());
+                (self.handler.on_study_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnError(tradingview_error) => {
                 error!("trading view error: {:?}", tradingview_error);
-                (self.event_handler.on_error)((
-                    Error::TradingViewError(tradingview_error),
+                (self.handler.on_error)((
+                    Error::TradingView {
+                        source: tradingview_error,
+                    },
                     message.to_owned(),
                 ));
             }
             TradingViewDataEvent::UnknownEvent(event) => {
                 warn!("unknown event: {:?}", event);
-                (self.event_handler.on_unknown_event)((event, message.to_owned()));
+                (self.handler.on_unknown_event)((event, message.to_owned()));
             }
         }
     }
@@ -787,7 +788,7 @@ impl WebSocketHandler {
             if let Some(resp_data) = message_data.get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
                 let data = StudyResponseData::deserialize(resp_data)?;
-                (self.event_handler.on_study_data)((options.clone(), data));
+                (self.handler.on_study_data)((options.clone(), data));
             }
         }
         Ok(())
@@ -824,7 +825,7 @@ impl WebSocketHandler {
                     .chart
                     .clone()
                     .unwrap_or_default();
-                (self.event_handler.on_chart_data)(chart_data);
+                (self.handler.on_chart_data)(chart_data);
 
                 // Handle study data if present
                 if let Some(study_options) = &series_info.options.study_config {
@@ -865,19 +866,21 @@ impl WebSocketHandler {
                 .map(|entry| entry.value().clone())
                 .collect();
             for quote in quotes {
-                (self.event_handler.on_quote_data)(quote);
+                (self.handler.on_quote_data)(quote);
             }
         } else {
             error!("quote data status error: {:?}", qsd);
-            (self.event_handler.on_error)((
-                Error::TradingViewError(TradingViewError::QuoteDataStatusError),
+            (self.handler.on_error)((
+                Error::TradingView {
+                    source: TradingViewError::QuoteDataStatusError(Ustr::from(&qsd.status)),
+                },
                 message.to_owned(),
             ));
         }
     }
 
-    pub fn set_callbacks(mut self, callbacks: TradingViewEventHandlers) -> Self {
-        self.event_handler = callbacks;
+    pub fn set_callbacks(mut self, callbacks: TradingViewHandlers) -> Self {
+        self.handler = callbacks;
         self
     }
 }

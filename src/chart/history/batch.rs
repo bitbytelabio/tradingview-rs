@@ -1,5 +1,5 @@
 use crate::{
-    handler::event::TradingViewEventHandlers, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocketClient, WebSocketHandler}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
+    handler::event::TradingViewHandlers, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocketClient, WebSocketHandler}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
 };
 use bon::builder;
 use dashmap::DashMap;
@@ -105,8 +105,8 @@ fn create_callbacks(
     info_tx: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
     tracker: BatchTracker,
     data_map: Arc<DashMap<Ustr, bool>>, // Track which series received data
-) -> TradingViewEventHandlers {
-    TradingViewEventHandlers::default()
+) -> TradingViewHandlers {
+    TradingViewHandlers::default()
         .on_chart_data({
             let tracker = tracker.clone();
             let data_map = Arc::clone(&data_map);
@@ -251,7 +251,7 @@ fn extract_series_id(msg: &[Value]) -> Option<Ustr> {
 async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: TradingViewEventHandlers,
+    callbacks: TradingViewHandlers,
     symbols: &[impl MarketSymbol],
     interval: Interval,
     batch_size: usize,
@@ -312,7 +312,7 @@ pub async fn retrieve(
     #[builder(default = 40)] batch_size: usize,
 ) -> Result<HashMap<String, (SymbolInfo, Interval, Vec<DataPoint>)>> {
     if symbols.is_empty() {
-        return Err(Error::Generic("No symbols provided".to_string()));
+        return Err(Error::Generic(Ustr::from("No symbols provided for batch retrieval")));
     }
 
     let auth_token = resolve_auth_token(auth_token)?;
@@ -412,7 +412,9 @@ pub async fn retrieve(
         }
         Err(_) => {
             tracing::error!("Timed out after {} seconds", timeout_duration.as_secs());
-            return Err(Error::TimeoutError("Batch operation timed out".to_string()));
+            return Err(Error::Timeout(
+                Ustr::from("Batch retrieval timed out after 5 minutes")
+            ));
         }
     }
 

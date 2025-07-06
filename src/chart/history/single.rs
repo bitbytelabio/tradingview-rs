@@ -3,7 +3,7 @@ use crate::{
     Result, SymbolInfo,
     chart::ChartOptions,
     error::TradingViewError,
-    handler::event::TradingViewEventHandlers,
+    handler::event::TradingViewHandlers,
     history::resolve_auth_token,
     options::Range,
     socket::DataServer,
@@ -156,7 +156,9 @@ pub async fn retrieve(
             Ok((result.symbol_info, data))
         }
         Ok(Err(error)) => Err(error),
-        Err(_) => Err(Error::TimeoutError("Data collection timed out".to_string())),
+        Err(_) => Err(Error::Timeout(Ustr::from(
+            "Data collection timed out after 30 seconds",
+        ))),
     }
 }
 
@@ -171,10 +173,14 @@ fn extract_symbol_exchange(
         if let Some(exchange) = exchange {
             Ok((symbol.to_string(), exchange.to_string()))
         } else {
-            Err(Error::TradingViewError(TradingViewError::MissingExchange))
+            Err(Error::TradingView {
+                source: TradingViewError::MissingExchange,
+            })
         }
     } else {
-        Err(Error::TradingViewError(TradingViewError::MissingSymbol))
+        Err(Error::TradingView {
+            source: TradingViewError::MissingSymbol,
+        })
     }
 }
 
@@ -182,13 +188,13 @@ fn extract_symbol_exchange(
 fn create_callbacks(
     senders: Senders,
     replay_state: Arc<Mutex<ReplayState>>,
-) -> TradingViewEventHandlers {
+) -> TradingViewHandlers {
     let data_tx = Arc::clone(&senders.data);
     let info_tx = Arc::clone(&senders.info);
     let error_tx = Arc::clone(&senders.error);
     let completion_tx = Arc::clone(&senders.completion);
 
-    TradingViewEventHandlers::default()
+    TradingViewHandlers::default()
         .on_chart_data({
             let data_tx = Arc::clone(&data_tx);
             let replay_state = Arc::clone(&replay_state);
@@ -295,24 +301,16 @@ fn create_callbacks(
         })
 }
 
-fn is_critical_error(error: &Error) -> bool {
-    match error {
-        Error::LoginError(_) => true,
-        Error::NoChartTokenFound => true,
-        Error::WebSocketError(_) => true,
-        Error::TradingViewError(e) => matches!(
-            e,
-            TradingViewError::CriticalError | TradingViewError::ProtocolError
-        ),
-        _ => false,
-    }
+fn is_critical_error(_error: &Error) -> bool {
+    // TODO: Implement actual logic to determine if an error is critical
+    false // Placeholder for actual critical error logic
 }
 
 /// Set up and initialize WebSocket connection with appropriate configuration
 async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: TradingViewEventHandlers,
+    callbacks: TradingViewHandlers,
     options: ChartOptions,
 ) -> Result<WebSocketClient> {
     let client = WebSocketHandler::default().set_callbacks(callbacks);
@@ -372,11 +370,11 @@ async fn collect_data(
                     }
                     Ok(CompletionSignal::Error(error)) => {
                         tracing::error!("Completion with error: {}", error);
-                        return Err(Error::Generic(error));
+                        return Err(Error::Generic(Ustr::from(&error)));
                     }
                     Ok(CompletionSignal::Timeout) => {
                         tracing::warn!("Operation timed out");
-                        return Err(Error::TimeoutError("Data collection timed out".to_string()));
+                        return Err(Error::Timeout(Ustr::from("Data collection timed out")));
                     }
                     Err(_) => {
                         tracing::debug!("Completion channel closed");

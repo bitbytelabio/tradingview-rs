@@ -315,7 +315,8 @@ pub trait Socket {
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
                     session.is_closed.store(true, Ordering::Relaxed);
-                    self.handle_error(Error::WebSocketError(Box::new(e))).await;
+                    self.handle_error(Error::WebSocket(e.to_string().into()))
+                        .await;
                     break;
                 }
                 None => {

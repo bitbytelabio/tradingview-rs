@@ -5,7 +5,7 @@ use tradingview::{
     Interval,
     chart::ChartOptions,
     get_builtin_indicators,
-    handler::event::TradingViewEventHandlers,
+    handler::event::TradingViewHandlers,
     pine_indicator::{BuiltinIndicators, ScriptType},
     socket::DataServer,
     websocket::{WebSocketClient, WebSocketHandler},
@@ -22,8 +22,8 @@ async fn main() -> anyhow::Result<()> {
     let study_callback = |data| {
         println!("{data:#?}");
     };
-    let callbacks: TradingViewEventHandlers =
-        TradingViewEventHandlers::default().on_study_data(study_callback);
+    let callbacks: TradingViewHandlers =
+        TradingViewHandlers::default().on_study_data(study_callback);
 
     let client = WebSocketHandler::default().set_callbacks(callbacks);
 

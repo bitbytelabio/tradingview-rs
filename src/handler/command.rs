@@ -130,3 +130,8 @@ pub enum TradingViewCommand {
         options: ChartOptions,
     },
 }
+
+#[derive(Clone)]
+pub struct TradingViewCommandHandler {
+    pub command_tx: CommandTx,
+}

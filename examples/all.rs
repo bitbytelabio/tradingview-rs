@@ -4,7 +4,7 @@ use std::env;
 use tradingview::{
     Interval, QuoteValue,
     chart::ChartOptions,
-    handler::event::TradingViewEventHandlers,
+    handler::event::TradingViewHandlers,
     pine_indicator::ScriptType,
     socket::DataServer,
     websocket::{WebSocketClient, WebSocketHandler},
@@ -20,8 +20,8 @@ async fn main() -> anyhow::Result<()> {
         println!("{data:#?}");
     };
 
-    let callbacks: TradingViewEventHandlers =
-        TradingViewEventHandlers::default().on_quote_data(quote_callback);
+    let callbacks: TradingViewHandlers =
+        TradingViewHandlers::default().on_quote_data(quote_callback);
 
     let client = WebSocketHandler::default().set_callbacks(callbacks);
 
