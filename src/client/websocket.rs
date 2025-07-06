@@ -81,13 +81,13 @@ pub struct WebSocketClient {
 #[derive(Default)]
 pub struct WebSocketBuilder {
     client: Option<WebSocketHandler>,
-    auth_token: Option<String>,
+    auth_token: Option<Ustr>,
     server: Option<DataServer>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SeriesInfo {
-    pub chart_session: String,
+    pub chart_session: Ustr,
     pub options: ChartOptions,
 }
 
@@ -98,7 +98,7 @@ impl WebSocketBuilder {
     }
 
     pub fn auth_token(mut self, auth_token: &str) -> Self {
-        self.auth_token = Some(auth_token.to_string());
+        self.auth_token = Some(Ustr::from(auth_token));
         self
     }
 
@@ -108,9 +108,7 @@ impl WebSocketBuilder {
     }
 
     pub async fn build(self) -> Result<WebSocketClient> {
-        let auth_token = self
-            .auth_token
-            .unwrap_or("unauthorized_user_token".to_string());
+        let auth_token = self.auth_token.unwrap_or("unauthorized_user_token".into());
         let server = self.server.unwrap_or_default();
 
         let socket = SocketSession::new(server, auth_token).await?;
@@ -512,7 +510,7 @@ impl WebSocketClient {
 
     pub async fn delete(&self) -> Result<&Self> {
         // Collect all sessions first to avoid holding iterator while making async calls
-        let chart_sessions: Vec<String> = self
+        let chart_sessions: Vec<Ustr> = self
             .handler
             .metadata
             .series
@@ -640,7 +638,7 @@ impl WebSocketClient {
         let symbol_series_id = format!("sds_sym_{series_count}");
         let series_id = Ustr::from(&format!("sds_{series_count}"));
         let series_version = format!("s{series_count}");
-        let chart_session = gen_session_id("cs");
+        let chart_session = Ustr::from(&gen_session_id("cs"));
         let symbol = format!("{}:{}", options.exchange, options.symbol);
         self.create_chart_session(&chart_session).await?;
 

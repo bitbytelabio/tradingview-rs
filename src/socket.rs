@@ -26,6 +26,7 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
+use ustr::Ustr;
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -169,7 +170,7 @@ impl std::fmt::Display for DataServer {
 #[derive(Clone)]
 pub struct SocketSession {
     server: Arc<DataServer>,
-    auth_token: Arc<String>,
+    auth_token: Arc<Ustr>,
     is_closed: Arc<AtomicBool>,
     read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
@@ -248,12 +249,12 @@ impl SocketSession {
     }
 
     pub async fn update_auth_token(&mut self, auth_token: &str) -> Result<()> {
-        self.auth_token = Arc::new(auth_token.to_string());
+        self.auth_token = Arc::new(auth_token.into());
         self.send("set_auth_token", &payload!(auth_token)).await?;
         Ok(())
     }
 
-    pub async fn new(server: DataServer, auth_token: String) -> Result<SocketSession> {
+    pub async fn new(server: DataServer, auth_token: Ustr) -> Result<SocketSession> {
         let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
 
         let write = Arc::from(RwLock::new(write_stream));

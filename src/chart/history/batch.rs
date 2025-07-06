@@ -2,7 +2,9 @@ use crate::{
     handler::event::TradingViewEventHandlers, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocketClient, WebSocketHandler}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
 };
 use bon::builder;
+use dashmap::DashMap;
 use serde_json::Value;
+use ustr::Ustr;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
     spawn,
@@ -102,7 +104,7 @@ fn create_callbacks(
     done_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     info_tx: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
     tracker: BatchTracker,
-    data_map: Arc<Mutex<HashMap<String, bool>>>, // Track which series received data
+    data_map: Arc<DashMap<Ustr, bool>>, // Track which series received data
 ) -> TradingViewEventHandlers {
     TradingViewEventHandlers::default()
         .on_chart_data({
@@ -115,16 +117,15 @@ fn create_callbacks(
                 
                 spawn(async move {
                     let symbol = format!("{}:{}", info.options.exchange, info.options.symbol);
-                    let series_id = &info.chart_session.clone();
+                    let series_id = info.chart_session;
                     
                     // Register series to symbol mapping
-                    tracker.register_series(series_id, &symbol).await;
+                    tracker.register_series(&series_id, &symbol).await;
                     
                     // Track data received
-                    {
-                        let mut map = data_map.lock().await;
-                        map.insert(series_id.clone(), !points.is_empty());
-                    }
+                    
+                    data_map.insert(series_id, !points.is_empty());
+                    
                     
                     if points.is_empty() {
                         tracing::warn!("Empty data for series {} (symbol {})", series_id, symbol);
@@ -172,14 +173,13 @@ fn create_callbacks(
                     
                     // Extract series ID from completion message
                     let series_id = extract_series_id(&msg)
-                        .unwrap_or_else(|| "unknown".to_string());
+                        .unwrap_or_else(|| "unknown".into());
                     
                     tracing::debug!("Extracted series ID: {}", series_id);
                     
                     // Check if series has data
                     let has_data = {
-                        let map = data_map.lock().await;
-                        map.get(&series_id).copied().unwrap_or(false)
+                        data_map.get(&series_id).map_or(false, |v| *v)
                     };
                     
                     // Mark as completed and check if all done
@@ -229,7 +229,7 @@ fn create_callbacks(
 }
 
 /// Extract series ID from completion message (cs_* pattern)
-fn extract_series_id(msg: &[Value]) -> Option<String> {
+fn extract_series_id(msg: &[Value]) -> Option<Ustr> {
     if msg.is_empty() {
         tracing::warn!("Empty completion message");
         return None;
@@ -239,7 +239,7 @@ fn extract_series_id(msg: &[Value]) -> Option<String> {
     for value in msg {  
         if let Some(s) = value.as_str() {
             if s.starts_with("cs_") {
-                return Some(s.to_string());
+                return Some(s.into());
             }
         }
     }
@@ -327,7 +327,7 @@ pub async fn retrieve(
 
     // Initialize tracking
     let tracker = BatchTracker::new(count);
-    let data_map = Arc::new(Mutex::new(HashMap::new()));
+    let data_map = Arc::new(DashMap::new());
 
     // Wrap channels for sharing
     let data_tx = Arc::new(Mutex::new(data_tx));
