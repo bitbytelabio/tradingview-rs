@@ -147,7 +147,6 @@ pub trait OHLCV {
     fn low(&self) -> f64;
     fn close(&self) -> f64;
     fn volume(&self) -> f64;
-    fn is_ohlcv(&self) -> bool;
     fn validate(&self) -> bool {
         !(self.close() > self.high() || self.close() < self.low() || self.high() < self.low())
             && self.close() > 0.
@@ -214,42 +213,38 @@ impl OHLCV for DataPoint {
     }
 
     fn open(&self) -> f64 {
-        if !(self.is_ohlcv()) {
+        if !(self.value.len() >= 5) {
             return f64::NAN;
         }
         self.value[1]
     }
 
     fn high(&self) -> f64 {
-        if !(self.is_ohlcv()) {
+        if !(self.value.len() >= 5) {
             return f64::NAN;
         }
         self.value[2]
     }
 
     fn low(&self) -> f64 {
-        if !(self.is_ohlcv()) {
+        if !(self.value.len() >= 5) {
             return f64::NAN;
         }
         self.value[3]
     }
 
     fn close(&self) -> f64 {
-        if !(self.is_ohlcv()) {
+        if !(self.value.len() >= 5) {
             return f64::NAN;
         }
         self.value[4]
     }
 
     fn volume(&self) -> f64 {
-        if !self.is_ohlcv() {
+        if !(self.value.len() >= 5) {
             return f64::NAN;
         }
         self.value[5]
-    }
-
-    fn is_ohlcv(&self) -> bool {
-        self.value.len() == 6
     }
 }
 
@@ -304,16 +299,8 @@ impl MarketSymbol for MarketTicker {
         &self.exchange
     }
 
-    fn currency(&self) -> &str {
-        self.currency.as_ref().map_or("USD", |c| c.code())
-    }
-
     fn id(&self) -> String {
         format!("{}:{}", self.exchange, self.symbol)
-    }
-
-    fn market_type(&self) -> MarketType {
-        self.market_type.unwrap_or(MarketType::All)
     }
 
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {
@@ -428,16 +415,8 @@ impl MarketSymbol for SymbolInfo {
         self.exchange.as_str()
     }
 
-    fn currency(&self) -> &str {
-        &self.currency_id
-    }
-
     fn id(&self) -> String {
         self.id.clone()
-    }
-
-    fn market_type(&self) -> MarketType {
-        MarketType::from(self.market_type.as_str())
     }
 
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {

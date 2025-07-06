@@ -14,11 +14,9 @@ pub trait MarketSymbol {
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self;
     fn symbol(&self) -> &str;
     fn exchange(&self) -> &str;
-    fn currency(&self) -> &str;
     fn id(&self) -> String {
         format!("{}:{}", self.exchange(), self.symbol())
     }
-    fn market_type(&self) -> MarketType;
 }
 
 impl MarketSymbol for Symbol {
@@ -29,15 +27,6 @@ impl MarketSymbol for Symbol {
     fn exchange(&self) -> &str {
         &self.exchange
     }
-
-    fn currency(&self) -> &str {
-        &self.currency_code
-    }
-
-    fn market_type(&self) -> MarketType {
-        MarketType::from(self.market_type.as_str())
-    }
-
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {
         Self {
             symbol: symbol.into(),

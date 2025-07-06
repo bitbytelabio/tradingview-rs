@@ -1,13 +1,13 @@
 [package]
 name = "tradingview-rs"
 authors = ["Nguyen Thanh Dat <dat.nguyen@bitbytelab.io>"]
-version = "0.0.5"
+version = "0.0.6"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
-resolver = "2"
+resolver = "3"
 
 [lib]
 name = "tradingview"
