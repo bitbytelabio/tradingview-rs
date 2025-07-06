@@ -23,6 +23,7 @@ use std::sync::{
 };
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, trace, warn};
+use ustr::Ustr;
 
 // Global object pool for reusing Vec<Value>
 static PAYLOAD_POOL: OnceLock<Mutex<Vec<Vec<Value>>>> = OnceLock::new();
@@ -58,12 +59,10 @@ pub struct WebSocketHandler {
 struct Metadata {
     series_count: Arc<AtomicU16>,
     studies_count: Arc<AtomicU16>,
-    // Use DashMap for concurrent access without explicit locking
-    series: Arc<DashMap<String, SeriesInfo>>,
-    studies: Arc<DashMap<String, String>>,
-    quotes: Arc<DashMap<String, QuoteValue>>,
-    quote_session: Arc<RwLock<String>>,
-    // Combined chart and symbol info to reduce locks
+    series: Arc<DashMap<Ustr, SeriesInfo>>,
+    studies: Arc<DashMap<Ustr, Ustr>>,
+    quotes: Arc<DashMap<Ustr, QuoteValue>>,
+    quote_session: Arc<RwLock<Ustr>>,
     chart_state: Arc<RwLock<ChartState>>,
 }
 
@@ -159,7 +158,7 @@ impl WebSocketClient {
     // Begin TradingView WebSocket Quote methods
     pub async fn create_quote_session(&self) -> Result<&Self> {
         let mut quote_session = self.handler.metadata.quote_session.write().await;
-        *quote_session = gen_session_id("qs");
+        *quote_session = Ustr::from(&gen_session_id("qs"));
         self.socket
             .send("quote_create_session", &payload!(quote_session.to_string()))
             .await?;
@@ -425,8 +424,8 @@ impl WebSocketClient {
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
-            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
-            _ => String::default(),
+            (None, Some(from), Some(to)) => Ustr::from(&format!("r,{from}:{to}")),
+            _ => Ustr::default(),
         };
 
         let mut payloads = get_pooled_payload().await;
@@ -437,7 +436,7 @@ impl WebSocketClient {
             Value::from(series_symbol_id),
             Value::from(config.interval.to_string()),
             Value::from(config.bar_count),
-            Value::from(range),
+            Value::from(range.to_string()),
         ]);
 
         let result = self.socket.send("create_series", &payloads).await;
@@ -456,8 +455,8 @@ impl WebSocketClient {
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
             (Some(range), _, _) => range.clone(),
-            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
-            _ => String::default(),
+            (None, Some(from), Some(to)) => Ustr::from(&format!("r,{from}:{to}")),
+            _ => Ustr::default(),
         };
 
         let mut payloads = get_pooled_payload().await;
@@ -468,7 +467,7 @@ impl WebSocketClient {
             Value::from(series_symbol_id),
             Value::from(config.interval.to_string()),
             Value::from(config.bar_count),
-            Value::from(range),
+            Value::from(range.to_string()),
         ]);
 
         let result = self.socket.send("modify_series", &payloads).await;
@@ -612,7 +611,7 @@ impl WebSocketClient {
             .fetch_add(1, Ordering::SeqCst)
             + 1;
 
-        let study_id = format!("st{study_count}");
+        let study_id = Ustr::from(&format!("st{study_count}"));
 
         let indicator = PineIndicator::build()
             .fetch(
@@ -622,10 +621,9 @@ impl WebSocketClient {
             )
             .await?;
 
-        self.handler
-            .metadata
-            .studies
-            .insert(indicator.metadata.data.id.clone(), study_id.clone());
+        let key = Ustr::from(&indicator.metadata.data.id);
+
+        self.handler.metadata.studies.insert(key, study_id);
 
         self.create_study(chart_session, &study_id, series_id, indicator)
             .await?;
@@ -640,7 +638,7 @@ impl WebSocketClient {
             .fetch_add(1, Ordering::SeqCst)
             + 1;
         let symbol_series_id = format!("sds_sym_{series_count}");
-        let series_id = format!("sds_{series_count}");
+        let series_id = Ustr::from(&format!("sds_{series_count}"));
         let series_version = format!("s{series_count}");
         let chart_session = gen_session_id("cs");
         let symbol = format!("{}:{}", options.exchange, options.symbol);

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
+use ustr::Ustr;
 
 use crate::{
     Result,
@@ -253,25 +253,25 @@ impl PineIndicator {
     }
 
     pub fn to_study_inputs(&self) -> Result<Value> {
-        let mut inputs: HashMap<String, IndicatorInput> = HashMap::new();
+        let mut inputs: HashMap<Ustr, IndicatorInput> = HashMap::new();
         inputs.insert(
-            "text".to_string(),
-            IndicatorInput::String(self.metadata.il_template.clone()),
+            Ustr::from("text"),
+            IndicatorInput::String(Ustr::from(&self.metadata.il_template)),
         );
         inputs.insert(
-            "pineId".to_string(),
-            IndicatorInput::String(self.script_id.clone()),
+            Ustr::from("pineId"),
+            IndicatorInput::String(Ustr::from(&self.script_id)),
         );
         inputs.insert(
-            "pineVersion".to_string(),
-            IndicatorInput::String(self.script_version.clone()),
+            Ustr::from("pineVersion"),
+            IndicatorInput::String(Ustr::from(&self.script_version)),
         );
         self.metadata.data.inputs.iter().for_each(|input| {
             if input.id == "text" || input.id == "pineId" || input.id == "pineVersion" {
                 return;
             }
             inputs.insert(
-                input.id.clone(),
+                Ustr::from(&input.id),
                 IndicatorInput::IndicatorInput(InputValue {
                     v: input.defval.clone(),
                     f: Value::from(input.is_fake),

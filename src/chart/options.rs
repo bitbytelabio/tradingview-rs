@@ -2,18 +2,19 @@ use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::Scr
 use bon::Builder;
 use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
+use ustr::Ustr;
 
 #[derive(Debug, Clone, Deserialize, Serialize, Builder)]
 pub struct ChartOptions {
     #[builder(default)]
-    pub symbol: String,
+    pub symbol: Ustr,
     #[builder(default)]
-    pub exchange: String,
+    pub exchange: Ustr,
     #[builder(default = Interval::OneDay)]
     pub interval: Interval,
     #[builder(default = 500_000)]
     pub bar_count: u64,
-    pub range: Option<String>,
+    pub range: Option<Ustr>,
     pub from: Option<u64>,
     pub to: Option<u64>,
     #[builder(default = false)]
@@ -27,7 +28,7 @@ pub struct ChartOptions {
     pub study_config: Option<StudyOptions>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Copy)]
 pub enum Range {
     FromTo(u64, u64),
     OneDay,
@@ -41,19 +42,19 @@ pub enum Range {
     All,
 }
 
-impl From<Range> for String {
-    fn from(range: Range) -> Self {
-        match range {
-            Range::FromTo(from, to) => format!("r,{from}:{to}"),
-            Range::OneDay => "1D".to_string(),
-            Range::FiveDays => "5d".to_string(),
-            Range::OneMonth => "1M".to_string(),
-            Range::ThreeMonths => "3M".to_string(),
-            Range::SixMonths => "6M".to_string(),
-            Range::YearToDate => "YTD".to_string(),
-            Range::OneYear => "12M".to_string(),
-            Range::FiveYears => "60M".to_string(),
-            Range::All => "ALL".to_string(),
+impl Into<Ustr> for Range {
+    fn into(self) -> Ustr {
+        match self {
+            Range::FromTo(from, to) => Ustr::from(&format!("r,{from}:{to}")),
+            Range::OneDay => Ustr::from("1D"),
+            Range::FiveDays => Ustr::from("5d"),
+            Range::OneMonth => Ustr::from("1M"),
+            Range::ThreeMonths => Ustr::from("3M"),
+            Range::SixMonths => Ustr::from("6M"),
+            Range::YearToDate => Ustr::from("YTD"),
+            Range::OneYear => Ustr::from("12M"),
+            Range::FiveYears => Ustr::from("60M"),
+            Range::All => Ustr::from("ALL"),
         }
     }
 }
@@ -78,8 +79,8 @@ impl ChartOptions {
 
     pub fn new_with(symbol: &str, exchange: &str, interval: Interval) -> Self {
         Self {
-            symbol: symbol.to_string(),
-            exchange: exchange.to_string(),
+            symbol: Ustr::from(symbol),
+            exchange: Ustr::from(exchange),
             interval,
             bar_count: 500_000,
             ..Default::default()
@@ -87,12 +88,12 @@ impl ChartOptions {
     }
 
     pub fn symbol(mut self, symbol: &str) -> Self {
-        self.symbol = symbol.to_string();
+        self.symbol = Ustr::from(symbol);
         self
     }
 
     pub fn exchange(mut self, exchange: &str) -> Self {
-        self.exchange = exchange.to_string();
+        self.exchange = Ustr::from(exchange);
         self
     }
 
@@ -123,7 +124,7 @@ impl ChartOptions {
 
     /// range: |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
     pub fn range(mut self, range: &str) -> Self {
-        self.range = Some(range.to_string());
+        self.range = Some(Ustr::from(range));
         self
     }
 

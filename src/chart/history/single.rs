@@ -17,6 +17,7 @@ use tokio::{
     sync::{Mutex, mpsc, oneshot},
     time::{sleep, timeout},
 };
+use ustr::Ustr;
 
 pub type DataSender = Arc<Mutex<mpsc::Sender<(SeriesInfo, Vec<DataPoint>)>>>;
 pub type DataReceiver = Arc<Mutex<mpsc::Receiver<(SeriesInfo, Vec<DataPoint>)>>>;
@@ -101,13 +102,13 @@ pub async fn retrieve(
     #[builder(default = Duration::from_secs(30))] timeout_duration: Duration,
 ) -> Result<(SymbolInfo, Vec<DataPoint>)> {
     let auth_token = resolve_auth_token(auth_token)?;
-    let range = range.map(String::from);
+    let range: Option<Ustr> = range.map(|r| r.into());
 
     let (symbol, exchange) = extract_symbol_exchange(ticker, symbol, exchange)?;
 
     let options = ChartOptions::builder()
-        .symbol(symbol)
-        .exchange(exchange)
+        .symbol(symbol.into())
+        .exchange(exchange.into())
         .interval(interval)
         .maybe_range(range)
         .maybe_bar_count(num_bars)

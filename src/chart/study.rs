@@ -1,10 +1,11 @@
 use serde::Serialize;
 use serde_json::Value;
+use ustr::Ustr;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum IndicatorInput {
-    String(String),
+    String(Ustr),
     IndicatorInput(InputValue),
 }
 
