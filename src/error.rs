@@ -79,6 +79,9 @@ pub enum TradingViewError {
     MissingExchange,
     #[error("Configuration error, missing symbol")]
     MissingSymbol,
+
+    #[error("Invalid session id or signature")]
+    InvalidSessionId,
 }
 
 #[derive(Debug, Clone, Error)]

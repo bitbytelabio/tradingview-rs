@@ -316,7 +316,7 @@ async fn setup_websocket(
 ) -> Result<WebSocketClient> {
     let client = WebSocketHandler::default().set_callbacks(callbacks);
 
-    let websocket = WebSocketClient::new()
+    let websocket = WebSocketClient::builder()
         .server(server.unwrap_or(DataServer::ProData))
         .auth_token(auth_token)
         .client(client)

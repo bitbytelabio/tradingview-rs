@@ -20,11 +20,12 @@ async fn main() -> anyhow::Result<()> {
         println!("{data:#?}");
     };
 
-    let callbacks: TradingViewEventHandlers = TradingViewEventHandlers::default().on_quote_data(quote_callback);
+    let callbacks: TradingViewEventHandlers =
+        TradingViewEventHandlers::default().on_quote_data(quote_callback);
 
     let client = WebSocketHandler::default().set_callbacks(callbacks);
 
-    let websocket = WebSocketClient::new()
+    let websocket = WebSocketClient::builder()
         .server(DataServer::ProData)
         .auth_token(&auth_token)
         .client(client)

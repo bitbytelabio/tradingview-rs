@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
 
     let client = WebSocketHandler::default().set_callbacks(callbacks);
 
-    let websocket = WebSocketClient::new()
+    let websocket = WebSocketClient::builder()
         .server(DataServer::ProData)
         .auth_token(&auth_token)
         .client(client)

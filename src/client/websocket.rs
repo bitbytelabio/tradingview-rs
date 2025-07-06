@@ -15,25 +15,31 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc,
+        atomic::{AtomicU16, Ordering},
+    },
+};
 use tokio::sync::RwLock;
 use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Default)]
 pub struct WebSocketHandler {
-    metadata: Arc<RwLock<Metadata>>,
+    metadata: Metadata,
     event_handler: TradingViewEventHandlers,
 }
 
 #[allow(clippy::type_complexity)]
 #[derive(Default, Clone)]
 struct Metadata {
-    series_count: u16,
+    series_count: Arc<AtomicU16>,
     series: Arc<RwLock<HashMap<String, SeriesInfo>>>,
-    studies_count: u16,
+    studies_count: Arc<AtomicU16>,
     studies: Arc<RwLock<HashMap<String, String>>>,
     quotes: Arc<RwLock<HashMap<String, QuoteValue>>>,
-    quote_session: String,
+    quote_session: Arc<RwLock<String>>,
     chart: Arc<RwLock<Option<(SeriesInfo, Vec<DataPoint>)>>>,
     symbol_info: Arc<RwLock<Option<SymbolInfo>>>,
 }
@@ -87,8 +93,7 @@ impl WebSocketBuilder {
 }
 
 impl WebSocketClient {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> WebSocketBuilder {
+    pub fn builder() -> WebSocketBuilder {
         WebSocketBuilder::default()
     }
 
@@ -105,41 +110,33 @@ impl WebSocketClient {
 
     // Begin TradingView WebSocket Quote methods
     pub async fn create_quote_session(&self) -> Result<&Self> {
-        let quote_session = gen_session_id("qs");
-        self.handler.metadata.write().await.quote_session = quote_session.clone();
+        let mut quote_session = self.handler.metadata.quote_session.write().await;
+        *quote_session = gen_session_id("qs");
         self.socket
-            .send("quote_create_session", &payload!(quote_session))
+            .send("quote_create_session", &payload!(quote_session.to_string()))
             .await?;
         Ok(self)
     }
 
     pub async fn delete_quote_session(&self) -> Result<&Self> {
+        let quote_session = self.handler.metadata.quote_session.read().await;
         self.socket
-            .send(
-                "quote_delete_session",
-                &payload!(self.handler.metadata.read().await.quote_session.clone()),
-            )
+            .send("quote_delete_session", &payload!(quote_session.to_string()))
             .await?;
         Ok(self)
     }
 
     pub async fn set_fields(&self) -> Result<&Self> {
-        let mut quote_fields = payload![
-            self.handler
-                .metadata
-                .read()
-                .await
-                .quote_session
-                .clone()
-                .to_string()
-        ];
+        let quote_session = self.handler.metadata.quote_session.read().await;
+        let mut quote_fields = payload![quote_session.to_string()];
         quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
         self.socket.send("quote_set_fields", &quote_fields).await?;
         Ok(self)
     }
 
     pub async fn add_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.handler.metadata.read().await.quote_session.clone()];
+        let quote_session = self.handler.metadata.quote_session.read().await;
+        let mut payloads = payload![quote_session.to_string()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_add_symbols", &payloads).await?;
         Ok(self)
@@ -151,14 +148,16 @@ impl WebSocketClient {
     }
 
     pub async fn fast_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.handler.metadata.read().await.quote_session.clone()];
+        let quote_session = self.handler.metadata.quote_session.read().await;
+        let mut payloads = payload![quote_session.to_string()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_fast_symbols", &payloads).await?;
         Ok(self)
     }
 
     pub async fn remove_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.handler.metadata.read().await.quote_session.clone()];
+        let quote_session = self.handler.metadata.quote_session.read().await;
+        let mut payloads = payload![quote_session.to_string()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(self)
@@ -452,16 +451,7 @@ impl WebSocketClient {
     }
 
     pub async fn delete(&self) -> Result<&Self> {
-        for (_, s) in self
-            .handler
-            .metadata
-            .read()
-            .await
-            .series
-            .read()
-            .await
-            .clone()
-        {
+        for (_, s) in self.handler.metadata.series.read().await.clone() {
             debug!("delete series: {:?}", s);
             self.delete_chart_session_id(&s.chart_session).await?;
         }
@@ -504,8 +494,13 @@ impl WebSocketClient {
         chart_session: &str,
         series_id: &str,
     ) -> Result<&Self> {
-        self.handler.metadata.write().await.studies_count += 1;
-        let study_count = self.handler.metadata.read().await.studies_count;
+        let study_count = self
+            .handler
+            .metadata
+            .studies_count
+            .fetch_add(1, Ordering::SeqCst)
+            + 1;
+
         let study_id = format!("st{study_count}");
 
         let indicator = PineIndicator::build()
@@ -518,8 +513,6 @@ impl WebSocketClient {
 
         self.handler
             .metadata
-            .read()
-            .await
             .studies
             .write()
             .await
@@ -531,8 +524,12 @@ impl WebSocketClient {
     }
 
     pub async fn set_market(&self, options: ChartOptions) -> Result<&Self> {
-        self.handler.metadata.write().await.series_count += 1;
-        let series_count = self.handler.metadata.read().await.series_count;
+        let series_count = self
+            .handler
+            .metadata
+            .series_count
+            .fetch_add(1, Ordering::SeqCst)
+            + 1;
         let symbol_series_id = format!("sds_sym_{series_count}");
         let series_id = format!("sds_{series_count}");
         let series_version = format!("s{series_count}");
@@ -568,8 +565,6 @@ impl WebSocketClient {
 
         self.handler
             .metadata
-            .read()
-            .await
             .series
             .write()
             .await
@@ -608,8 +603,8 @@ impl WebSocketHandler {
                 trace!("received raw chart data: {:?}", message);
                 match self
                     .handle_chart_data(
-                        &self.metadata.read().await.series.read().await.clone(),
-                        &self.metadata.read().await.studies.read().await.clone(),
+                        &self.metadata.series.read().await.clone(),
+                        &self.metadata.studies.read().await.clone(),
                         message,
                     )
                     .await
@@ -626,17 +621,9 @@ impl WebSocketHandler {
                 match SymbolInfo::deserialize(&message[2]) {
                     Ok(s) => {
                         debug!("receive symbol info: {:?}", s);
-                        self.metadata
-                            .read()
-                            .await
-                            .symbol_info
-                            .write()
-                            .await
-                            .replace(s.clone());
+                        self.metadata.symbol_info.write().await.replace(s.clone());
                         let info = self
                             .metadata
-                            .read()
-                            .await
                             .symbol_info
                             .read()
                             .await
@@ -720,25 +707,16 @@ impl WebSocketHandler {
                 Some(resp_data) => {
                     let data = ChartResponseData::deserialize(resp_data)?.series;
                     self.metadata
-                        .read()
-                        .await
                         .chart
                         .write()
                         .await
                         .replace((s.clone(), data.clone()));
                     trace!(
                         "series data extracted: {:?}",
-                        self.metadata.read().await.chart.read().await
+                        self.metadata.chart.read().await
                     );
                     (self.event_handler.on_chart_data)(
-                        self.metadata
-                            .read()
-                            .await
-                            .chart
-                            .read()
-                            .await
-                            .clone()
-                            .unwrap_or_default(),
+                        self.metadata.chart.read().await.clone().unwrap_or_default(),
                     );
                 }
                 None => {
@@ -774,27 +752,17 @@ impl WebSocketHandler {
         debug!("received raw quote data: {:?}", message);
         let qsd = QuoteData::deserialize(&message[1]).unwrap_or_default();
         if qsd.status == "ok" {
-            if let Some(prev_quote) = self
-                .metadata
-                .read()
-                .await
-                .quotes
-                .write()
-                .await
-                .get_mut(&qsd.name)
-            {
+            if let Some(prev_quote) = self.metadata.quotes.write().await.get_mut(&qsd.name) {
                 *prev_quote = merge_quotes(prev_quote, &qsd.value);
             } else {
                 self.metadata
-                    .read()
-                    .await
                     .quotes
                     .write()
                     .await
                     .insert(qsd.name, qsd.value);
             }
 
-            for q in self.metadata.read().await.quotes.read().await.values() {
+            for q in self.metadata.quotes.read().await.values() {
                 debug!("quote data: {:?}", q);
                 (self.event_handler.on_quote_data)(q.to_owned());
             }
