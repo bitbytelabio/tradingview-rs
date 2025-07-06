@@ -17,11 +17,11 @@ use std::sync::{
 };
 use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, connect_async,
+    MaybeTlsStream, WebSocketStream, connect_async_with_config,
     tungstenite::{
         client::IntoClientRequest,
         http::{HeaderMap, HeaderValue},
-        protocol::Message,
+        protocol::{Message, WebSocketConfig},
     },
 };
 use tracing::{debug, error, info, trace, warn};
@@ -215,7 +215,12 @@ impl SocketSession {
             .headers_mut()
             .extend(WEBSOCKET_HEADERS.clone().into_iter());
 
-        let (socket, _response) = connect_async(request).await?;
+        // Configure WebSocket with larger message size limits
+        let conf = WebSocketConfig::default()
+            .read_buffer_size(1024 * 1024)
+            .write_buffer_size(1024 * 1024);
+
+        let (socket, _response) = connect_async_with_config(request, Some(conf), false).await?;
 
         let (mut write, read) = socket.split();
 
