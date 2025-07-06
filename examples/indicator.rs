@@ -3,12 +3,12 @@ use dotenv::dotenv;
 use std::env;
 use tradingview::{
     Interval,
-    callback::EventCallback,
     chart::ChartOptions,
     get_builtin_indicators,
+    handler::event::TradingViewEventHandlers,
     pine_indicator::{BuiltinIndicators, ScriptType},
     socket::DataServer,
-    websocket::{WebSocket, WebSocketClient},
+    websocket::{WebSocketClient, WebSocketHandler},
 };
 
 #[tokio::main]
@@ -22,11 +22,12 @@ async fn main() -> anyhow::Result<()> {
     let study_callback = |data| {
         println!("{data:#?}");
     };
-    let callbacks: EventCallback = EventCallback::default().on_study_data(study_callback);
+    let callbacks: TradingViewEventHandlers =
+        TradingViewEventHandlers::default().on_study_data(study_callback);
 
-    let client = WebSocketClient::default().set_callbacks(callbacks);
+    let client = WebSocketHandler::default().set_callbacks(callbacks);
 
-    let websocket = WebSocket::new()
+    let websocket = WebSocketClient::new()
         .server(DataServer::ProData)
         .auth_token(&auth_token)
         .client(client)

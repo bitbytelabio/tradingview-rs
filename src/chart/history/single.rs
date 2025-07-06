@@ -1,13 +1,13 @@
 use crate::{
     ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, MarketTicker, OHLCV as _,
     Result, SymbolInfo,
-    callback::EventCallback,
     chart::ChartOptions,
     error::TradingViewError,
+    handler::event::TradingViewEventHandlers,
     history::resolve_auth_token,
     options::Range,
     socket::DataServer,
-    websocket::{SeriesInfo, WebSocket, WebSocketClient},
+    websocket::{SeriesInfo, WebSocketClient, WebSocketHandler},
 };
 use bon::builder;
 use serde_json::Value;
@@ -178,13 +178,16 @@ fn extract_symbol_exchange(
 }
 
 /// Create callback handlers for processing incoming WebSocket data
-fn create_callbacks(senders: Senders, replay_state: Arc<Mutex<ReplayState>>) -> EventCallback {
+fn create_callbacks(
+    senders: Senders,
+    replay_state: Arc<Mutex<ReplayState>>,
+) -> TradingViewEventHandlers {
     let data_tx = Arc::clone(&senders.data);
     let info_tx = Arc::clone(&senders.info);
     let error_tx = Arc::clone(&senders.error);
     let completion_tx = Arc::clone(&senders.completion);
 
-    EventCallback::default()
+    TradingViewEventHandlers::default()
         .on_chart_data({
             let data_tx = Arc::clone(&data_tx);
             let replay_state = Arc::clone(&replay_state);
@@ -308,12 +311,12 @@ fn is_critical_error(error: &Error) -> bool {
 async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: EventCallback,
+    callbacks: TradingViewEventHandlers,
     options: ChartOptions,
-) -> Result<WebSocket> {
-    let client = WebSocketClient::default().set_callbacks(callbacks);
+) -> Result<WebSocketClient> {
+    let client = WebSocketHandler::default().set_callbacks(callbacks);
 
-    let websocket = WebSocket::new()
+    let websocket = WebSocketClient::new()
         .server(server.unwrap_or(DataServer::ProData))
         .auth_token(auth_token)
         .client(client)
@@ -329,7 +332,7 @@ async fn setup_websocket(
 /// Collect and accumulate incoming historical data from channels
 async fn collect_data(
     receivers: Receivers,
-    websocket: &WebSocket,
+    websocket: &WebSocketClient,
     replay_state: Arc<Mutex<ReplayState>>,
 ) -> Result<ChartHistoricalData> {
     let mut data = ChartHistoricalData::new();
@@ -415,7 +418,7 @@ async fn handle_replay(
     replay_state: &Arc<Mutex<ReplayState>>,
     replay_attempted: &mut bool,
     data: &ChartHistoricalData,
-    websocket: &WebSocket,
+    websocket: &WebSocketClient,
 ) -> Result<()> {
     let mut state = replay_state.lock().await;
 
@@ -484,7 +487,7 @@ async fn process_remaining(
     }
 }
 
-async fn cleanup(websocket: Arc<WebSocket>, sub_task: tokio::task::JoinHandle<()>) {
+async fn cleanup(websocket: Arc<WebSocketClient>, sub_task: tokio::task::JoinHandle<()>) {
     // Cancel subscription task
     sub_task.abort();
 

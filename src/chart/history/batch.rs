@@ -1,5 +1,5 @@
 use crate::{
-    callback::EventCallback, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocket, WebSocketClient}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
+    handler::event::TradingViewEventHandlers, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocketClient, WebSocketHandler}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
 };
 use bon::builder;
 use serde_json::Value;
@@ -103,8 +103,8 @@ fn create_callbacks(
     info_tx: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
     tracker: BatchTracker,
     data_map: Arc<Mutex<HashMap<String, bool>>>, // Track which series received data
-) -> EventCallback {
-    EventCallback::default()
+) -> TradingViewEventHandlers {
+    TradingViewEventHandlers::default()
         .on_chart_data({
             let tracker = tracker.clone();
             let data_map = Arc::clone(&data_map);
@@ -251,14 +251,14 @@ fn extract_series_id(msg: &[Value]) -> Option<String> {
 async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: EventCallback,
+    callbacks: TradingViewEventHandlers,
     symbols: &[impl MarketSymbol],
     interval: Interval,
     batch_size: usize,
-) -> Result<WebSocket> {
-    let client = WebSocketClient::default().set_callbacks(callbacks);
+) -> Result<WebSocketClient> {
+    let client = WebSocketHandler::default().set_callbacks(callbacks);
 
-    let ws = WebSocket::new()
+    let ws = WebSocketClient::new()
         .server(server.unwrap_or(DataServer::ProData))
         .auth_token(auth_token)
         .client(client)

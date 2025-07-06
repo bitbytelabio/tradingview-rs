@@ -1,7 +1,7 @@
-pub mod callback;
 pub mod chart;
 pub mod client;
 pub mod error;
+pub mod handler;
 pub mod models;
 pub mod prelude;
 pub mod quote;

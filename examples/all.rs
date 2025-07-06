@@ -3,11 +3,11 @@ use std::env;
 
 use tradingview::{
     Interval, QuoteValue,
-    callback::EventCallback,
     chart::ChartOptions,
+    handler::event::TradingViewEventHandlers,
     pine_indicator::ScriptType,
     socket::DataServer,
-    websocket::{WebSocket, WebSocketClient},
+    websocket::{WebSocketClient, WebSocketHandler},
 };
 
 #[tokio::main]
@@ -20,11 +20,11 @@ async fn main() -> anyhow::Result<()> {
         println!("{data:#?}");
     };
 
-    let callbacks: EventCallback = EventCallback::default().on_quote_data(quote_callback);
+    let callbacks: TradingViewEventHandlers = TradingViewEventHandlers::default().on_quote_data(quote_callback);
 
-    let client = WebSocketClient::default().set_callbacks(callbacks);
+    let client = WebSocketHandler::default().set_callbacks(callbacks);
 
-    let websocket = WebSocket::new()
+    let websocket = WebSocketClient::new()
         .server(DataServer::ProData)
         .auth_token(&auth_token)
         .client(client)

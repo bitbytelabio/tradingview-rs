@@ -1,8 +1,8 @@
 use crate::{
     DataPoint, Error, Interval, Result, Timezone,
-    callback::EventCallback,
     chart::{ChartOptions, ChartResponseData, StudyOptions, StudyResponseData, SymbolInfo},
     error::TradingViewError,
+    handler::event::TradingViewEventHandlers,
     payload,
     pine_indicator::PineIndicator,
     quote::{
@@ -20,9 +20,9 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Default)]
-pub struct WebSocketClient {
+pub struct WebSocketHandler {
     metadata: Arc<RwLock<Metadata>>,
-    event_callback: EventCallback,
+    event_handler: TradingViewEventHandlers,
 }
 
 #[allow(clippy::type_complexity)]
@@ -39,14 +39,14 @@ struct Metadata {
 }
 
 #[derive(Clone)]
-pub struct WebSocket {
-    client: WebSocketClient,
+pub struct WebSocketClient {
+    handler: WebSocketHandler,
     socket: SocketSession,
 }
 
 #[derive(Default)]
 pub struct WebSocketBuilder {
-    client: Option<WebSocketClient>,
+    client: Option<WebSocketHandler>,
     auth_token: Option<String>,
     server: Option<DataServer>,
 }
@@ -58,7 +58,7 @@ pub struct SeriesInfo {
 }
 
 impl WebSocketBuilder {
-    pub fn client(mut self, client: WebSocketClient) -> Self {
+    pub fn client(mut self, client: WebSocketHandler) -> Self {
         self.client = Some(client);
         self
     }
@@ -73,7 +73,7 @@ impl WebSocketBuilder {
         self
     }
 
-    pub async fn build(self) -> Result<WebSocket> {
+    pub async fn build(self) -> Result<WebSocketClient> {
         let auth_token = self
             .auth_token
             .unwrap_or("unauthorized_user_token".to_string());
@@ -82,18 +82,21 @@ impl WebSocketBuilder {
         let socket = SocketSession::new(server, auth_token).await?;
         let client = self.client.unwrap_or_default();
 
-        Ok(WebSocket::new_with_session(client, socket))
+        Ok(WebSocketClient::new_with_session(client, socket))
     }
 }
 
-impl WebSocket {
+impl WebSocketClient {
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> WebSocketBuilder {
         WebSocketBuilder::default()
     }
 
-    pub fn new_with_session(client: WebSocketClient, socket: SocketSession) -> Self {
-        Self { client, socket }
+    pub fn new_with_session(client: WebSocketHandler, socket: SocketSession) -> Self {
+        Self {
+            handler: client,
+            socket,
+        }
     }
 
     pub async fn is_closed(&self) -> bool {
@@ -103,7 +106,7 @@ impl WebSocket {
     // Begin TradingView WebSocket Quote methods
     pub async fn create_quote_session(&self) -> Result<&Self> {
         let quote_session = gen_session_id("qs");
-        self.client.metadata.write().await.quote_session = quote_session.clone();
+        self.handler.metadata.write().await.quote_session = quote_session.clone();
         self.socket
             .send("quote_create_session", &payload!(quote_session))
             .await?;
@@ -114,7 +117,7 @@ impl WebSocket {
         self.socket
             .send(
                 "quote_delete_session",
-                &payload!(self.client.metadata.read().await.quote_session.clone()),
+                &payload!(self.handler.metadata.read().await.quote_session.clone()),
             )
             .await?;
         Ok(self)
@@ -122,7 +125,7 @@ impl WebSocket {
 
     pub async fn set_fields(&self) -> Result<&Self> {
         let mut quote_fields = payload![
-            self.client
+            self.handler
                 .metadata
                 .read()
                 .await
@@ -136,7 +139,7 @@ impl WebSocket {
     }
 
     pub async fn add_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.client.metadata.read().await.quote_session.clone()];
+        let mut payloads = payload![self.handler.metadata.read().await.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_add_symbols", &payloads).await?;
         Ok(self)
@@ -148,14 +151,14 @@ impl WebSocket {
     }
 
     pub async fn fast_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.client.metadata.read().await.quote_session.clone()];
+        let mut payloads = payload![self.handler.metadata.read().await.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_fast_symbols", &payloads).await?;
         Ok(self)
     }
 
     pub async fn remove_symbols(&self, symbols: Vec<&str>) -> Result<&Self> {
-        let mut payloads = payload![self.client.metadata.read().await.quote_session.clone()];
+        let mut payloads = payload![self.handler.metadata.read().await.quote_session.clone()];
         payloads.extend(symbols.into_iter().map(Value::from));
         self.socket.send("quote_remove_symbols", &payloads).await?;
         Ok(self)
@@ -450,7 +453,7 @@ impl WebSocket {
 
     pub async fn delete(&self) -> Result<&Self> {
         for (_, s) in self
-            .client
+            .handler
             .metadata
             .read()
             .await
@@ -501,8 +504,8 @@ impl WebSocket {
         chart_session: &str,
         series_id: &str,
     ) -> Result<&Self> {
-        self.client.metadata.write().await.studies_count += 1;
-        let study_count = self.client.metadata.read().await.studies_count;
+        self.handler.metadata.write().await.studies_count += 1;
+        let study_count = self.handler.metadata.read().await.studies_count;
         let study_id = format!("st{study_count}");
 
         let indicator = PineIndicator::build()
@@ -513,7 +516,7 @@ impl WebSocket {
             )
             .await?;
 
-        self.client
+        self.handler
             .metadata
             .read()
             .await
@@ -528,8 +531,8 @@ impl WebSocket {
     }
 
     pub async fn set_market(&self, options: ChartOptions) -> Result<&Self> {
-        self.client.metadata.write().await.series_count += 1;
-        let series_count = self.client.metadata.read().await.series_count;
+        self.handler.metadata.write().await.series_count += 1;
+        let series_count = self.handler.metadata.read().await.series_count;
         let symbol_series_id = format!("sds_sym_{series_count}");
         let series_id = format!("sds_{series_count}");
         let series_version = format!("s{series_count}");
@@ -563,7 +566,7 @@ impl WebSocket {
             options,
         };
 
-        self.client
+        self.handler
             .metadata
             .read()
             .await
@@ -586,19 +589,19 @@ impl WebSocket {
 }
 
 #[async_trait::async_trait]
-impl Socket for WebSocket {
+impl Socket for WebSocketClient {
     async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.to_owned());
-        self.client.handle_events(event, &message.p).await;
+        self.handler.handle_events(event, &message.p).await;
         Ok(())
     }
 
     async fn handle_error(&self, error: Error) {
-        (self.client.event_callback.on_error)((error, vec![]));
+        (self.handler.event_handler.on_error)((error, vec![]));
     }
 }
 
-impl WebSocketClient {
+impl WebSocketHandler {
     pub(crate) async fn handle_events(&self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
@@ -614,7 +617,7 @@ impl WebSocketClient {
                     Ok(_) => (),
                     Err(e) => {
                         error!("chart data parsing error: {:?}", e);
-                        (self.event_callback.on_error)((e, message.to_owned()));
+                        (self.event_handler.on_error)((e, message.to_owned()));
                     }
                 };
             }
@@ -640,11 +643,11 @@ impl WebSocketClient {
                             .clone()
                             .unwrap_or_default();
 
-                        (self.event_callback.on_symbol_info)(info);
+                        (self.event_handler.on_symbol_info)(info);
                     }
                     Err(e) => {
                         error!("symbol resolved parsing error: {:?}", e);
-                        (self.event_callback.on_error)((
+                        (self.event_handler.on_error)((
                             Error::JsonParseError(e),
                             message.to_owned(),
                         ));
@@ -653,54 +656,54 @@ impl WebSocketClient {
             }
             TradingViewDataEvent::OnSeriesCompleted => {
                 debug!("series completed: {:?}", message);
-                (self.event_callback.on_series_completed)(message.to_owned());
+                (self.event_handler.on_series_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnSeriesLoading => {
                 debug!("series loading: {:?}", message);
-                (self.event_callback.on_series_loading)(message.to_owned());
+                (self.event_handler.on_series_loading)(message.to_owned());
             }
             TradingViewDataEvent::OnQuoteCompleted => {
                 debug!("quote completed: {:?}", message);
-                (self.event_callback.on_quote_completed)(message.to_owned());
+                (self.event_handler.on_quote_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayOk => {
                 debug!("replay ok: {:?}", message);
-                (self.event_callback.on_replay_ok)(message.to_owned());
+                (self.event_handler.on_replay_ok)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayPoint => {
                 debug!("replay point: {:?}", message);
-                (self.event_callback.on_replay_point)(message.to_owned());
+                (self.event_handler.on_replay_point)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayInstanceId => {
                 debug!("replay instance id: {:?}", message);
-                (self.event_callback.on_replay_instance_id)(message.to_owned());
+                (self.event_handler.on_replay_instance_id)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayResolutions => {
                 debug!("replay resolutions: {:?}", message);
-                (self.event_callback.on_replay_resolutions)(message.to_owned());
+                (self.event_handler.on_replay_resolutions)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayDataEnd => {
                 debug!("replay data end: {:?}", message);
-                (self.event_callback.on_replay_data_end)(message.to_owned());
+                (self.event_handler.on_replay_data_end)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyLoading => {
                 debug!("study loading: {:?}", message);
-                (self.event_callback.on_study_loading)(message.to_owned());
+                (self.event_handler.on_study_loading)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyCompleted => {
                 debug!("study completed: {:?}", message);
-                (self.event_callback.on_study_completed)(message.to_owned());
+                (self.event_handler.on_study_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnError(tradingview_error) => {
                 error!("trading view error: {:?}", tradingview_error);
-                (self.event_callback.on_error)((
+                (self.event_handler.on_error)((
                     Error::TradingViewError(tradingview_error),
                     message.to_owned(),
                 ));
             }
             TradingViewDataEvent::UnknownEvent(event) => {
                 warn!("unknown event: {:?}", event);
-                (self.event_callback.on_unknown_event)((event, message.to_owned()));
+                (self.event_handler.on_unknown_event)((event, message.to_owned()));
             }
         }
     }
@@ -727,7 +730,7 @@ impl WebSocketClient {
                         "series data extracted: {:?}",
                         self.metadata.read().await.chart.read().await
                     );
-                    (self.event_callback.on_chart_data)(
+                    (self.event_handler.on_chart_data)(
                         self.metadata
                             .read()
                             .await
@@ -761,7 +764,7 @@ impl WebSocketClient {
             if let Some(resp_data) = message[1].get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
                 let data = StudyResponseData::deserialize(resp_data)?;
-                (self.event_callback.on_study_data)((options.clone(), data));
+                (self.event_handler.on_study_data)((options.clone(), data));
             }
         }
         Ok(())
@@ -793,19 +796,19 @@ impl WebSocketClient {
 
             for q in self.metadata.read().await.quotes.read().await.values() {
                 debug!("quote data: {:?}", q);
-                (self.event_callback.on_quote_data)(q.to_owned());
+                (self.event_handler.on_quote_data)(q.to_owned());
             }
         } else {
             error!("quote data status error: {:?}", qsd);
-            (self.event_callback.on_error)((
+            (self.event_handler.on_error)((
                 Error::TradingViewError(TradingViewError::QuoteDataStatusError),
                 message.to_owned(),
             ));
         }
     }
 
-    pub fn set_callbacks(mut self, callbacks: EventCallback) -> Self {
-        self.event_callback = callbacks;
+    pub fn set_callbacks(mut self, callbacks: TradingViewEventHandlers) -> Self {
+        self.event_handler = callbacks;
         self
     }
 }
