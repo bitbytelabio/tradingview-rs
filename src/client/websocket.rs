@@ -86,22 +86,20 @@ pub struct WebSocketClient {
     pub(crate) command_rx: Arc<Mutex<CommandRx>>,
     pub(crate) handler: WebSocketHandler,
     pub(crate) socket: SocketSession,
-    pub(crate) server: DataServer,
 }
 
 #[bon::bon]
 impl WebSocketClient {
     #[builder]
-    pub fn new(
+    pub async fn new(
         auth_token: Option<&str>,
         #[builder(default = DataServer::ProData)] server: DataServer,
         response_tx: ResponseTx,
         command_rx: CommandRx,
     ) -> Result<Self> {
         let auth_token = Ustr::from(auth_token.unwrap_or("unauthorized_user_token"));
-        let rt = tokio::runtime::Handle::current();
 
-        let socket = rt.block_on(SocketSession::new(server, auth_token))?;
+        let socket = SocketSession::new(server, auth_token).await?;
         let handler = WebSocketHandler::builder().res_tx(response_tx).build();
         let command_rx = Arc::new(Mutex::new(command_rx));
 
@@ -109,7 +107,6 @@ impl WebSocketClient {
             command_rx,
             handler,
             socket,
-            server,
         })
     }
 
@@ -652,7 +649,7 @@ impl WebSocketClient {
         Ok(self)
     }
 
-    pub async fn subscribe(&mut self) {
+    pub async fn subscribe(&self) {
         let mut client = self.clone();
         tokio::spawn(async move {
             if let Err(e) = client.handle_commands().await {
@@ -845,7 +842,6 @@ impl WebSocketHandler {
         };
 
         if qsd.status == "ok" {
-            // Use DashMap's efficient upsert
             self.metadata
                 .quotes
                 .entry(qsd.name)

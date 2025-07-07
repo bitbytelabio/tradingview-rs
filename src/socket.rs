@@ -170,7 +170,7 @@ impl std::fmt::Display for DataServer {
 #[derive(Clone)]
 pub struct SocketSession {
     server: Arc<DataServer>,
-    auth_token: Arc<Ustr>,
+    auth_token: Arc<RwLock<Ustr>>,
     is_closed: Arc<AtomicBool>,
     read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
@@ -201,8 +201,8 @@ impl SocketSession {
     /// An authentication message is sent using the write part of the connection.
     /// Finally, it returns the write and read parts of the connection.
     async fn connect(
-        server: &DataServer,
-        auth_token: &str,
+        server: DataServer,
+        auth_token: Ustr,
     ) -> Result<(
         SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
         SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
@@ -226,7 +226,10 @@ impl SocketSession {
         let (mut write, read) = socket.split();
 
         write
-            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
+            .send(
+                SocketMessageSer::new("set_auth_token", payload!(auth_token.as_str()))
+                    .to_message()?,
+            )
             .await?;
 
         Ok((write, read))
@@ -237,11 +240,8 @@ impl SocketSession {
     }
 
     pub async fn reconnect(&mut self) -> Result<()> {
-        let (write, read) = SocketSession::connect(
-            self.server.clone().as_ref(),
-            self.auth_token.clone().as_ref(),
-        )
-        .await?;
+        let auth_token = self.auth_token.read().await;
+        let (write, read) = SocketSession::connect(*self.server, *auth_token).await?;
         self.write = Arc::from(RwLock::new(write));
         self.read = Arc::from(RwLock::new(read));
         self.is_closed.store(false, Ordering::Relaxed);
@@ -249,18 +249,19 @@ impl SocketSession {
     }
 
     pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
-        self.auth_token = Arc::new(auth_token.into());
+        let mut auth_token_ = self.auth_token.write().await;
+        *auth_token_ = Ustr::from(auth_token);
         self.send("set_auth_token", &payload!(auth_token)).await?;
         Ok(())
     }
 
     pub async fn new(server: DataServer, auth_token: Ustr) -> Result<SocketSession> {
-        let (write_stream, read_stream) = SocketSession::connect(&server, &auth_token).await?;
+        let (write_stream, read_stream) = SocketSession::connect(server, auth_token).await?;
 
         let write = Arc::from(RwLock::new(write_stream));
         let read = Arc::from(RwLock::new(read_stream));
         let server = Arc::new(server);
-        let auth_token = Arc::new(auth_token);
+        let auth_token = Arc::new(RwLock::new(auth_token));
         let is_closed = Arc::new(AtomicBool::new(false));
 
         Ok(SocketSession {

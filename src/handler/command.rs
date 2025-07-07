@@ -12,7 +12,9 @@ impl WebSocketClient {
         let mut command_rx = self.command_rx.lock().await;
         while let Some(command) = command_rx.recv().await {
             match command {
-                TradingViewCommand::Cleanup => todo!(),
+                TradingViewCommand::Cleanup => {
+                    self.delete().await?;
+                }
                 TradingViewCommand::SetAuthToken { auth_token } => {
                     self.socket.set_auth_token(&auth_token).await?;
                 }
@@ -87,7 +89,7 @@ impl WebSocketClient {
                     study_id,
                     series_id,
                 } => {
-                    let id = format!("{}_{}", series_id, study_id);
+                    let id = format!("{series_id}_{study_id}");
                     self.remove_study(&session, &id).await?;
                 }
                 TradingViewCommand::SetStudy {
