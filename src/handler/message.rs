@@ -14,14 +14,14 @@ pub enum TradingViewResponse {
     Error(Error, Vec<Value>),
     SymbolInfo(SymbolInfo),
     SeriesCompleted(Vec<Value>),
-    SeriesLoading(SeriesLoadingMsg),
+    SeriesLoading(LoadingMsg),
     QuoteCompleted(Vec<Value>),
     ReplayOk(Vec<Value>),
     ReplayPoint(Vec<Value>),
     ReplayInstanceId(Vec<Value>),
     ReplayResolutions(Vec<Value>),
     ReplayDataEnd(Vec<Value>),
-    StudyLoading(Vec<Value>),
+    StudyLoading(LoadingMsg),
     StudyCompleted(Vec<Value>),
     UnknownEvent(Ustr, Vec<Value>),
 }
@@ -152,24 +152,111 @@ pub enum TradingViewCommand {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
-pub struct SeriesLoadingMsg {
-    pub session: Ustr,
-    pub series_id1: Ustr,
-    pub series_id2: Ustr,
+pub enum LoadingMsg {
+    Series(LoadingData),
+    Study(LoadingData),
 }
 
-impl SeriesLoadingMsg {
-    pub fn new(messages: &[Value]) -> Self {
-        if messages.len() < 3 {
-            tracing::warn!(
-                "SeriesLoading requires at least 3 messages, got {}",
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoadingType {
+    Series,
+    Study,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
+pub struct LoadingData {
+    pub session: Ustr,
+    pub id1: Ustr,
+    pub id2: Ustr,
+}
+
+impl LoadingMsg {
+    pub fn new(messages: &[Value]) -> Result<Self, String> {
+        const REQUIRED_FIELDS: usize = 3;
+
+        if messages.len() < REQUIRED_FIELDS {
+            return Err(format!(
+                "Loading message requires {} fields, got {}",
+                REQUIRED_FIELDS,
                 messages.len()
-            );
+            ));
         }
-        Self {
-            session: messages[0].as_str().unwrap_or_default().into(),
-            series_id1: messages[1].as_str().unwrap_or_default().into(),
-            series_id2: messages[2].as_str().unwrap_or_default().into(),
+
+        let session = messages[0]
+            .as_str()
+            .ok_or("Invalid session field: expected string")?
+            .into();
+
+        let id1 = messages[1]
+            .as_str()
+            .ok_or("Invalid series_id1 field: expected string")?
+            .into();
+
+        let id2 = messages[2]
+            .as_str()
+            .ok_or("Invalid series_id2 field: expected string")?
+            .into();
+
+        let data = LoadingData { session, id1, id2 };
+
+        // Auto-detect type based on ID format
+        let msg_type = Self::detect_type(&id1, &id2)?;
+
+        Ok(match msg_type {
+            LoadingType::Series => Self::Series(data),
+            LoadingType::Study => Self::Study(data),
+        })
+    }
+
+    fn detect_type(series_id1: &str, series_id2: &str) -> Result<LoadingType, String> {
+        // Check for series pattern: sds_* and s*
+        if series_id1.starts_with("sds_")
+            && series_id2.starts_with('s')
+            && !series_id2.contains("_st")
+        {
+            return Ok(LoadingType::Series);
         }
+
+        // Check for study pattern: st* and *_st*
+        if series_id1.starts_with("st") && series_id2.contains("_st") {
+            return Ok(LoadingType::Study);
+        }
+
+        Err(format!(
+            "Cannot determine loading type from IDs: '{}', '{}'. Expected series pattern (sds_*, s*) or study pattern (st*, *_st*)",
+            series_id1, series_id2
+        ))
+    }
+
+    pub fn session(&self) -> Ustr {
+        match self {
+            Self::Series(data) | Self::Study(data) => data.session,
+        }
+    }
+
+    pub fn id1(&self) -> Ustr {
+        match self {
+            Self::Series(data) | Self::Study(data) => data.id1,
+        }
+    }
+
+    pub fn id2(&self) -> Ustr {
+        match self {
+            Self::Series(data) | Self::Study(data) => data.id2,
+        }
+    }
+
+    pub fn data(&self) -> &LoadingData {
+        match self {
+            Self::Series(data) | Self::Study(data) => data,
+        }
+    }
+
+    pub fn is_series(&self) -> bool {
+        matches!(self, Self::Series(_))
+    }
+
+    pub fn is_study(&self) -> bool {
+        matches!(self, Self::Study(_))
     }
 }

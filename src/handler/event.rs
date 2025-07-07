@@ -3,7 +3,7 @@
 use crate::{
     Error,
     chart::{DataPoint, StudyOptions, StudyResponseData, SymbolInfo},
-    handler::message::{SeriesLoadingMsg, TradingViewResponse},
+    handler::message::{LoadingMsg, TradingViewResponse},
     quote::models::QuoteValue,
     websocket::SeriesInfo,
 };
@@ -171,9 +171,13 @@ fn create_handlers(tx: Arc<ResponseTx>) -> TradingViewHandlers {
         .on_series_loading({
             let tx = tx.clone();
             Arc::new(Box::new(move |data: Vec<Value>| {
-                if let Err(e) = tx.send(TradingViewResponse::SeriesLoading(SeriesLoadingMsg::new(
-                    &data,
-                ))) {
+                let msg = if let Ok(msg) = LoadingMsg::new(&data) {
+                    msg
+                } else {
+                    tracing::error!("Failed to parse LoadingMsg from data: {:?}", data);
+                    return;
+                };
+                if let Err(e) = tx.send(TradingViewResponse::SeriesLoading(msg)) {
                     tracing::error!("Failed to send SeriesLoading response: {}", e);
                 }
             }))
@@ -197,7 +201,13 @@ fn create_handlers(tx: Arc<ResponseTx>) -> TradingViewHandlers {
         .on_study_loading({
             let tx = tx.clone();
             Arc::new(Box::new(move |data| {
-                if let Err(e) = tx.send(TradingViewResponse::StudyLoading(data)) {
+                let msg = if let Ok(msg) = LoadingMsg::new(&data) {
+                    msg
+                } else {
+                    tracing::error!("Failed to parse LoadingMsg from data: {:?}", data);
+                    return;
+                };
+                if let Err(e) = tx.send(TradingViewResponse::StudyLoading(msg)) {
                     tracing::error!("Failed to send StudyLoading response: {}", e);
                 }
             }))
