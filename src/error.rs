@@ -1,7 +1,8 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ustr::Ustr;
 
-#[derive(Debug, Clone, Error, Copy)]
+#[derive(Debug, Clone, Error, Copy, Serialize, Deserialize)]
 pub enum Error {
     #[error("Generic: {0}")]
     Generic(Ustr),
@@ -176,7 +177,7 @@ impl From<TradingViewError> for Error {
     }
 }
 
-#[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy, Serialize, Deserialize)]
 pub enum TradingViewError {
     #[error("Series error")]
     SeriesError,
@@ -200,7 +201,7 @@ pub enum TradingViewError {
     InvalidSessionId,
 }
 
-#[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy, Serialize, Deserialize)]
 pub enum LoginError {
     #[error("Username or password is empty")]
     EmptyCredentials,

@@ -389,7 +389,7 @@ pub async fn retrieve(
                     let symbol = info.id.clone();
                     tracing::debug!("Processing symbol info for {}: {:?}", symbol, info);
 
-                    let data = results.entry(symbol)
+                    let data = results.entry(symbol.to_string())
                         .or_insert_with(ChartHistoricalData::new);
 
                     data.symbol_info = info;
@@ -440,7 +440,7 @@ pub async fn retrieve(
         let symbol = info.id.clone();
         tracing::debug!("Final symbol info for {}", symbol);
 
-        let data = results.entry(symbol)
+        let data = results.entry(symbol.to_string())
             .or_insert_with(ChartHistoricalData::new);
 
         data.symbol_info = info;
