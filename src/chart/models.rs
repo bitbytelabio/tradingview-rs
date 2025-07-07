@@ -210,35 +210,35 @@ impl OHLCV for DataPoint {
     }
 
     fn open(&self) -> f64 {
-        if !(self.value.len() >= 5) {
+        if self.value.len() < 5 {
             return f64::NAN;
         }
         self.value[1]
     }
 
     fn high(&self) -> f64 {
-        if !(self.value.len() >= 5) {
+        if self.value.len() < 5 {
             return f64::NAN;
         }
         self.value[2]
     }
 
     fn low(&self) -> f64 {
-        if !(self.value.len() >= 5) {
+        if self.value.len() < 5 {
             return f64::NAN;
         }
         self.value[3]
     }
 
     fn close(&self) -> f64 {
-        if !(self.value.len() >= 5) {
+        if self.value.len() < 5 {
             return f64::NAN;
         }
         self.value[4]
     }
 
     fn volume(&self) -> f64 {
-        if !(self.value.len() >= 5) {
+        if self.value.len() < 5 {
             return f64::NAN;
         }
         self.value[5]
@@ -310,8 +310,8 @@ impl MarketSymbol for MarketTicker {
 impl From<&SymbolInfo> for MarketTicker {
     fn from(symbol_info: &SymbolInfo) -> Self {
         Self {
-            symbol: symbol_info.name.clone(),
-            exchange: symbol_info.exchange.clone(),
+            symbol: symbol_info.name,
+            exchange: symbol_info.exchange,
             currency: Currency::from_code(symbol_info.currency_id.as_str()),
             country: None,
             market_type: Some(MarketType::from(symbol_info.market_type.as_str())),

@@ -545,7 +545,6 @@ pub async fn get_indicator_metadata(
     }
 
     Err(Error::Generic(Ustr::from(&format!(
-        "Failed to retrieve metadata for Pine script ID: {}, Version: {}",
-        pinescript_id, pinescript_version
+        "Failed to retrieve metadata for Pine script ID: {pinescript_id}, Version: {pinescript_version}"
     ))))
 }

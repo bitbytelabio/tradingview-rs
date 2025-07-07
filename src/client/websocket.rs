@@ -420,7 +420,7 @@ impl WebSocketClient {
         config: ChartOptions,
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
-            (Some(range), _, _) => range.clone(),
+            (Some(range), _, _) => *range,
             (None, Some(from), Some(to)) => Ustr::from(&format!("r,{from}:{to}")),
             _ => Ustr::default(),
         };
@@ -451,9 +451,9 @@ impl WebSocketClient {
         config: ChartOptions,
     ) -> Result<&Self> {
         let range = match (&config.range, config.from, config.to) {
-            (Some(range), _, _) => range.clone(),
+            (Some(range), _, _) => *range,
             (None, Some(from), Some(to)) => Ustr::from(&format!("r,{from}:{to}")),
-            _ => Ustr::default(),
+            _ => "all".into(),
         };
 
         let mut payloads = get_pooled_payload().await;
@@ -514,7 +514,7 @@ impl WebSocketClient {
             .metadata
             .series
             .iter()
-            .map(|entry| entry.value().chart_session.clone())
+            .map(|entry| entry.value().chart_session)
             .collect();
 
         // Delete quote session first
@@ -611,11 +611,7 @@ impl WebSocketClient {
         let study_id = Ustr::from(&format!("st{study_count}"));
 
         let indicator = PineIndicator::build()
-            .fetch(
-                &study.script_id,
-                &study.script_version,
-                study.script_type.clone(),
-            )
+            .fetch(&study.script_id, &study.script_version, study.script_type)
             .await?;
 
         let key = Ustr::from(&indicator.metadata.data.id);
@@ -788,7 +784,7 @@ impl WebSocketHandler {
             if let Some(resp_data) = message_data.get(v.as_str()) {
                 debug!("study data received: {} - {:?}", k, resp_data);
                 let data = StudyResponseData::deserialize(resp_data)?;
-                (self.handler.on_study_data)((options.clone(), data));
+                (self.handler.on_study_data)((*options, data));
             }
         }
         Ok(())
@@ -863,7 +859,7 @@ impl WebSocketHandler {
                 .metadata
                 .quotes
                 .iter()
-                .map(|entry| entry.value().clone())
+                .map(|entry| *entry.value())
                 .collect();
             for quote in quotes {
                 (self.handler.on_quote_data)(quote);

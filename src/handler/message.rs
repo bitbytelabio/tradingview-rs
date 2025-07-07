@@ -223,8 +223,7 @@ impl LoadingMsg {
         }
 
         Err(format!(
-            "Cannot determine loading type from IDs: '{}', '{}'. Expected series pattern (sds_*, s*) or study pattern (st*, *_st*)",
-            series_id1, series_id2
+            "Cannot determine loading type from IDs: '{series_id1}', '{series_id2}'. Expected series pattern (sds_*, s*) or study pattern (st*, *_st*)"
         ))
     }
 

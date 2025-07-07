@@ -438,7 +438,7 @@ async fn handle_replay(
                 .unwrap_or(0)
         });
 
-        let mut options = data.series_info.options.clone();
+        let mut options = data.series_info.options;
         options.replay_mode = true;
         options.replay_from = earliest_ts;
 
@@ -450,9 +450,8 @@ async fn handle_replay(
         // Small delay to ensure data processing is complete
         sleep(Duration::from_millis(100)).await;
 
-        websocket.set_market(options).await.map_err(|e| {
+        websocket.set_market(options).await.inspect_err(|&e| {
             tracing::error!("Failed to set replay mode: {}", e);
-            e
         })?;
 
         state.configured = true;

@@ -179,7 +179,7 @@ fn create_callbacks(
                     
                     // Check if series has data
                     let has_data = {
-                        data_map.get(&series_id).map_or(false, |v| *v)
+                        data_map.get(&series_id).is_some_and(|v| *v)
                     };
                     
                     // Mark as completed and check if all done
@@ -280,7 +280,7 @@ async fn setup_websocket(
             tracing::debug!("Processing batch {} with {} symbols", idx + 1, chunk.len());
             
             for opt in chunk {
-                match ws_clone.set_market(opt.clone()).await {
+                match ws_clone.set_market(*opt).await {
                     Ok(_) => {
                         tracing::debug!("Set market: {}:{}", opt.exchange, opt.symbol);
                     }
@@ -386,7 +386,7 @@ pub async fn retrieve(
                     data.data.extend(points);
                 }
                 Some(info) = info_rx.recv() => {
-                    let symbol = info.id.clone();
+                    let symbol = info.id;
                     tracing::debug!("Processing symbol info for {}: {:?}", symbol, info);
 
                     let data = results.entry(symbol.to_string())
@@ -437,7 +437,7 @@ pub async fn retrieve(
     while let Ok(Some(info)) =
         timeout(Duration::from_millis(100), info_rx.recv()).await
     {
-        let symbol = info.id.clone();
+        let symbol = info.id;
         tracing::debug!("Final symbol info for {}", symbol);
 
         let data = results.entry(symbol.to_string())

@@ -42,9 +42,9 @@ pub enum Range {
     All,
 }
 
-impl Into<Ustr> for Range {
-    fn into(self) -> Ustr {
-        match self {
+impl From<Range> for Ustr {
+    fn from(val: Range) -> Self {
+        match val {
             Range::FromTo(from, to) => Ustr::from(&format!("r,{from}:{to}")),
             Range::OneDay => Ustr::from("1D"),
             Range::FiveDays => Ustr::from("5d"),
