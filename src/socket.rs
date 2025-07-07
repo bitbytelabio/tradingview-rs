@@ -239,16 +239,18 @@ impl SocketSession {
         self.is_closed.load(Ordering::Relaxed)
     }
 
-    pub async fn reconnect(&mut self) -> Result<()> {
+    pub async fn reconnect(&self) -> Result<()> {
         let auth_token = self.auth_token.read().await;
         let (write, read) = SocketSession::connect(*self.server, *auth_token).await?;
-        self.write = Arc::from(RwLock::new(write));
-        self.read = Arc::from(RwLock::new(read));
+        let mut write_guard = self.write.write().await;
+        let mut read_guard = self.read.write().await;
+        *write_guard = write;
+        *read_guard = read;
         self.is_closed.store(false, Ordering::Relaxed);
         Ok(())
     }
 
-    pub async fn set_auth_token(&mut self, auth_token: &str) -> Result<()> {
+    pub async fn set_auth_token(&self, auth_token: &str) -> Result<()> {
         let mut auth_token_ = self.auth_token.write().await;
         *auth_token_ = Ustr::from(auth_token);
         self.send("set_auth_token", &payload!(auth_token)).await?;

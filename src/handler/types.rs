@@ -3,7 +3,7 @@
 use crate::{
     Error,
     chart::{DataPoint, StudyOptions, StudyResponseData, SymbolInfo},
-    handler::message::{LoadingMsg, TradingViewResponse},
+    handler::message::{LoadingMsg, TradingViewCommand, TradingViewResponse},
     quote::models::QuoteValue,
     websocket::SeriesInfo,
 };
@@ -14,6 +14,9 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 pub type ResponseTx = UnboundedSender<TradingViewResponse>;
 pub type ResponseRx = UnboundedReceiver<TradingViewResponse>;
+
+pub type CommandTx = UnboundedSender<TradingViewCommand>;
+pub type CommandRx = UnboundedReceiver<TradingViewCommand>;
 
 pub type CallbackFn<T> = Box<dyn Fn(T) + Send + Sync + 'static>;
 

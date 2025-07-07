@@ -59,7 +59,27 @@ async fn main() -> anyhow::Result<()> {
     //     ])
     //     .await?;
 
-    tokio::spawn(async move { websocket.subscribe().await });
+    // Spawn WebSocket tasks in background
+    let websocket_handle = tokio::spawn(async move {
+        // Run both command handling and subscription concurrently
+        let command_task = websocket.handle_commands();
+        tracing::info!("WebSocket command handler started");
+        let subscribe_task = websocket.subscribe();
+        tracing::info!("WebSocket subscription started");
+
+        // Use select to run both concurrently and handle either completing
+        tokio::select! {
+            result = command_task => {
+                tracing::info!("WebSocket command handler completed");
+                if let Err(e) = result {
+                    tracing::error!("Command handler error: {}", e);
+                }
+            }
+            _ = subscribe_task => {
+                tracing::info!("WebSocket subscription completed");
+            }
+        }
+    });
 
     tokio::spawn(async move {
         loop {
@@ -151,13 +171,23 @@ async fn main() -> anyhow::Result<()> {
     command_tx.send(TradingViewCommand::QuoteFastSymbols {
         symbols: vec![
             "BINANCE:BTCUSDT".into(),
-            "BINANCE:ETHUSDT".into(),
-            "BITSTAMP:ETHUSD".into(),
-            "NASDAQ:TSLA".into(),
+            // "BINANCE:ETHUSDT".into(),
+            // "BITSTAMP:ETHUSD".into(),
+            // "NASDAQ:TSLA".into(),
         ],
     })?;
 
-    loop {}
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(90)).await;
+        command_tx.send(TradingViewCommand::QuoteFastSymbols {
+            symbols: vec![
+                // "BINANCE:BTCUSDT".into(),
+                // "BINANCE:ETHUSDT".into(),
+                // "BITSTAMP:ETHUSD".into(),
+                "NASDAQ:TSLA".into(),
+            ],
+        })?;
+    }
 
     Ok(())
 }
