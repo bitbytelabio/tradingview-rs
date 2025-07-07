@@ -245,7 +245,7 @@ impl OHLCV for DataPoint {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChartDataChanges {
     pub changes: Vec<f64>,
     pub index: i64,
@@ -254,7 +254,7 @@ pub struct ChartDataChanges {
     pub zoffset: i64,
 }
 
-#[derive(Clone, PartialEq, Serialize, Hash, Debug, Default, Copy)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Hash, Debug, Default, Copy)]
 pub struct SeriesCompletedMessage {
     #[serde(default)]
     pub id: Ustr,

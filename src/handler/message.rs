@@ -14,7 +14,7 @@ pub enum TradingViewResponse {
     Error(Error, Vec<Value>),
     SymbolInfo(SymbolInfo),
     SeriesCompleted(Vec<Value>),
-    SeriesLoading(Vec<Value>),
+    SeriesLoading(Vec<Ustr>),
     QuoteCompleted(Vec<Value>),
     ReplayOk(Vec<Value>),
     ReplayPoint(Vec<Value>),
