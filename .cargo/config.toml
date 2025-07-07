@@ -1,2 +1,2 @@
 [env]
-RUST_LOG = { value = "info" }
+RUST_LOG = { value = "debug" }

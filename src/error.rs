@@ -5,7 +5,7 @@ use ustr::Ustr;
 #[derive(Debug, Clone, Error, Copy, Serialize, Deserialize)]
 pub enum Error {
     #[error("Generic: {0}")]
-    Generic(Ustr),
+    Internal(Ustr),
 
     #[error("Request failed: {0}")]
     Request(Ustr),

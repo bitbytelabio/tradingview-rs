@@ -2,12 +2,8 @@ use dotenv::dotenv;
 use std::{env, sync::Arc};
 
 use tradingview::{
-    Interval,
-    chart::ChartOptions,
-    handler::message::{Command, CommandHandler},
-    pine_indicator::ScriptType,
-    socket::DataServer,
-    websocket::WebSocketClient,
+    Interval, chart::ChartOptions, handler::message::Command, pine_indicator::ScriptType,
+    socket::DataServer, websocket::WebSocketClient,
 };
 
 #[tokio::main]
@@ -24,20 +20,45 @@ async fn main() -> anyhow::Result<()> {
         .auth_token(&auth_token)
         .data_tx(response_tx)
         .build()
-        .await?;
+        .await
+        .unwrap();
 
-    websocket.subscribe().await;
+    // let opts = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneMinute).bar_count(100);
+    // let opts2 = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneDay)
+    //     .bar_count(1)
+    //     .study_config(
+    //         "STD;Candlestick%1Pattern%1Bearish%1Abandoned%1Baby",
+    //         "33.0",
+    //         ScriptType::IntervalScript,
+    //     );
+    // let opts3 = ChartOptions::new_with("BTCUSDT", "BINANCE", Interval::OneHour)
+    //     .replay_mode(true)
+    //     .replay_from(1698624060);
 
-    let arc_websocket = Arc::new(websocket);
+    // websocket
+    //     .set_market(opts)
+    //     .await?
+    //     .set_market(opts2)
+    //     .await?
+    //     .set_market(opts3)
+    //     .await?;
 
-    let mut command_handler = CommandHandler::new(command_rx, arc_websocket.clone());
+    // websocket
+    //     .create_quote_session()
+    //     .await?
+    //     .set_fields()
+    //     .await?
+    //     .add_symbols(&[
+    //         "SP:SPX",
+    //         "BINANCE:BTCUSDT",
+    //         "BINANCE:ETHUSDT",
+    //         "BITSTAMP:ETHUSD",
+    //         "NASDAQ:TSLA", // "BINANCE:B",
+    //     ])
+    //     .await?;
+
     tokio::spawn(async move {
-        if let Err(e) = command_handler.handle_commands().await {
-            tracing::error!("Error handling commands: {:?}", e);
-        }
-    });
-
-    tokio::spawn(async move {
+        websocket.subscribe().await;
         while let Some(res) = response_rx.recv().await {
             match res {
                 tradingview::handler::message::TradingViewResponse::ChartData(

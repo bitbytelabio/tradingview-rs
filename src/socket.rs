@@ -15,7 +15,10 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use tokio::{net::TcpStream, sync::RwLock};
+use tokio::{
+    net::TcpStream,
+    sync::{Mutex, RwLock},
+};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async_with_config,
     tungstenite::{
@@ -172,8 +175,8 @@ pub struct SocketSession {
     server: Arc<DataServer>,
     auth_token: Arc<RwLock<Ustr>>,
     is_closed: Arc<AtomicBool>,
-    read: Arc<RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
-    write: Arc<RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
 }
 
 impl SocketSession {
@@ -242,8 +245,8 @@ impl SocketSession {
     pub async fn reconnect(&self) -> Result<()> {
         let auth_token = self.auth_token.read().await;
         let (write, read) = SocketSession::connect(*self.server, *auth_token).await?;
-        let mut write_guard = self.write.write().await;
-        let mut read_guard = self.read.write().await;
+        let mut write_guard = self.write.lock().await;
+        let mut read_guard = self.read.lock().await;
         *write_guard = write;
         *read_guard = read;
         self.is_closed.store(false, Ordering::Relaxed);
@@ -260,8 +263,8 @@ impl SocketSession {
     pub async fn new(server: DataServer, auth_token: Ustr) -> Result<SocketSession> {
         let (write_stream, read_stream) = SocketSession::connect(server, auth_token).await?;
 
-        let write = Arc::from(RwLock::new(write_stream));
-        let read = Arc::from(RwLock::new(read_stream));
+        let write = Arc::from(Mutex::new(write_stream));
+        let read = Arc::from(Mutex::new(read_stream));
         let server = Arc::new(server);
         let auth_token = Arc::new(RwLock::new(auth_token));
         let is_closed = Arc::new(AtomicBool::new(false));
@@ -276,32 +279,41 @@ impl SocketSession {
     }
 
     pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
-        self.write
-            .write()
-            .await
+        let mut write_guard = self.write.lock().await;
+        write_guard
             .send(SocketMessageSer::new(m, p).to_message()?)
             .await?;
+        trace!("sent message: {} with payload: {:?}", m, p);
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
         Ok(())
     }
 
     pub async fn ping(&self, ping: &Message) -> Result<()> {
-        self.write.write().await.send(ping.clone()).await?;
+        let mut write_guard = self.write.lock().await;
+        write_guard.send(ping.clone()).await?;
         trace!("sent ping message {}", ping);
+        if ping.is_close() {
+            self.is_closed.store(true, Ordering::Relaxed);
+            warn!("ping message is close, closing session");
+        }
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
+        trace!("ping message sent successfully");
         Ok(())
     }
 
     pub async fn close(&self) -> Result<()> {
         self.is_closed.store(true, Ordering::Relaxed);
-        self.write.write().await.close().await?;
+        self.write.lock().await.close().await?;
         Ok(())
     }
 
-    pub async fn update_token(&self, auth_token: &str) -> Result<()> {
-        self.write
-            .write()
-            .await
+    pub async fn update_auth_token(&self, auth_token: &str) -> Result<()> {
+        let mut write_guard = self.write.lock().await;
+        write_guard
             .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
             .await?;
+        trace!("updated auth token to: {}", auth_token);
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
         Ok(())
     }
 }
@@ -310,7 +322,7 @@ impl SocketSession {
 pub trait Socket {
     async fn event_loop(&self, session: &SocketSession) {
         let read = session.read.clone();
-        let mut read_guard = read.write().await;
+        let mut read_guard = read.lock().await;
         loop {
             trace!("waiting for next message");
             match read_guard.next().await {

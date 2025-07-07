@@ -177,18 +177,18 @@ pub async fn advanced_search_symbol(
 
     // Validate URL length (most browsers/servers have ~8KB limit)
     if url.len() > 8000 {
-        return Err(Error::Generic(Ustr::from(
+        return Err(Error::Internal(Ustr::from(
             "URL too long - please reduce search parameters",
         )));
     }
 
     let search_data: SymbolSearchResponse = get(None, &url)
         .await
-        .map_err(|e| Error::Generic(Ustr::from(&format!("Failed to fetch symbol search: {e}"))))?
+        .map_err(|e| Error::Internal(Ustr::from(&format!("Failed to fetch symbol search: {e}"))))?
         .json()
         .await
         .map_err(|e| {
-            Error::Generic(Ustr::from(&format!(
+            Error::Internal(Ustr::from(&format!(
                 "Failed to parse symbol search response: {e}"
             )))
         })?;
@@ -279,7 +279,7 @@ pub async fn list_symbols(
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.map_err(|e| {
-                Error::Generic(Ustr::from(&format!("Failed to acquire semaphore: {e}")))
+                Error::Internal(Ustr::from(&format!("Failed to acquire semaphore: {e}")))
             })?;
 
             advanced_search_symbol()
@@ -293,7 +293,7 @@ pub async fn list_symbols(
                 .await
                 .map(|resp| resp.symbols)
                 .map_err(|e| {
-                    Error::Generic(Ustr::from(&format!(
+                    Error::Internal(Ustr::from(&format!(
                         "Failed to fetch symbols for batch starting at {i}: {e}"
                     )))
                 })
@@ -308,7 +308,7 @@ pub async fn list_symbols(
             Ok(Ok(batch_symbols)) => symbols.extend(batch_symbols),
             Ok(Err(e)) => return Err(e),
             Err(join_err) => {
-                return Err(Error::Generic(Ustr::from(&format!(
+                return Err(Error::Internal(Ustr::from(&format!(
                     "Task join failed for batch {index}: {join_err}"
                 ))));
             }
@@ -490,7 +490,7 @@ pub async fn search_indicator(
     debug!("Response: {:?}", resp);
 
     if resp.results.is_empty() {
-        return Err(Error::Generic(Ustr::from(
+        return Err(Error::Internal(Ustr::from(
             "No indicators found for the given search query",
         )));
     }
@@ -544,7 +544,7 @@ pub async fn get_indicator_metadata(
         return Ok(resp.result);
     }
 
-    Err(Error::Generic(Ustr::from(&format!(
+    Err(Error::Internal(Ustr::from(&format!(
         "Failed to retrieve metadata for Pine script ID: {pinescript_id}, Version: {pinescript_version}"
     ))))
 }

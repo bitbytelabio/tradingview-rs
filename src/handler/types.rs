@@ -3,7 +3,7 @@
 use crate::{
     Error,
     chart::{DataPoint, StudyOptions, StudyResponseData, SymbolInfo},
-    handler::message::{LoadingMsg, TradingViewCommand, TradingViewResponse},
+    handler::message::{LoadingMsg, Command, TradingViewResponse},
     quote::models::QuoteValue,
     websocket::SeriesInfo,
 };
@@ -12,11 +12,11 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-pub type ResponseTx = UnboundedSender<TradingViewResponse>;
-pub type ResponseRx = UnboundedReceiver<TradingViewResponse>;
+pub type DataTx = UnboundedSender<TradingViewResponse>;
+pub type DataRx = UnboundedReceiver<TradingViewResponse>;
 
-pub type CommandTx = UnboundedSender<TradingViewCommand>;
-pub type CommandRx = UnboundedReceiver<TradingViewCommand>;
+pub type CommandTx = UnboundedSender<Command>;
+pub type CommandRx = UnboundedReceiver<Command>;
 
 pub type CallbackFn<T> = Box<dyn Fn(T) + Send + Sync + 'static>;
 
@@ -119,7 +119,7 @@ impl TradingViewHandler {
     event_setter!(on_unknown_event, (String, Vec<Value>));
 }
 
-pub fn create_handler(tx: Arc<ResponseTx>) -> TradingViewHandler {
+pub fn create_handler(tx: Arc<DataTx>) -> TradingViewHandler {
     TradingViewHandler::builder()
         .on_symbol_info({
             let tx = tx.clone();
