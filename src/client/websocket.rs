@@ -2,7 +2,10 @@ use crate::{
     DataPoint, Error, Interval, Result, Timezone,
     chart::{ChartOptions, ChartResponseData, StudyOptions, StudyResponseData, SymbolInfo},
     error::TradingViewError,
-    handler::event::{ResponseTx, TradingViewHandler, create_handler},
+    handler::{
+        command::CommandRx,
+        event::{ResponseTx, TradingViewHandler, create_handler},
+    },
     payload,
     pine_indicator::PineIndicator,
     quote::{
@@ -53,7 +56,6 @@ async fn return_pooled_payload(mut payload: Vec<Value>) {
 pub struct WebSocketHandler {
     metadata: Metadata,
     handler: TradingViewHandler,
-    socket_session: Option<SocketSession>,
 }
 
 #[derive(Default, Clone)]
@@ -73,60 +75,42 @@ struct ChartState {
     symbol_info: Option<SymbolInfo>,
 }
 
-#[derive(Clone)]
-pub struct WebSocketClient {
-    handler: WebSocketHandler,
-    socket: SocketSession,
-}
-
-#[derive(Default)]
-pub struct WebSocketBuilder {
-    client: Option<WebSocketHandler>,
-    auth_token: Option<Ustr>,
-    server: Option<DataServer>,
-}
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SeriesInfo {
     pub chart_session: Ustr,
     pub options: ChartOptions,
 }
 
-impl WebSocketBuilder {
-    pub fn handler(mut self, handler: WebSocketHandler) -> Self {
-        self.client = Some(handler);
-        self
-    }
-
-    pub fn auth_token(mut self, auth_token: &str) -> Self {
-        self.auth_token = Some(Ustr::from(auth_token));
-        self
-    }
-
-    pub fn server(mut self, server: DataServer) -> Self {
-        self.server = Some(server);
-        self
-    }
-
-    pub async fn build(self) -> Result<WebSocketClient> {
-        let auth_token = self.auth_token.unwrap_or("unauthorized_user_token".into());
-        let server = self.server.unwrap_or_default();
-
-        let socket = SocketSession::new(server, auth_token).await?;
-        let client = self.client.unwrap_or_default();
-
-        Ok(WebSocketClient::new_with_session(client, socket))
-    }
+#[derive(Clone)]
+pub struct WebSocketClient {
+    pub(crate) command_rx: Arc<Mutex<CommandRx>>,
+    pub(crate) handler: WebSocketHandler,
+    pub(crate) socket: SocketSession,
+    pub(crate) server: DataServer,
 }
 
+#[bon::bon]
 impl WebSocketClient {
-    pub fn builder() -> WebSocketBuilder {
-        WebSocketBuilder::default()
-    }
+    #[builder]
+    pub fn new(
+        auth_token: Option<&str>,
+        #[builder(default = DataServer::ProData)] server: DataServer,
+        response_tx: ResponseTx,
+        command_rx: CommandRx,
+    ) -> Result<Self> {
+        let auth_token = Ustr::from(auth_token.unwrap_or("unauthorized_user_token"));
+        let rt = tokio::runtime::Handle::current();
 
-    pub fn new_with_session(mut handler: WebSocketHandler, socket: SocketSession) -> Self {
-        handler.socket_session = Some(socket.clone());
-        Self { handler, socket }
+        let socket = rt.block_on(SocketSession::new(server, auth_token))?;
+        let handler = WebSocketHandler::builder().res_tx(response_tx).build();
+        let command_rx = Arc::new(Mutex::new(command_rx));
+
+        Ok(Self {
+            command_rx,
+            handler,
+            socket,
+            server,
+        })
     }
 
     pub async fn is_closed(&self) -> bool {
@@ -278,14 +262,14 @@ impl WebSocketClient {
         Ok(self)
     }
 
-    pub async fn delete_chart_session_id(&self, session: &str) -> Result<&Self> {
+    pub async fn delete_chart_session(&self, session: &str) -> Result<&Self> {
         self.socket
             .send("chart_delete_session", &payload!(session))
             .await?;
         Ok(self)
     }
 
-    pub async fn delete_replay_session_id(&self, session: &str) -> Result<&Self> {
+    pub async fn delete_replay_session(&self, session: &str) -> Result<&Self> {
         self.socket
             .send("replay_delete_session", &payload!(session))
             .await?;
@@ -525,7 +509,7 @@ impl WebSocketClient {
         // Delete all chart sessions in parallel for better performance
         let delete_futures: Vec<_> = chart_sessions
             .iter()
-            .map(|session| self.delete_chart_session_id(session))
+            .map(|session| self.delete_chart_session(session))
             .collect();
 
         // Execute all deletions concurrently
@@ -668,7 +652,13 @@ impl WebSocketClient {
         Ok(self)
     }
 
-    pub async fn subscribe(&self) {
+    pub async fn subscribe(&mut self) {
+        let mut client = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = client.handle_commands().await {
+                error!("Command handler error: {:?}", e);
+            }
+        });
         self.event_loop(&self.socket.to_owned()).await;
     }
 
@@ -693,12 +683,12 @@ impl Socket for WebSocketClient {
 #[bon::bon]
 impl WebSocketHandler {
     #[builder]
-    pub fn new(tx: Arc<ResponseTx>) -> Self {
-        let handler: TradingViewHandler = create_handler(tx);
+    pub fn new(res_tx: ResponseTx) -> Self {
+        let res_tx = Arc::new(res_tx);
+        let handler: TradingViewHandler = create_handler(res_tx);
         Self {
             metadata: Metadata::default(),
             handler,
-            socket_session: None,
         }
     }
 

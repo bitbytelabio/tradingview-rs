@@ -185,10 +185,7 @@ fn extract_symbol_exchange(
 }
 
 /// Create callback handlers for processing incoming WebSocket data
-fn create_callbacks(
-    senders: Senders,
-    replay_state: Arc<Mutex<ReplayState>>,
-) -> TradingViewHandler {
+fn create_callbacks(senders: Senders, replay_state: Arc<Mutex<ReplayState>>) -> TradingViewHandler {
     let data_tx = Arc::clone(&senders.data);
     let info_tx = Arc::clone(&senders.info);
     let error_tx = Arc::clone(&senders.error);
@@ -319,8 +316,7 @@ async fn setup_websocket(
         .server(server.unwrap_or(DataServer::ProData))
         .auth_token(auth_token)
         .handler(client)
-        .build()
-        .await?;
+        .build()?;
 
     // Configure market settings before starting subscription
     websocket.set_market(options).await?;

@@ -4,6 +4,7 @@ use std::{env, sync::Arc};
 use tradingview::{
     Interval,
     chart::ChartOptions,
+    handler::command,
     pine_indicator::ScriptType,
     socket::DataServer,
     websocket::{WebSocketClient, WebSocketHandler},
@@ -16,9 +17,9 @@ async fn main() -> anyhow::Result<()> {
     let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
     let (response_tx, mut response_rx) = tokio::sync::mpsc::unbounded_channel();
-
+    // let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
     let handler = WebSocketHandler::builder()
-        .tx(Arc::new(response_tx))
+        .res_tx(Arc::new(response_tx))
         .build();
 
     let websocket = WebSocketClient::builder()

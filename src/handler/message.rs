@@ -40,7 +40,7 @@ pub enum TradingViewCommand {
     },
     SetTimeZone {
         session: Ustr,
-        time_zone: Timezone,
+        timezone: Timezone,
     },
     CreateQuoteSession,
     DeleteQuoteSession,
@@ -119,7 +119,8 @@ pub enum TradingViewCommand {
         session: Ustr,
         symbol: Ustr,
         exchange: Ustr,
-        interval: Interval,
+        opts: ChartOptions,
+        replay_session: Option<Ustr>,
     },
     SetReplayStep {
         session: Ustr,

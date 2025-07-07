@@ -262,8 +262,7 @@ async fn setup_websocket(
         .server(server.unwrap_or(DataServer::ProData))
         .auth_token(auth_token)
         .handler(client)
-        .build()
-        .await?;
+        .build()?;
 
     // Prepare market options
     let mut opts = Vec::new();
