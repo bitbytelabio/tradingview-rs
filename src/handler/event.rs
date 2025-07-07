@@ -3,7 +3,7 @@
 use crate::{
     Error,
     chart::{DataPoint, StudyOptions, StudyResponseData, SymbolInfo},
-    handler::message::TradingViewResponse,
+    handler::message::{SeriesLoadingMsg, TradingViewResponse},
     quote::models::QuoteValue,
     websocket::SeriesInfo,
 };
@@ -11,7 +11,6 @@ use bon::Builder;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use ustr::Ustr;
 
 pub type ResponseTx = UnboundedSender<TradingViewResponse>;
 pub type ResponseRx = UnboundedReceiver<TradingViewResponse>;
@@ -147,109 +146,7 @@ impl TradingViewResponseHandler {
     pub fn with_channel() -> (TradingViewHandlers, ResponseRx) {
         let (response_tx, response_rx) = tokio::sync::mpsc::unbounded_channel();
         let tx = Arc::new(response_tx);
-
-        let handlers = TradingViewHandlers::builder()
-            .on_symbol_info({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::SymbolInfo(data));
-                }))
-            })
-            .on_series_loading({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data: Vec<Value>| {
-                    let _ = tx.send(TradingViewResponse::SeriesLoading(
-                        data.into_iter()
-                            .map(|v| v.as_str().map(Ustr::from).unwrap_or_default())
-                            .collect::<Vec<Ustr>>(),
-                    ));
-                }))
-            })
-            .on_chart_data({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(series_info, data_points)| {
-                    let _ = tx.send(TradingViewResponse::ChartData(series_info, data_points));
-                }))
-            })
-            .on_series_completed({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::SeriesCompleted(data));
-                }))
-            })
-            .on_study_loading({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::StudyLoading(data));
-                }))
-            })
-            .on_study_data({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(study_options, study_data)| {
-                    let _ = tx.send(TradingViewResponse::StudyData(study_options, study_data));
-                }))
-            })
-            .on_study_completed({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::StudyCompleted(data));
-                }))
-            })
-            .on_quote_data({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::QuoteData(data));
-                }))
-            })
-            .on_quote_completed({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::QuoteCompleted(data));
-                }))
-            })
-            .on_replay_ok({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayOk(data));
-                }))
-            })
-            .on_replay_point({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayPoint(data));
-                }))
-            })
-            .on_replay_instance_id({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayInstanceId(data));
-                }))
-            })
-            .on_replay_resolutions({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayResolutions(data));
-                }))
-            })
-            .on_replay_data_end({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayDataEnd(data));
-                }))
-            })
-            .on_error({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(error, values)| {
-                    let _ = tx.send(TradingViewResponse::Error(error, values));
-                }))
-            })
-            .on_unknown_event({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(event, values): (String, Vec<Value>)| {
-                    let _ = tx.send(TradingViewResponse::UnknownEvent(event.into(), values));
-                }))
-            })
-            .build();
+        let handlers = create_handlers(tx);
 
         (handlers, response_rx)
     }
@@ -259,107 +156,139 @@ impl TradingViewResponseHandler {
     pub fn with_tx(response_tx: ResponseTx) -> TradingViewHandlers {
         let tx = Arc::new(response_tx);
 
-        TradingViewHandlers::builder()
-            .on_symbol_info({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::SymbolInfo(data));
-                }))
-            })
-            .on_series_loading({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data: Vec<Value>| {
-                    let _ = tx.send(TradingViewResponse::SeriesLoading(
-                        data.into_iter()
-                            .map(|v| v.as_str().map(Ustr::from).unwrap_or_default())
-                            .collect::<Vec<Ustr>>(),
-                    ));
-                }))
-            })
-            .on_chart_data({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(series_info, data_points)| {
-                    let _ = tx.send(TradingViewResponse::ChartData(series_info, data_points));
-                }))
-            })
-            .on_series_completed({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::SeriesCompleted(data));
-                }))
-            })
-            .on_study_loading({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::StudyLoading(data));
-                }))
-            })
-            .on_study_data({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(study_options, study_data)| {
-                    let _ = tx.send(TradingViewResponse::StudyData(study_options, study_data));
-                }))
-            })
-            .on_study_completed({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::StudyCompleted(data));
-                }))
-            })
-            .on_quote_data({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::QuoteData(data));
-                }))
-            })
-            .on_quote_completed({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::QuoteCompleted(data));
-                }))
-            })
-            .on_replay_ok({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayOk(data));
-                }))
-            })
-            .on_replay_point({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayPoint(data));
-                }))
-            })
-            .on_replay_instance_id({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayInstanceId(data));
-                }))
-            })
-            .on_replay_resolutions({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayResolutions(data));
-                }))
-            })
-            .on_replay_data_end({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |data| {
-                    let _ = tx.send(TradingViewResponse::ReplayDataEnd(data));
-                }))
-            })
-            .on_error({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(error, values)| {
-                    let _ = tx.send(TradingViewResponse::Error(error, values));
-                }))
-            })
-            .on_unknown_event({
-                let tx = tx.clone();
-                Arc::new(Box::new(move |(event, values): (String, Vec<Value>)| {
-                    let _ = tx.send(TradingViewResponse::UnknownEvent(event.into(), values));
-                }))
-            })
-            .build()
+        create_handlers(tx)
     }
+}
+
+fn create_handlers(tx: Arc<ResponseTx>) -> TradingViewHandlers {
+    TradingViewHandlers::builder()
+        .on_symbol_info({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                let _ = tx.send(TradingViewResponse::SymbolInfo(data));
+            }))
+        })
+        .on_series_loading({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data: Vec<Value>| {
+                if let Err(e) = tx.send(TradingViewResponse::SeriesLoading(SeriesLoadingMsg::new(
+                    &data,
+                ))) {
+                    tracing::error!("Failed to send SeriesLoading response: {}", e);
+                }
+            }))
+        })
+        .on_chart_data({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |(series_info, data_points)| {
+                if let Err(e) = tx.send(TradingViewResponse::ChartData(series_info, data_points)) {
+                    tracing::error!("Failed to send ChartData response: {}", e);
+                }
+            }))
+        })
+        .on_series_completed({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::SeriesCompleted(data)) {
+                    tracing::error!("Failed to send SeriesCompleted response: {}", e);
+                }
+            }))
+        })
+        .on_study_loading({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::StudyLoading(data)) {
+                    tracing::error!("Failed to send StudyLoading response: {}", e);
+                }
+            }))
+        })
+        .on_study_data({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |(study_options, study_data)| {
+                if let Err(e) = tx.send(TradingViewResponse::StudyData(study_options, study_data)) {
+                    tracing::error!("Failed to send StudyData response: {}", e);
+                }
+            }))
+        })
+        .on_study_completed({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::StudyCompleted(data)) {
+                    tracing::error!("Failed to send StudyCompleted response: {}", e);
+                }
+            }))
+        })
+        .on_quote_data({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::QuoteData(data)) {
+                    tracing::error!("Failed to send QuoteData response: {}", e);
+                }
+            }))
+        })
+        .on_quote_completed({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::QuoteCompleted(data)) {
+                    tracing::error!("Failed to send QuoteCompleted response: {}", e);
+                }
+            }))
+        })
+        .on_replay_ok({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::ReplayOk(data)) {
+                    tracing::error!("Failed to send ReplayOk response: {}", e);
+                }
+            }))
+        })
+        .on_replay_point({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::ReplayPoint(data)) {
+                    tracing::error!("Failed to send ReplayPoint response: {}", e);
+                }
+            }))
+        })
+        .on_replay_instance_id({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::ReplayInstanceId(data)) {
+                    tracing::error!("Failed to send ReplayInstanceId response: {}", e);
+                }
+            }))
+        })
+        .on_replay_resolutions({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::ReplayResolutions(data)) {
+                    tracing::error!("Failed to send ReplayResolutions response: {}", e);
+                }
+            }))
+        })
+        .on_replay_data_end({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |data| {
+                if let Err(e) = tx.send(TradingViewResponse::ReplayDataEnd(data)) {
+                    tracing::error!("Failed to send ReplayDataEnd response: {}", e);
+                }
+            }))
+        })
+        .on_error({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |(error, values)| {
+                if let Err(e) = tx.send(TradingViewResponse::Error(error, values)) {
+                    tracing::error!("Failed to send Error response: {}", e);
+                }
+            }))
+        })
+        .on_unknown_event({
+            let tx = tx.clone();
+            Arc::new(Box::new(move |(event, values): (String, Vec<Value>)| {
+                if let Err(e) = tx.send(TradingViewResponse::UnknownEvent(event.into(), values)) {
+                    tracing::error!("Failed to send UnknownEvent response: {}", e);
+                }
+            }))
+        })
+        .build()
 }

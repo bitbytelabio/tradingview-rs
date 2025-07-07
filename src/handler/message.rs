@@ -14,7 +14,7 @@ pub enum TradingViewResponse {
     Error(Error, Vec<Value>),
     SymbolInfo(SymbolInfo),
     SeriesCompleted(Vec<Value>),
-    SeriesLoading(Vec<Ustr>),
+    SeriesLoading(SeriesLoadingMsg),
     QuoteCompleted(Vec<Value>),
     ReplayOk(Vec<Value>),
     ReplayPoint(Vec<Value>),
@@ -149,4 +149,27 @@ pub enum TradingViewCommand {
     SetMarket {
         options: ChartOptions,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
+pub struct SeriesLoadingMsg {
+    pub session: Ustr,
+    pub series_id1: Ustr,
+    pub series_id2: Ustr,
+}
+
+impl SeriesLoadingMsg {
+    pub fn new(messages: &[Value]) -> Self {
+        if messages.len() < 3 {
+            tracing::warn!(
+                "SeriesLoading requires at least 3 messages, got {}",
+                messages.len()
+            );
+        }
+        Self {
+            session: messages[0].as_str().unwrap_or_default().into(),
+            series_id1: messages[1].as_str().unwrap_or_default().into(),
+            series_id2: messages[2].as_str().unwrap_or_default().into(),
+        }
+    }
 }
