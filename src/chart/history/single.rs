@@ -3,7 +3,7 @@ use crate::{
     Result, SymbolInfo,
     chart::ChartOptions,
     error::TradingViewError,
-    handler::event::TradingViewHandlers,
+    handler::event::TradingViewHandler,
     history::resolve_auth_token,
     options::Range,
     socket::DataServer,
@@ -188,13 +188,13 @@ fn extract_symbol_exchange(
 fn create_callbacks(
     senders: Senders,
     replay_state: Arc<Mutex<ReplayState>>,
-) -> TradingViewHandlers {
+) -> TradingViewHandler {
     let data_tx = Arc::clone(&senders.data);
     let info_tx = Arc::clone(&senders.info);
     let error_tx = Arc::clone(&senders.error);
     let completion_tx = Arc::clone(&senders.completion);
 
-    TradingViewHandlers::default()
+    TradingViewHandler::default()
         .on_chart_data({
             let data_tx = Arc::clone(&data_tx);
             let replay_state = Arc::clone(&replay_state);
@@ -310,15 +310,15 @@ fn is_critical_error(_error: &Error) -> bool {
 async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: TradingViewHandlers,
+    callbacks: TradingViewHandler,
     options: ChartOptions,
 ) -> Result<WebSocketClient> {
-    let client = WebSocketHandler::default().set_callbacks(callbacks);
+    let client = WebSocketHandler::default().set_handler(callbacks);
 
     let websocket = WebSocketClient::builder()
         .server(server.unwrap_or(DataServer::ProData))
         .auth_token(auth_token)
-        .client(client)
+        .handler(client)
         .build()
         .await?;
 

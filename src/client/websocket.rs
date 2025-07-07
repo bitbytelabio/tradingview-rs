@@ -2,7 +2,7 @@ use crate::{
     DataPoint, Error, Interval, Result, Timezone,
     chart::{ChartOptions, ChartResponseData, StudyOptions, StudyResponseData, SymbolInfo},
     error::TradingViewError,
-    handler::event::TradingViewHandlers,
+    handler::event::{ResponseTx, TradingViewHandler, create_handler},
     payload,
     pine_indicator::PineIndicator,
     quote::{
@@ -52,7 +52,7 @@ async fn return_pooled_payload(mut payload: Vec<Value>) {
 #[derive(Clone, Default)]
 pub struct WebSocketHandler {
     metadata: Metadata,
-    handler: TradingViewHandlers,
+    handler: TradingViewHandler,
     socket_session: Option<SocketSession>,
 }
 
@@ -93,8 +93,8 @@ pub struct SeriesInfo {
 }
 
 impl WebSocketBuilder {
-    pub fn client(mut self, client: WebSocketHandler) -> Self {
-        self.client = Some(client);
+    pub fn handler(mut self, handler: WebSocketHandler) -> Self {
+        self.client = Some(handler);
         self
     }
 
@@ -690,8 +690,18 @@ impl Socket for WebSocketClient {
         (self.handler.handler.on_error)((error, vec![]));
     }
 }
-
+#[bon::bon]
 impl WebSocketHandler {
+    #[builder]
+    pub fn new(tx: Arc<ResponseTx>) -> Self {
+        let handler: TradingViewHandler = create_handler(tx);
+        Self {
+            metadata: Metadata::default(),
+            handler,
+            socket_session: None,
+        }
+    }
+
     pub(crate) async fn handle_events(&self, event: TradingViewDataEvent, message: &Vec<Value>) {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
@@ -875,8 +885,8 @@ impl WebSocketHandler {
         }
     }
 
-    pub fn set_callbacks(mut self, callbacks: TradingViewHandlers) -> Self {
-        self.handler = callbacks;
+    pub fn set_handler(mut self, handler: TradingViewHandler) -> Self {
+        self.handler = handler;
         self
     }
 }

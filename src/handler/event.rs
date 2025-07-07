@@ -41,7 +41,7 @@ macro_rules! event_setter {
 }
 
 #[derive(Clone, Builder)]
-pub struct TradingViewHandlers {
+pub struct TradingViewHandler {
     #[builder(default= default_callback::<SymbolInfo>("ON_SYMBOL_INFO"))]
     pub on_symbol_info: Arc<CallbackFn<SymbolInfo>>,
 
@@ -91,13 +91,13 @@ pub struct TradingViewHandlers {
     pub on_unknown_event: Arc<CallbackFn<(String, Vec<Value>)>>,
 }
 
-impl Default for TradingViewHandlers {
+impl Default for TradingViewHandler {
     fn default() -> Self {
-        TradingViewHandlers::builder().build()
+        TradingViewHandler::builder().build()
     }
 }
 
-impl TradingViewHandlers {
+impl TradingViewHandler {
     event_setter!(on_chart_data, (SeriesInfo, Vec<DataPoint>));
     event_setter!(on_quote_data, QuoteValue);
     event_setter!(on_study_data, (StudyOptions, StudyResponseData));
@@ -116,52 +116,8 @@ impl TradingViewHandlers {
     event_setter!(on_unknown_event, (String, Vec<Value>));
 }
 
-#[derive(Clone)]
-pub struct TradingViewResponseHandler {
-    pub response_tx: ResponseTx,
-}
-
-impl TradingViewResponseHandler {
-    pub fn new() -> (Self, ResponseRx) {
-        let (response_tx, response_rx) = tokio::sync::mpsc::unbounded_channel();
-        (Self { response_tx }, response_rx)
-    }
-
-    pub fn send_response(
-        &self,
-        response: TradingViewResponse,
-    ) -> Result<(), tokio::sync::mpsc::error::SendError<TradingViewResponse>> {
-        self.response_tx.send(response)
-    }
-
-    // Callback function that maintains the same API but sends to channel
-    pub fn on_message(&self, response: TradingViewResponse) {
-        if let Err(e) = self.send_response(response) {
-            tracing::error!("Failed to send response to channel: {}", e);
-        }
-    }
-
-    /// Creates TradingViewHandlers with all callbacks configured to send data through a channel
-    /// Returns the handlers and the receiver for listening to all events
-    pub fn with_channel() -> (TradingViewHandlers, ResponseRx) {
-        let (response_tx, response_rx) = tokio::sync::mpsc::unbounded_channel();
-        let tx = Arc::new(response_tx);
-        let handlers = create_handlers(tx);
-
-        (handlers, response_rx)
-    }
-
-    /// Creates TradingViewHandlers with a custom response transmitter
-    /// Useful when you want to share the same channel across multiple handlers
-    pub fn with_tx(response_tx: ResponseTx) -> TradingViewHandlers {
-        let tx = Arc::new(response_tx);
-
-        create_handlers(tx)
-    }
-}
-
-fn create_handlers(tx: Arc<ResponseTx>) -> TradingViewHandlers {
-    TradingViewHandlers::builder()
+pub fn create_handler(tx: Arc<ResponseTx>) -> TradingViewHandler {
+    TradingViewHandler::builder()
         .on_symbol_info({
             let tx = tx.clone();
             Arc::new(Box::new(move |data| {

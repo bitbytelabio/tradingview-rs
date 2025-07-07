@@ -1,5 +1,5 @@
 use crate::{
-    handler::event::TradingViewHandlers, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocketClient, WebSocketHandler}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
+    handler::event::TradingViewHandler, chart::ChartOptions, history::resolve_auth_token, socket::DataServer, websocket::{SeriesInfo, WebSocketClient, WebSocketHandler}, ChartHistoricalData, DataPoint, Error, Interval, MarketSymbol, Result, SymbolInfo, OHLCV as _
 };
 use bon::builder;
 use dashmap::DashMap;
@@ -105,8 +105,8 @@ fn create_callbacks(
     info_tx: Arc<Mutex<mpsc::Sender<SymbolInfo>>>,
     tracker: BatchTracker,
     data_map: Arc<DashMap<Ustr, bool>>, // Track which series received data
-) -> TradingViewHandlers {
-    TradingViewHandlers::default()
+) -> TradingViewHandler {
+    TradingViewHandler::default()
         .on_chart_data({
             let tracker = tracker.clone();
             let data_map = Arc::clone(&data_map);
@@ -251,17 +251,17 @@ fn extract_series_id(msg: &[Value]) -> Option<Ustr> {
 async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
-    callbacks: TradingViewHandlers,
+    callbacks: TradingViewHandler,
     symbols: &[impl MarketSymbol],
     interval: Interval,
     batch_size: usize,
 ) -> Result<WebSocketClient> {
-    let client = WebSocketHandler::default().set_callbacks(callbacks);
+    let client = WebSocketHandler::default().set_handler(callbacks);
 
     let ws = WebSocketClient::builder()
         .server(server.unwrap_or(DataServer::ProData))
         .auth_token(auth_token)
-        .client(client)
+        .handler(client)
         .build()
         .await?;
 
