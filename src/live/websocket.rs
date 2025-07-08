@@ -26,12 +26,14 @@ use std::{
     fmt::Debug,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU16, Ordering},
+        atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering},
     },
+    time::{Duration, Instant},
 };
 use tokio::{
     net::TcpStream,
     sync::{Mutex, MutexGuard, RwLock},
+    time::timeout,
 };
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async_with_config,
@@ -41,9 +43,66 @@ use tokio_tungstenite::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use url::Url;
 use ustr::{Ustr, ustr};
+
+// Error recovery configuration
+#[derive(Debug, Clone)]
+struct ErrorRecoveryConfig {
+    max_consecutive_errors: u64,
+    error_reset_interval: Duration,
+    _critical_error_threshold: Duration,
+}
+
+impl Default for ErrorRecoveryConfig {
+    fn default() -> Self {
+        Self {
+            max_consecutive_errors: 5,
+            error_reset_interval: Duration::from_secs(60),
+            _critical_error_threshold: Duration::from_secs(30),
+        }
+    }
+}
+
+// Error statistics and tracking
+#[derive(Debug, Default)]
+struct ErrorStats {
+    consecutive_errors: Arc<AtomicU64>,
+    last_error_time: Arc<RwLock<Option<Instant>>>,
+    total_errors: Arc<AtomicU64>,
+    recovery_attempts: Arc<AtomicU64>,
+}
+
+impl ErrorStats {
+    fn increment_error(&self) -> u64 {
+        let count = self.consecutive_errors.fetch_add(1, Ordering::SeqCst) + 1;
+        self.total_errors.fetch_add(1, Ordering::SeqCst);
+        count
+    }
+
+    fn reset_consecutive(&self) {
+        self.consecutive_errors.store(0, Ordering::SeqCst);
+    }
+
+    async fn update_last_error_time(&self) {
+        let mut last_error = self.last_error_time.write().await;
+        *last_error = Some(Instant::now());
+    }
+
+    async fn should_reset_consecutive_errors(&self, reset_interval: Duration) -> bool {
+        let last_error = self.last_error_time.read().await;
+        if let Some(last_time) = *last_error {
+            last_time.elapsed() > reset_interval
+        } else {
+            false
+        }
+    }
+
+    fn get_consecutive_errors(&self) -> u64 {
+        self.consecutive_errors.load(Ordering::SeqCst)
+    }
+}
 
 #[derive(Default, Clone)]
 pub(crate) struct Metadata {
@@ -78,8 +137,23 @@ pub struct WebSocketClient {
     is_closed: Arc<AtomicBool>,
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+
+    // Error handling and recovery
+    error_stats: ErrorStats,
+    error_config: ErrorRecoveryConfig,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ErrorSeverity {
+    /// Low severity - log and continue
+    Minor,
+    /// Medium severity - may trigger recovery actions
+    Moderate,
+    /// High severity - requires immediate attention and recovery
+    Critical,
+    /// Fatal - connection should be terminated
+    Fatal,
+}
 #[bon::bon]
 impl WebSocketClient {
     #[builder]
@@ -106,6 +180,8 @@ impl WebSocketClient {
             auth_token,
             is_closed,
             closed: CancellationToken::new(),
+            error_stats: ErrorStats::default(),
+            error_config: ErrorRecoveryConfig::default(),
         });
 
         Self::spawn_reader_task(Arc::clone(&client));
@@ -150,6 +226,185 @@ impl WebSocketClient {
             .await?;
 
         Ok((write, read))
+    }
+
+    /// Classify error severity for appropriate response
+    fn classify_error_severity(&self, error: &Error, context: &str) -> ErrorSeverity {
+        match error {
+            // Network errors - usually recoverable
+            Error::WebSocket(msg) => {
+                if msg.contains("ConnectionClosed") || msg.contains("ConnectionReset") {
+                    ErrorSeverity::Critical
+                } else if msg.contains("timeout") {
+                    ErrorSeverity::Moderate
+                } else {
+                    ErrorSeverity::Critical
+                }
+            }
+
+            // TradingView specific errors
+            Error::TradingView { source } => {
+                use crate::error::TradingViewError;
+                match source {
+                    TradingViewError::CriticalError => ErrorSeverity::Fatal,
+                    TradingViewError::ProtocolError => ErrorSeverity::Critical,
+                    TradingViewError::SymbolError | TradingViewError::SeriesError => {
+                        ErrorSeverity::Moderate
+                    }
+                    _ => ErrorSeverity::Minor,
+                }
+            }
+
+            // Parse errors - usually minor unless frequent
+            Error::JsonParse(_) => {
+                if self.error_stats.get_consecutive_errors() > 3 {
+                    ErrorSeverity::Moderate
+                } else {
+                    ErrorSeverity::Minor
+                }
+            }
+
+            // Internal errors - context dependent
+            Error::Internal(msg) => {
+                if msg.contains("connection") || msg.contains("timeout") {
+                    ErrorSeverity::Critical
+                } else if context.contains("critical") {
+                    ErrorSeverity::Fatal
+                } else {
+                    ErrorSeverity::Moderate
+                }
+            }
+
+            // Default classification
+            _ => ErrorSeverity::Moderate,
+        }
+    }
+
+    /// Attempt to recover from different types of errors
+    async fn attempt_error_recovery(&self, severity: ErrorSeverity, error: &Error) -> Result<bool> {
+        match severity {
+            ErrorSeverity::Minor => {
+                // For minor errors, just log and continue
+                debug!("Minor error occurred, continuing: {}", error);
+                Ok(true)
+            }
+
+            ErrorSeverity::Moderate => {
+                // For moderate errors, try soft recovery
+                warn!(
+                    "Moderate error occurred, attempting soft recovery: {}",
+                    error
+                );
+
+                // Reset error count if enough time has passed
+                if self
+                    .error_stats
+                    .should_reset_consecutive_errors(self.error_config.error_reset_interval)
+                    .await
+                {
+                    self.error_stats.reset_consecutive();
+                    info!("Reset consecutive error count after timeout period");
+                }
+
+                // Try to send a ping to test connection
+                if let Err(ping_err) = self.try_ping().await {
+                    warn!(
+                        "Ping failed during recovery, connection may be lost: {}",
+                        ping_err
+                    );
+                    return Ok(false);
+                }
+
+                Ok(true)
+            }
+
+            ErrorSeverity::Critical => {
+                // For critical errors, attempt reconnection
+                error!(
+                    "Critical error occurred, attempting reconnection: {}",
+                    error
+                );
+                self.error_stats
+                    .recovery_attempts
+                    .fetch_add(1, Ordering::SeqCst);
+
+                match timeout(Duration::from_secs(30), self.reconnect()).await {
+                    Ok(Ok(_)) => {
+                        info!("Successfully recovered from critical error through reconnection");
+                        self.error_stats.reset_consecutive();
+                        Ok(true)
+                    }
+                    Ok(Err(reconnect_err)) => {
+                        error!("Reconnection failed: {}", reconnect_err);
+                        Ok(false)
+                    }
+                    Err(_) => {
+                        error!("Reconnection timed out");
+                        Ok(false)
+                    }
+                }
+            }
+
+            ErrorSeverity::Fatal => {
+                // For fatal errors, mark connection as closed
+                error!(
+                    "Fatal error occurred, marking connection as closed: {}",
+                    error
+                );
+                self.is_closed.store(true, Ordering::Relaxed);
+                self.closed.cancel();
+                Ok(false)
+            }
+        }
+    }
+
+    /// Send error information through the data handler
+    async fn notify_error_handlers(&self, error: &Error, context: &str, severity: ErrorSeverity) {
+        // Create context information
+        let error_context = vec![serde_json::json!({
+            "error_type": format!("{:?}", error),
+            "context": context,
+            "severity": format!("{:?}", severity),
+            "consecutive_errors": self.error_stats.get_consecutive_errors(),
+            "total_errors": self.error_stats.total_errors.load(Ordering::SeqCst),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        })];
+
+        // Notify through the error callback
+        (self.data_handler.handler.on_error)((error.clone(), error_context));
+    }
+
+    /// Log error with appropriate level based on severity
+    fn log_error(&self, error: &Error, context: &str, severity: &ErrorSeverity) {
+        let consecutive = self.error_stats.get_consecutive_errors();
+        let total = self.error_stats.total_errors.load(Ordering::SeqCst);
+
+        match severity {
+            ErrorSeverity::Minor => {
+                debug!(
+                    "Minor error in {}: {} (consecutive: {}, total: {})",
+                    context, error, consecutive, total
+                );
+            }
+            ErrorSeverity::Moderate => {
+                warn!(
+                    "Moderate error in {}: {} (consecutive: {}, total: {})",
+                    context, error, consecutive, total
+                );
+            }
+            ErrorSeverity::Critical => {
+                error!(
+                    "Critical error in {}: {} (consecutive: {}, total: {})",
+                    context, error, consecutive, total
+                );
+            }
+            ErrorSeverity::Fatal => {
+                error!(
+                    "FATAL error in {}: {} (consecutive: {}, total: {})",
+                    context, error, consecutive, total
+                );
+            }
+        }
     }
 
     pub async fn is_closed(&self) -> bool {
@@ -761,12 +1016,25 @@ impl Socket for WebSocketClient {
         loop {
             trace!("waiting for next message");
             match read.next().await {
-                Some(Ok(message)) => self.handle_raw_messages(message).await?,
+                Some(Ok(message)) => {
+                    if let Err(e) = self.handle_raw_messages(message).await {
+                        self.handle_error(e, ustr("handle_raw_messages")).await?;
+                    } else {
+                        // Reset consecutive errors on successful message processing
+                        if self.error_stats.get_consecutive_errors() > 0 {
+                            self.error_stats.reset_consecutive();
+                            debug!("Reset consecutive errors after successful message processing");
+                        }
+                    }
+                }
                 Some(Err(e)) => {
                     error!("Error reading message: {:#?}", e);
                     self.is_closed.store(true, Ordering::Relaxed);
-                    self.handle_error(Error::WebSocket(e.to_string().into()), ustr(""))
-                        .await?;
+                    self.handle_error(
+                        Error::WebSocket(e.to_string().into()),
+                        ustr("event_loop_read"),
+                    )
+                    .await?;
 
                     return Err(Error::Internal(ustr(&e.to_string())));
                 }
@@ -789,6 +1057,7 @@ impl Socket for WebSocketClient {
             Message::Close(msg) => {
                 warn!("connection closed with code: {:?}", msg);
                 self.is_closed.store(true, Ordering::Relaxed);
+                self.closed.cancel();
             }
             Message::Binary(msg) => {
                 debug!("received binary message: {:?}", msg);
@@ -819,7 +1088,7 @@ impl Socket for WebSocketClient {
                 }
                 SocketMessage::SocketMessage(msg) => {
                     if let Err(e) = self.handle_message_data(msg).await {
-                        self.handle_error(e, ustr("")).await?;
+                        self.handle_error(e, ustr("handle_message_data")).await?;
                     }
                 }
                 SocketMessage::Other(value) => {
@@ -827,7 +1096,7 @@ impl Socket for WebSocketClient {
                     if value.is_number() {
                         trace!("handling ping message: {:?}", value);
                         if let Err(e) = self.ping(raw).await {
-                            self.handle_error(e, ustr("")).await?;
+                            self.handle_error(e, ustr("ping_response")).await?;
                         }
                     } else {
                         warn!("unhandled message: {:?}", value);
@@ -847,7 +1116,78 @@ impl Socket for WebSocketClient {
         Ok(())
     }
 
-    async fn handle_error(&self, _error: Error, _context: Ustr) -> Result<()> {
-        todo!()
+    async fn handle_error(&self, error: Error, context: Ustr) -> Result<()> {
+        let context_str = context.as_str();
+
+        // Update error statistics
+        let consecutive_errors = self.error_stats.increment_error();
+        self.error_stats.update_last_error_time().await;
+
+        // Classify error severity
+        let severity = self.classify_error_severity(&error, context_str);
+
+        // Log the error appropriately
+        self.log_error(&error, context_str, &severity);
+
+        // Check if we've exceeded consecutive error threshold
+        if consecutive_errors >= self.error_config.max_consecutive_errors {
+            error!(
+                "Exceeded maximum consecutive errors ({} >= {}), marking connection as critical",
+                consecutive_errors, self.error_config.max_consecutive_errors
+            );
+
+            // Escalate to critical if we have too many consecutive errors
+            let escalated_severity = ErrorSeverity::Critical;
+
+            // Notify error handlers
+            self.notify_error_handlers(&error, context_str, escalated_severity.clone())
+                .await;
+
+            // Attempt recovery
+            match self
+                .attempt_error_recovery(escalated_severity, &error)
+                .await
+            {
+                Ok(recovered) => {
+                    if !recovered {
+                        warn!("Failed to recover from critical error state");
+                        return Err(Error::Internal(ustr("Error recovery failed")));
+                    }
+                }
+                Err(recovery_err) => {
+                    error!("Error during recovery attempt: {}", recovery_err);
+                    return Err(recovery_err);
+                }
+            }
+        } else {
+            // Normal error handling
+            self.notify_error_handlers(&error, context_str, severity.clone())
+                .await;
+
+            // Attempt recovery based on severity
+            match self.attempt_error_recovery(severity, &error).await {
+                Ok(recovered) => {
+                    if !recovered {
+                        warn!("Recovery attempt indicated connection should be closed");
+                        return Err(Error::Internal(ustr("Connection recovery failed")));
+                    }
+                }
+                Err(recovery_err) => {
+                    error!("Error during recovery attempt: {}", recovery_err);
+                    // Don't propagate recovery errors for non-fatal issues
+                    match self.classify_error_severity(&error, context_str) {
+                        ErrorSeverity::Fatal => return Err(recovery_err),
+                        _ => {
+                            warn!(
+                                "Ignoring recovery error for non-fatal issue: {}",
+                                recovery_err
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
