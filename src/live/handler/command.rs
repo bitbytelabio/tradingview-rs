@@ -2,6 +2,7 @@ use crate::{Error, Result, error::TradingViewError, live::handler::message::Comm
 use std::sync::Arc;
 use tokio::{
     select,
+    task::JoinHandle,
     time::{Duration, interval, sleep, timeout},
 };
 use tokio_util::sync::CancellationToken;
@@ -126,6 +127,7 @@ pub struct CommandRunner {
     state: ConnectionState,
     command_queue: CommandQueue,
     stats: ConnectionStats,
+    reader_handle: Option<JoinHandle<()>>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -145,30 +147,36 @@ impl CommandRunner {
             state: ConnectionState::Connected,
             command_queue: CommandQueue::new(),
             stats: ConnectionStats::default(),
+            reader_handle: None,
         }
     }
 
     pub async fn run(mut self) -> Result<()> {
-        let mut hb = interval(Duration::from_secs(30)); // Increased heartbeat interval
+        let mut hb = interval(Duration::from_secs(30));
         let mut backoff = ExponentialBackoff::new();
         let mut health_check = interval(Duration::from_secs(5));
 
         info!("CommandRunner started");
 
+        // Start the WebSocket reader task
+        self.start_reader_task();
+
+        // Wait a moment for WebSocket to be ready
+        sleep(Duration::from_millis(100)).await;
+
         loop {
             select! {
-                biased; // Process shutdown first
+                biased;
 
-                // ❶ External shutdown signal (highest priority)
                 _ = self.shutdown.cancelled() => {
                     info!("Shutdown signal received");
                     self.state = ConnectionState::Shutdown;
                     break;
                 },
 
-                // ❷ Application commands
                 cmd = self.rx.recv() => match cmd {
                     Some(cmd) => {
+                        tracing::debug!("Processing command: {:?}", cmd);
                         if let Err(e) = self.handle_command(cmd, &mut backoff).await {
                             self.stats.errors_handled += 1;
                             match self.classify_error(&e) {
@@ -182,11 +190,11 @@ impl CommandRunner {
                                 },
                                 ErrorSeverity::CommandOnly => {
                                     warn!("Command error (continuing): {}", e);
-                                    // Continue processing other commands
                                 },
                             }
                         } else {
                             self.stats.commands_processed += 1;
+                            tracing::debug!("Command processed successfully");
                         }
                     },
                     None => {
@@ -195,7 +203,6 @@ impl CommandRunner {
                     }
                 },
 
-                // ❸ Connection health monitoring
                 _ = health_check.tick() => {
                     if let Err(e) = self.check_connection_health().await {
                         warn!("Health check failed: {}", e);
@@ -203,13 +210,6 @@ impl CommandRunner {
                     }
                 },
 
-                // ❹ Detect connection loss
-                _ = self.ws.closed_notifier() => {
-                    warn!("WebSocket connection lost");
-                    self.state = ConnectionState::Disconnected;
-                },
-
-                // ❺ Heartbeat (less frequent)
                 _ = hb.tick() => {
                     if self.state == ConnectionState::Connected {
                         if let Err(e) = self.send_heartbeat().await {
@@ -220,7 +220,6 @@ impl CommandRunner {
                 },
             }
 
-            // Handle reconnection if needed
             if self.state == ConnectionState::Disconnected {
                 if let Err(e) = self.handle_reconnection(&mut backoff).await {
                     error!("Reconnection failed: {}", e);
@@ -229,10 +228,20 @@ impl CommandRunner {
             }
         }
 
-        // Cleanup
         self.cleanup().await;
         info!("CommandRunner stopped. Stats: {:?}", self.stats);
         Ok(())
+    }
+
+    fn start_reader_task(&mut self) {
+        if self.reader_handle.is_none() {
+            let ws = Arc::clone(&self.ws);
+            self.reader_handle = Some(tokio::spawn(async move {
+                if let Err(e) = ws.subscribe().await {
+                    error!("WebSocket reader task failed: {}", e);
+                }
+            }));
+        }
     }
 
     async fn handle_command(
@@ -527,6 +536,11 @@ impl CommandRunner {
         self.state = ConnectionState::Reconnecting;
         self.stats.reconnect_attempts += 1;
 
+        // Stop the old reader task
+        if let Some(handle) = self.reader_handle.take() {
+            handle.abort();
+        }
+
         while let Some(delay) = backoff.next_backoff() {
             info!(
                 "Attempting reconnection in {:?} (attempt {}/{})",
@@ -535,7 +549,6 @@ impl CommandRunner {
 
             sleep(delay).await;
 
-            // Check for shutdown during backoff
             if self.shutdown.is_cancelled() {
                 self.state = ConnectionState::Shutdown;
                 return Ok(());
@@ -548,7 +561,9 @@ impl CommandRunner {
                     self.stats.successful_reconnects += 1;
                     backoff.reset();
 
-                    // Process queued commands
+                    // Start new reader task
+                    self.start_reader_task();
+
                     self.process_queued_commands().await;
                     return Ok(());
                 }
@@ -629,7 +644,14 @@ impl CommandRunner {
     async fn cleanup(&mut self) {
         info!("Cleaning up CommandRunner");
 
-        // Clear command queue
+        // Stop reader task
+        if let Some(handle) = self.reader_handle.take() {
+            handle.abort();
+            if let Err(_) = timeout(Duration::from_secs(2), handle).await {
+                warn!("Reader task did not stop gracefully");
+            }
+        }
+
         let remaining_commands = self.command_queue.len();
         if remaining_commands > 0 {
             warn!(
@@ -639,9 +661,8 @@ impl CommandRunner {
             self.command_queue.clear();
         }
 
-        // Attempt graceful WebSocket closure
-        if let Err(e) = timeout(Duration::from_secs(5), self.ws.close()).await {
-            warn!("WebSocket close timeout during cleanup: {:?}", e);
+        if let Err(e) = timeout(Duration::from_secs(5), self.ws.delete()).await {
+            warn!("WebSocket cleanup timeout: {:?}", e);
         }
     }
 

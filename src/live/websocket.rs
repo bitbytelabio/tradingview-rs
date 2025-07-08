@@ -184,13 +184,18 @@ impl WebSocketClient {
             error_config: ErrorRecoveryConfig::default(),
         });
 
-        Self::spawn_reader_task(Arc::clone(&client));
+        // Don't spawn the reader task here - let CommandRunner handle it
+        // Self::spawn_reader_task(Arc::clone(&client));
 
         Ok(client)
     }
 
-    fn spawn_reader_task(self: Arc<Self>) {
-        tokio::spawn(async move { self.subscribe().await });
+    pub fn spawn_reader_task(self: Arc<Self>) {
+        tokio::spawn(async move {
+            if let Err(e) = self.subscribe().await {
+                tracing::error!("Reader task failed: {}", e);
+            }
+        });
     }
 
     async fn connect(
