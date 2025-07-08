@@ -161,15 +161,24 @@ impl CommandRunner {
         // Start the WebSocket reader task
         self.start_reader_task();
 
-        // Wait longer for WebSocket to be fully ready
-        // sleep(Duration::from_millis(2000)).await;
-
         // Send initial authentication if we have a token
         let auth_token = self.ws.auth_token.read().await.clone();
         if auth_token != "unauthorized_user_token" {
             info!("Sending initial authentication token");
             if let Err(e) = self.ws.set_auth_token(&auth_token).await {
                 warn!("Failed to set initial auth token: {}", e);
+            }
+        }
+
+        // Create a quote session if not already created
+        if self.ws.quote_session.read().await.is_empty() {
+            info!("Creating initial quote session");
+            if let Err(e) = self.ws.create_quote_session().await {
+                warn!("Failed to create initial quote session: {}", e);
+            }
+
+            if let Err(e) = self.ws.set_fields().await {
+                warn!("Failed to set quote fields: {}", e);
             }
         }
 

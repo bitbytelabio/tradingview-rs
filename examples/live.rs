@@ -6,7 +6,7 @@ use tokio::{
 };
 use tracing::{error, info, warn};
 use tradingview::{
-    OHLCV,
+    ChartOptions, Interval, OHLCV,
     live::{
         handler::{
             command::CommandRunner,
@@ -195,23 +195,22 @@ async fn handle_responses(mut response_rx: DataRx) {
 async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
     info!("🔧 Running simple example...");
 
-    // Wait longer for WebSocket to be ready
-    sleep(Duration::from_millis(3000)).await;
-
-    command_tx.send(Command::CreateQuoteSession)?;
-    sleep(Duration::from_millis(1000)).await;
-
-    command_tx.send(Command::SetQuoteFields)?;
-    sleep(Duration::from_millis(1000)).await;
+    let options = ChartOptions::builder()
+        .symbol("BTCUSDT".into())
+        .exchange("BINANCE".into())
+        .interval(Interval::OneMinute)
+        .build();
 
     // Try symbols that are more likely to have data during market hours
     command_tx.send(Command::QuoteFastSymbols {
         symbols: vec![
             ustr("BINANCE:BTCUSDT"),
-            ustr("FX_IDC:EURUSD"), // Forex - 24/7
-            ustr("CRYPTO:BTCUSD"), // Alternative BTC
+            // ustr("FX_IDC:EURUSD"), // Forex - 24/7
+            // ustr("CRYPTO:BTCUSD"), // Alternative BTC
         ],
     })?;
+
+    command_tx.send(Command::SetMarket { options })?;
 
     // Monitor for longer - 2 minutes to give time for data
     for i in 0..24 {
@@ -234,10 +233,10 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
             })?;
         }
 
-        if i % 4 == 0 {
-            // Ping every 20 seconds
-            command_tx.send(Command::Ping)?;
-        }
+        // if i % 4 == 0 {
+        //     // Ping every 20 seconds
+        //     command_tx.send(Command::Ping)?;
+        // }
     }
 
     info!("🧹 Cleaning up...");

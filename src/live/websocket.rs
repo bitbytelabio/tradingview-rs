@@ -106,12 +106,9 @@ impl ErrorStats {
 
 #[derive(Default, Clone)]
 pub(crate) struct Metadata {
-    pub(crate) series_count: Arc<AtomicU16>,
-    pub(crate) studies_count: Arc<AtomicU16>,
     pub(crate) series: Arc<DashMap<Ustr, SeriesInfo>>,
     pub(crate) studies: Arc<DashMap<Ustr, Ustr>>,
     pub(crate) quotes: Arc<DashMap<Ustr, QuoteValue>>,
-    pub(crate) quote_session: Arc<RwLock<Ustr>>,
     pub(crate) chart_state: Arc<RwLock<ChartState>>,
 }
 
@@ -130,11 +127,15 @@ pub struct SeriesInfo {
 pub struct WebSocketClient {
     pub server: DataServer,
     pub(crate) auth_token: Arc<RwLock<Ustr>>,
+    pub(crate) quote_session: Arc<RwLock<Ustr>>,
 
     data_handler: DataHandler,
     closed: CancellationToken,
     // The following fields are used for the WebSocket connection
     is_closed: Arc<AtomicBool>,
+    series_count: Arc<AtomicU16>,
+    studies_count: Arc<AtomicU16>,
+
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
 
@@ -168,9 +169,12 @@ impl WebSocketClient {
 
         let data_handler = DataHandler::builder().res_tx(data_tx).build();
         let is_closed = Arc::new(AtomicBool::new(false));
+        let series_count = Arc::new(AtomicU16::new(0));
+        let studies_count = Arc::new(AtomicU16::new(0));
         let auth_token = Arc::new(RwLock::new(auth_token));
         let write = Arc::new(Mutex::new(write));
         let read = Arc::new(Mutex::new(read));
+        let quote_session = Arc::new(RwLock::new(ustr("")));
 
         let client = Arc::new(Self {
             data_handler,
@@ -179,13 +183,13 @@ impl WebSocketClient {
             write,
             auth_token,
             is_closed,
+            quote_session,
+            series_count,
+            studies_count,
             closed: CancellationToken::new(),
             error_stats: ErrorStats::default(),
             error_config: ErrorRecoveryConfig::default(),
         });
-
-        // Don't spawn the reader task here - let CommandRunner handle it
-        // Self::spawn_reader_task(Arc::clone(&client));
 
         Ok(client)
     }
@@ -226,6 +230,7 @@ impl WebSocketClient {
 
         Ok((write, read))
     }
+
     /// Classify error severity for appropriate response
     fn classify_error_severity(&self, error: &Error, context: &str) -> ErrorSeverity {
         match error {
@@ -421,52 +426,41 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn add_symbols(&self, symbols: &[&str]) -> Result<()> {
-        let quote_session = self
-            .data_handler
-            .metadata
-            .quote_session
-            .read()
-            .await
-            .to_string();
-
-        let mut payloads = payload!(quote_session);
-        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
-
-        self.send("quote_add_symbols", &payload!(payloads)).await?;
-
-        Ok(())
-    }
-
-    // Begin TradingView WebSocket Quote methods
     pub async fn create_quote_session(&self) -> Result<()> {
-        let mut quote_session = self.data_handler.metadata.quote_session.write().await;
-        *quote_session = Ustr::from(&gen_session_id("qs"));
-        self.send("quote_create_session", &payload!(quote_session.to_string()))
+        // Generate a new session ID for the quote session
+        let session_id = gen_session_id("qs");
+        self.send("quote_create_session", &payload!(session_id.clone()))
             .await?;
+        let mut quote_session = self.quote_session.write().await;
+        *quote_session = ustr(&session_id);
         Ok(())
     }
 
     pub async fn delete_quote_session(&self) -> Result<()> {
-        let quote_session = self.data_handler.metadata.quote_session.read().await;
+        let quote_session = self.quote_session.read().await;
         self.send("quote_delete_session", &payload!(quote_session.to_string()))
             .await?;
         Ok(())
     }
 
     pub async fn set_fields(&self) -> Result<()> {
-        let quote_session = self
-            .data_handler
-            .metadata
-            .quote_session
-            .read()
-            .await
-            .to_string();
+        let quote_session = self.quote_session.read().await.to_string();
 
         let mut quote_fields = payload![quote_session];
         quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
 
         self.send("quote_set_fields", &quote_fields).await?;
+
+        Ok(())
+    }
+
+    pub async fn add_symbols(&self, symbols: &[&str]) -> Result<()> {
+        let quote_session = self.quote_session.read().await.to_string();
+
+        let mut payloads = payload!(quote_session);
+        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
+
+        self.send("quote_add_symbols", &payload!(payloads)).await?;
 
         Ok(())
     }
@@ -522,13 +516,7 @@ impl WebSocketClient {
     }
 
     pub async fn fast_symbols(&self, symbols: &[&str]) -> Result<()> {
-        let quote_session = self
-            .data_handler
-            .metadata
-            .quote_session
-            .read()
-            .await
-            .to_string();
+        let quote_session = self.quote_session.read().await.to_string();
 
         let mut payloads = payload![quote_session];
         payloads.extend(symbols.iter().map(|s| Value::from(*s)));
@@ -539,13 +527,7 @@ impl WebSocketClient {
     }
 
     pub async fn remove_symbols(&self, symbols: &[&str]) -> Result<()> {
-        let quote_session = self
-            .data_handler
-            .metadata
-            .quote_session
-            .read()
-            .await
-            .to_string();
+        let quote_session = self.quote_session.read().await.to_string();
 
         let mut payloads = payload![quote_session];
         payloads.extend(symbols.iter().map(|s| Value::from(*s)));
@@ -730,11 +712,10 @@ impl WebSocketClient {
         config: ChartOptions,
     ) -> Result<()> {
         let range = match (&config.range, config.from, config.to) {
-            (Some(range), _, _) => *range,
-            (None, Some(from), Some(to)) => ustr(&format!("r,{from}:{to}")),
-            _ => ustr("all"),
-        }
-        .to_string();
+            (Some(range), _, _) => range.to_string(),
+            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
+            _ => Default::default(),
+        };
 
         self.send(
             "create_series",
@@ -762,11 +743,10 @@ impl WebSocketClient {
         config: ChartOptions,
     ) -> Result<()> {
         let range = match (&config.range, config.from, config.to) {
-            (Some(range), _, _) => *range,
-            (None, Some(from), Some(to)) => ustr(&format!("r,{from}:{to}")),
-            _ => ustr("all"),
-        }
-        .to_string();
+            (Some(range), _, _) => range.to_string(),
+            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
+            _ => Default::default(),
+        };
 
         self.send(
             "modify_series",
@@ -857,14 +837,8 @@ impl WebSocketClient {
         self.data_handler.metadata.quotes.clear();
 
         // Reset counters
-        self.data_handler
-            .metadata
-            .series_count
-            .store(0, Ordering::SeqCst);
-        self.data_handler
-            .metadata
-            .studies_count
-            .store(0, Ordering::SeqCst);
+        self.series_count.store(0, Ordering::SeqCst);
+        self.studies_count.store(0, Ordering::SeqCst);
 
         // Close the socket last
         if let Err(e) = self.close().await {
@@ -911,12 +885,7 @@ impl WebSocketClient {
         chart_session: &str,
         series_id: &str,
     ) -> Result<()> {
-        let study_count = self
-            .data_handler
-            .metadata
-            .studies_count
-            .fetch_add(1, Ordering::SeqCst)
-            + 1;
+        let study_count = self.studies_count.fetch_add(1, Ordering::SeqCst) + 1;
 
         let study_id = Ustr::from(&format!("st{study_count}"));
 
@@ -934,12 +903,7 @@ impl WebSocketClient {
     }
 
     pub async fn set_market(&self, options: ChartOptions) -> Result<()> {
-        let series_count = self
-            .data_handler
-            .metadata
-            .series_count
-            .fetch_add(1, Ordering::SeqCst)
-            + 1;
+        let series_count = self.series_count.fetch_add(1, Ordering::SeqCst) + 1;
         let symbol_series_id = format!("sds_sym_{series_count}");
         let series_id = Ustr::from(&format!("sds_{series_count}"));
         let series_version = format!("s{series_count}");
