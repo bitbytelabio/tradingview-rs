@@ -596,24 +596,23 @@ impl CommandRunner {
     }
 
     fn classify_error(&self, error: &Error) -> ErrorSeverity {
+        use Error::*;
+
         match error {
             // Network/connection errors are recoverable
-            Error::WebSocket(_) => ErrorSeverity::Recoverable,
+            WebSocket(_) => ErrorSeverity::Recoverable,
 
             // Authentication errors might be recoverable
-            Error::TradingView { source } => match source {
-                TradingViewError::ProtocolError | TradingViewError::CriticalError => {
-                    ErrorSeverity::Recoverable
-                }
-                _ => ErrorSeverity::CommandOnly,
-            },
+            TradingView {
+                source: TradingViewError::ProtocolError | TradingViewError::CriticalError,
+            } => ErrorSeverity::Recoverable,
 
             // Parse errors are usually command-specific
-            Error::JsonParse(_) => ErrorSeverity::CommandOnly,
-            Error::UrlParse(_) => ErrorSeverity::CommandOnly,
+            JsonParse(_) => ErrorSeverity::CommandOnly,
+            UrlParse(_) => ErrorSeverity::CommandOnly,
 
             // Internal errors depend on context
-            Error::Internal(msg) => {
+            Internal(msg) => {
                 if msg.contains("timeout") || msg.contains("connection") {
                     ErrorSeverity::Recoverable
                 } else {

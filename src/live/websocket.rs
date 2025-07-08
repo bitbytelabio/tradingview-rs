@@ -371,7 +371,7 @@ impl WebSocketClient {
         })];
 
         // Notify through the error callback
-        (self.data_handler.handler.on_error)((error.clone(), error_context));
+        (self.data_handler.handler.on_error)((*error, error_context));
     }
 
     /// Log error with appropriate level based on severity
@@ -1003,7 +1003,7 @@ impl WebSocketClient {
         }
         self.ping(&Message::Ping(Vec::new().into()))
             .await
-            .map_err(|e| Error::WebSocket(ustr(&format!("{}", e))))?;
+            .map_err(|e| Error::WebSocket(ustr(&format!("{e}"))))?;
         Ok(())
     }
 }
@@ -1140,7 +1140,7 @@ impl Socket for WebSocketClient {
             let escalated_severity = ErrorSeverity::Critical;
 
             // Notify error handlers
-            self.notify_error_handlers(&error, context_str, escalated_severity.clone())
+            self.notify_error_handlers(&error, context_str, escalated_severity)
                 .await;
 
             // Attempt recovery
@@ -1161,7 +1161,7 @@ impl Socket for WebSocketClient {
             }
         } else {
             // Normal error handling
-            self.notify_error_handlers(&error, context_str, severity.clone())
+            self.notify_error_handlers(&error, context_str, severity)
                 .await;
 
             // Attempt recovery based on severity
