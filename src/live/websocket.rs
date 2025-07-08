@@ -1,53 +1,65 @@
 use crate::{
     DataPoint, Error, Interval, Result, Timezone,
-    chart::{ChartOptions, ChartResponseData, StudyOptions, StudyResponseData, SymbolInfo},
-    error::TradingViewError,
+    chart::{ChartOptions, StudyOptions, SymbolInfo},
     live::{
-        handler::types::{DataTx, TradingViewHandler, create_handler},
-        socket::{DataServer, Socket, SocketMessageDe, SocketSession, TradingViewDataEvent},
+        handler::{data::DataHandler, types::DataTx},
+        socket::{
+            DataServer, Socket, SocketMessage, SocketMessageDe, SocketMessageSer,
+            TradingViewDataEvent, WEBSOCKET_HEADERS,
+        },
     },
     payload,
     pine_indicator::PineIndicator,
-    quote::{
-        ALL_QUOTE_FIELDS,
-        models::{QuoteData, QuoteValue},
-        utils::merge_quotes,
-    },
-    utils::{gen_id, gen_session_id, symbol_init},
+    quote::{ALL_QUOTE_FIELDS, models::QuoteValue},
+    utils::{gen_id, gen_session_id, parse_packet, symbol_init},
 };
+
 use dashmap::DashMap;
-use futures_util::future::join_all;
+use futures_util::{
+    SinkExt, StreamExt,
+    future::join_all,
+    stream::{SplitSink, SplitStream},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::{
-    Arc,
-    atomic::{AtomicU16, Ordering},
+use std::{
+    fmt::Debug,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU16, Ordering},
+    },
 };
-use tokio::sync::RwLock;
+use tokio::{
+    net::TcpStream,
+    sync::{Mutex, MutexGuard, RwLock},
+};
+use tokio_tungstenite::{
+    MaybeTlsStream, WebSocketStream, connect_async_with_config,
+    tungstenite::{
+        client::IntoClientRequest,
+        protocol::{Message, WebSocketConfig},
+    },
+};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, trace, warn};
+use url::Url;
 use ustr::{Ustr, ustr};
 
-#[derive(Clone, Default)]
-pub struct DataHandler {
-    metadata: Metadata,
-    handler: TradingViewHandler,
+#[derive(Default, Clone)]
+pub(crate) struct Metadata {
+    pub(crate) series_count: Arc<AtomicU16>,
+    pub(crate) studies_count: Arc<AtomicU16>,
+    pub(crate) series: Arc<DashMap<Ustr, SeriesInfo>>,
+    pub(crate) studies: Arc<DashMap<Ustr, Ustr>>,
+    pub(crate) quotes: Arc<DashMap<Ustr, QuoteValue>>,
+    pub(crate) quote_session: Arc<RwLock<Ustr>>,
+    pub(crate) chart_state: Arc<RwLock<ChartState>>,
 }
 
 #[derive(Default, Clone)]
-struct Metadata {
-    series_count: Arc<AtomicU16>,
-    studies_count: Arc<AtomicU16>,
-    series: Arc<DashMap<Ustr, SeriesInfo>>,
-    studies: Arc<DashMap<Ustr, Ustr>>,
-    quotes: Arc<DashMap<Ustr, QuoteValue>>,
-    quote_session: Arc<RwLock<Ustr>>,
-    chart_state: Arc<RwLock<ChartState>>,
-}
-
-#[derive(Default, Clone)]
-struct ChartState {
-    chart: Option<(SeriesInfo, Vec<DataPoint>)>,
-    symbol_info: Option<SymbolInfo>,
+pub(crate) struct ChartState {
+    pub(crate) chart: Option<(SeriesInfo, Vec<DataPoint>)>,
+    pub(crate) symbol_info: Option<SymbolInfo>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -59,7 +71,14 @@ pub struct SeriesInfo {
 #[derive(Clone)]
 pub struct WebSocketClient {
     data_handler: DataHandler,
-    socket: SocketSession,
+    closed: CancellationToken,
+
+    // The following fields are used for the WebSocket connection
+    server: DataServer,
+    auth_token: Arc<RwLock<Ustr>>,
+    is_closed: Arc<AtomicBool>,
+    read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
 }
 
 #[bon::bon]
@@ -69,26 +88,103 @@ impl WebSocketClient {
         auth_token: Option<&str>,
         #[builder(default = DataServer::ProData)] server: DataServer,
         data_tx: DataTx,
-    ) -> Result<Self> {
+    ) -> Result<Arc<Self>> {
         let auth_token = Ustr::from(auth_token.unwrap_or("unauthorized_user_token"));
 
-        let socket = SocketSession::new(server, auth_token).await?;
-        let data_handler = DataHandler::builder().res_tx(data_tx).build();
+        let (write, read) = Self::connect(server, auth_token).await?;
 
-        Ok(Self {
+        let data_handler = DataHandler::builder().res_tx(data_tx).build();
+        let is_closed = Arc::new(AtomicBool::new(false));
+        let auth_token = Arc::new(RwLock::new(auth_token));
+        let write = Arc::new(Mutex::new(write));
+        let read = Arc::new(Mutex::new(read));
+
+        let client = Arc::new(Self {
             data_handler,
-            socket,
-        })
+            server,
+            read,
+            write,
+            auth_token,
+            is_closed,
+            closed: CancellationToken::new(),
+        });
+
+        Self::spawn_reader_task(Arc::clone(&client));
+
+        Ok(client)
+    }
+
+    fn spawn_reader_task(self: Arc<Self>) {
+        tokio::spawn(async move {
+            // split() once, drive the read half here…
+            // let mut reader = /* tungstenite SplitStream */;
+            // while let Some(frame) = reader.next().await {
+            //     match frame {
+            //         Ok(Message::Close(_)) | Err(_) => {
+            //             // Notify EVERYBODY that the socket is now dead
+            //             self.closed.cancel();
+            //             break;
+            //         }
+            //         Ok(msg) => self.handle_incoming(msg).await,
+            //     }
+            // }
+        });
+    }
+
+    async fn connect(
+        server: DataServer,
+        auth_token: Ustr,
+    ) -> Result<(
+        SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    )> {
+        let url = Url::parse(&format!(
+            "wss://{server}.tradingview.com/socket.io/websocket"
+        ))?;
+
+        let mut request = url.into_client_request()?;
+        request
+            .headers_mut()
+            .extend(WEBSOCKET_HEADERS.clone().into_iter());
+
+        // Configure WebSocket with larger message size limits
+        let conf = WebSocketConfig::default()
+            .read_buffer_size(1024 * 1024)
+            .write_buffer_size(1024 * 1024);
+
+        let (socket, _response) = connect_async_with_config(request, Some(conf), false).await?;
+
+        let (mut write, read) = socket.split();
+
+        write
+            .send(
+                SocketMessageSer::new("set_auth_token", payload!(auth_token.as_str()))
+                    .to_message()?,
+            )
+            .await?;
+
+        Ok((write, read))
     }
 
     pub async fn is_closed(&self) -> bool {
-        self.socket.is_closed().await
+        self.is_closed.load(Ordering::Relaxed)
     }
 
     pub async fn send_batch(&self, messages: Vec<(&str, &Vec<Value>)>) -> Result<()> {
         for (method, payload) in messages {
-            self.socket.send(method, payload).await?;
+            self.send(method, payload).await?;
         }
+        Ok(())
+    }
+
+    pub async fn reconnect(&self) -> Result<()> {
+        let auth_token = self.auth_token.read().await;
+        let (write, read) = Self::connect(self.server, *auth_token).await?;
+        let mut write_guard = self.write.lock().await;
+        let mut read_guard = self.read.lock().await;
+        *write_guard = write;
+        *read_guard = read;
+        self.is_closed.store(false, Ordering::Relaxed);
         Ok(())
     }
 
@@ -104,9 +200,7 @@ impl WebSocketClient {
         let mut payloads = payload!(quote_session);
         payloads.extend(symbols.iter().map(|s| Value::from(*s)));
 
-        self.socket
-            .send("quote_add_symbols", &payload!(payloads))
-            .await?;
+        self.send("quote_add_symbols", &payload!(payloads)).await?;
 
         Ok(())
     }
@@ -115,16 +209,14 @@ impl WebSocketClient {
     pub async fn create_quote_session(&self) -> Result<()> {
         let mut quote_session = self.data_handler.metadata.quote_session.write().await;
         *quote_session = Ustr::from(&gen_session_id("qs"));
-        self.socket
-            .send("quote_create_session", &payload!(quote_session.to_string()))
+        self.send("quote_create_session", &payload!(quote_session.to_string()))
             .await?;
         Ok(())
     }
 
     pub async fn delete_quote_session(&self) -> Result<()> {
         let quote_session = self.data_handler.metadata.quote_session.read().await;
-        self.socket
-            .send("quote_delete_session", &payload!(quote_session.to_string()))
+        self.send("quote_delete_session", &payload!(quote_session.to_string()))
             .await?;
         Ok(())
     }
@@ -141,13 +233,54 @@ impl WebSocketClient {
         let mut quote_fields = payload![quote_session];
         quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
 
-        self.socket.send("quote_set_fields", &quote_fields).await?;
+        self.send("quote_set_fields", &quote_fields).await?;
 
         Ok(())
     }
 
     pub async fn set_auth_token(&self, auth_token: &str) -> Result<()> {
-        self.socket.set_auth_token(auth_token).await?;
+        let mut auth_token_ = self.auth_token.write().await;
+        *auth_token_ = Ustr::from(auth_token);
+        self.send("set_auth_token", &payload!(auth_token)).await?;
+        Ok(())
+    }
+
+    pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
+        let mut write_guard = self.write.lock().await;
+        write_guard
+            .send(SocketMessageSer::new(m, p).to_message()?)
+            .await?;
+        trace!("sent message: {} with payload: {:?}", m, p);
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
+        Ok(())
+    }
+
+    pub async fn ping(&self, ping: &Message) -> Result<()> {
+        let mut write_guard = self.write.lock().await;
+        write_guard.send(ping.clone()).await?;
+        trace!("sent ping message {}", ping);
+        if ping.is_close() {
+            self.is_closed.store(true, Ordering::Relaxed);
+            warn!("ping message is close, closing session");
+        }
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
+        trace!("ping message sent successfully");
+        Ok(())
+    }
+
+    pub async fn close(&self) -> Result<()> {
+        self.is_closed.store(true, Ordering::Relaxed);
+        self.write.lock().await.close().await?;
+        Ok(())
+    }
+
+    pub async fn update_auth_token(&self, auth_token: &str) -> Result<()> {
+        let mut write_guard = self.write.lock().await;
+        write_guard
+            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
+            .await?;
+        trace!("updated auth token to: {}", auth_token);
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
         Ok(())
     }
 
@@ -163,7 +296,7 @@ impl WebSocketClient {
         let mut payloads = payload![quote_session];
         payloads.extend(symbols.iter().map(|s| Value::from(*s)));
 
-        self.socket.send("quote_fast_symbols", &payloads).await?;
+        self.send("quote_fast_symbols", &payloads).await?;
 
         Ok(())
     }
@@ -180,7 +313,7 @@ impl WebSocketClient {
         let mut payloads = payload![quote_session];
         payloads.extend(symbols.iter().map(|s| Value::from(*s)));
 
-        self.socket.send("quote_remove_symbols", &payloads).await?;
+        self.send("quote_remove_symbols", &payloads).await?;
 
         Ok(())
     }
@@ -189,38 +322,32 @@ impl WebSocketClient {
     // Begin TradingView WebSocket Chart methods
     /// Example: local = ("en", "US")
     pub async fn set_locale(&self, local: (&str, &str)) -> Result<()> {
-        self.socket
-            .send("set_locale", &payload!(local.0, local.1))
-            .await?;
+        self.send("set_locale", &payload!(local.0, local.1)).await?;
         Ok(())
     }
 
     pub async fn set_data_quality(&self, data_quality: &str) -> Result<()> {
-        self.socket
-            .send("set_data_quality", &payload!(data_quality))
+        self.send("set_data_quality", &payload!(data_quality))
             .await?;
 
         Ok(())
     }
 
     pub async fn set_timezone(&self, session: &str, timezone: Timezone) -> Result<()> {
-        self.socket
-            .send("switch_timezone", &payload!(session, timezone.to_string()))
+        self.send("switch_timezone", &payload!(session, timezone.to_string()))
             .await?;
 
         Ok(())
     }
 
     pub async fn create_chart_session(&self, session: &str) -> Result<()> {
-        self.socket
-            .send("chart_create_session", &payload!(session))
+        self.send("chart_create_session", &payload!(session))
             .await?;
         Ok(())
     }
 
     pub async fn create_replay_session(&self, session: &str) -> Result<()> {
-        self.socket
-            .send("replay_create_session", &payload!(session))
+        self.send("replay_create_session", &payload!(session))
             .await?;
         Ok(())
     }
@@ -232,43 +359,39 @@ impl WebSocketClient {
         symbol: &str,
         config: ChartOptions,
     ) -> Result<()> {
-        self.socket
-            .send(
-                "replay_add_series",
-                &payload!(
-                    session,
-                    series_id,
-                    symbol_init(
-                        symbol,
-                        config.adjustment,
-                        config.currency,
-                        config.session_type,
-                        None
-                    )?,
-                    config.interval.to_string()
-                ),
-            )
-            .await?;
+        self.send(
+            "replay_add_series",
+            &payload!(
+                session,
+                series_id,
+                symbol_init(
+                    symbol,
+                    config.adjustment,
+                    config.currency,
+                    config.session_type,
+                    None
+                )?,
+                config.interval.to_string()
+            ),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn delete_chart_session(&self, session: &str) -> Result<()> {
-        self.socket
-            .send("chart_delete_session", &payload!(session))
+        self.send("chart_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
 
     pub async fn delete_replay_session(&self, session: &str) -> Result<()> {
-        self.socket
-            .send("replay_delete_session", &payload!(session))
+        self.send("replay_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
 
     pub async fn replay_step(&self, session: &str, series_id: &str, step: u64) -> Result<()> {
-        self.socket
-            .send("replay_step", &payload!(session, series_id, step))
+        self.send("replay_step", &payload!(session, series_id, step))
             .await?;
         Ok(())
     }
@@ -279,32 +402,28 @@ impl WebSocketClient {
         series_id: &str,
         interval: Interval,
     ) -> Result<()> {
-        self.socket
-            .send(
-                "replay_start",
-                &payload!(session, series_id, interval.to_string()),
-            )
-            .await?;
+        self.send(
+            "replay_start",
+            &payload!(session, series_id, interval.to_string()),
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn replay_stop(&self, session: &str, series_id: &str) -> Result<()> {
-        self.socket
-            .send("replay_stop", &payload!(session, series_id))
+        self.send("replay_stop", &payload!(session, series_id))
             .await?;
         Ok(())
     }
 
     pub async fn replay_reset(&self, session: &str, series_id: &str, timestamp: i64) -> Result<()> {
-        self.socket
-            .send("replay_reset", &payload!(session, series_id, timestamp))
+        self.send("replay_reset", &payload!(session, series_id, timestamp))
             .await?;
         Ok(())
     }
 
     pub async fn request_more_data(&self, session: &str, series_id: &str, num: u64) -> Result<()> {
-        self.socket
-            .send("request_more_data", &payload!(session, series_id, num))
+        self.send("request_more_data", &payload!(session, series_id, num))
             .await?;
         Ok(())
     }
@@ -315,8 +434,7 @@ impl WebSocketClient {
         series_id: &str,
         num: u64,
     ) -> Result<()> {
-        self.socket
-            .send("request_more_tickmarks", &payload!(session, series_id, num))
+        self.send("request_more_tickmarks", &payload!(session, series_id, num))
             .await?;
         Ok(())
     }
@@ -337,7 +455,7 @@ impl WebSocketClient {
             Value::from(indicator.script_type.to_string()),
             inputs,
         ];
-        self.socket.send("create_study", &payloads).await?;
+        self.send("create_study", &payloads).await?;
         Ok(())
     }
 
@@ -357,12 +475,11 @@ impl WebSocketClient {
             Value::from(indicator.script_type.to_string()),
             inputs,
         ];
-        self.socket.send("modify_study", &payloads).await?;
+        self.send("modify_study", &payloads).await?;
         Ok(())
     }
     pub async fn remove_study(&self, session: &str, study_id: &str) -> Result<()> {
-        self.socket
-            .send("remove_study", &payload!(session, study_id))
+        self.send("remove_study", &payload!(session, study_id))
             .await?;
         Ok(())
     }
@@ -382,20 +499,19 @@ impl WebSocketClient {
         }
         .to_string();
 
-        self.socket
-            .send(
-                "create_series",
-                &payload!(
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config.interval.to_string(),
-                    config.bar_count,
-                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
-                ),
-            )
-            .await?;
+        self.send(
+            "create_series",
+            &payload!(
+                session,
+                series_id,
+                series_version,
+                series_symbol_id,
+                config.interval.to_string(),
+                config.bar_count,
+                range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
+            ),
+        )
+        .await?;
 
         Ok(())
     }
@@ -415,27 +531,25 @@ impl WebSocketClient {
         }
         .to_string();
 
-        self.socket
-            .send(
-                "modify_series",
-                &payload!(
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config.interval.to_string(),
-                    config.bar_count,
-                    range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
-                ),
-            )
-            .await?;
+        self.send(
+            "modify_series",
+            &payload!(
+                session,
+                series_id,
+                series_version,
+                series_symbol_id,
+                config.interval.to_string(),
+                config.bar_count,
+                range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
+            ),
+        )
+        .await?;
 
         Ok(())
     }
 
     pub async fn remove_series(&self, session: &str, series_id: &str) -> Result<()> {
-        self.socket
-            .send("remove_series", &payload!(session, series_id))
+        self.send("remove_series", &payload!(session, series_id))
             .await?;
         Ok(())
     }
@@ -448,22 +562,21 @@ impl WebSocketClient {
         config: ChartOptions,
         replay_session: Option<&str>,
     ) -> Result<()> {
-        self.socket
-            .send(
-                "resolve_symbol",
-                &payload!(
-                    session,
-                    symbol_series_id,
-                    symbol_init(
-                        symbol,
-                        config.adjustment,
-                        config.currency,
-                        config.session_type,
-                        replay_session
-                    )?
-                ),
-            )
-            .await?;
+        self.send(
+            "resolve_symbol",
+            &payload!(
+                session,
+                symbol_series_id,
+                symbol_init(
+                    symbol,
+                    config.adjustment,
+                    config.currency,
+                    config.session_type,
+                    replay_session
+                )?
+            ),
+        )
+        .await?;
         Ok(())
     }
 
@@ -517,7 +630,7 @@ impl WebSocketClient {
             .store(0, Ordering::SeqCst);
 
         // Close the socket last
-        if let Err(e) = self.socket.close().await {
+        if let Err(e) = self.close().await {
             error!("Failed to close socket: {:?}", e);
             return Err(e);
         }
@@ -632,223 +745,124 @@ impl WebSocketClient {
     }
 
     pub async fn subscribe(&self) {
-        self.event_loop(&self.socket).await;
+        // self.event_loop().await;
+        todo!()
     }
 
-    pub async fn reconnect(&self) -> Result<()> {
-        self.socket.reconnect().await?;
+    /// Resolves when the reader task detects Close / IO failure.
+    pub async fn closed_notifier(&self) {
+        if self.is_closed().await {
+            return;
+        }
+    }
+
+    /// Fire-and-forget ping. Ignores `WouldBlock` when write buffer is full.
+    pub async fn try_ping(&self) -> Result<()> {
+        if self.is_closed().await {
+            return Ok(());
+        }
+        self.ping(&Message::Ping(Vec::new().into()))
+            .await
+            .map_err(|e| Error::WebSocket(ustr(&format!("{}", e))))?;
         Ok(())
     }
 }
 
-#[async_trait::async_trait]
 impl Socket for WebSocketClient {
+    async fn event_loop(
+        &self,
+        mut read: MutexGuard<'_, SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
+    ) -> Result<()> {
+        loop {
+            trace!("waiting for next message");
+            match read.next().await {
+                Some(Ok(message)) => self.handle_raw_messages(message).await?,
+                Some(Err(e)) => {
+                    error!("Error reading message: {:#?}", e);
+                    self.is_closed.store(true, Ordering::Relaxed);
+                    self.handle_error(Error::WebSocket(e.to_string().into()), ustr(""))
+                        .await?;
+
+                    return Err(Error::Internal(ustr(&e.to_string())));
+                }
+                None => {
+                    trace!("stream ended");
+                    self.is_closed.store(true, Ordering::Relaxed);
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    async fn handle_raw_messages(&self, raw: Message) -> Result<()> {
+        match &raw {
+            Message::Text(text) => {
+                trace!("parsing message: {:?}", text);
+                self.handle_parsed_messages(parse_packet(text), &raw)
+                    .await?;
+            }
+            Message::Close(msg) => {
+                warn!("connection closed with code: {:?}", msg);
+                self.is_closed.store(true, Ordering::Relaxed);
+            }
+            Message::Binary(msg) => {
+                debug!("received binary message: {:?}", msg);
+                // TODO: handle binary messages
+            }
+            Message::Ping(msg) => {
+                trace!("received ping message: {:?}", msg);
+            }
+            Message::Pong(msg) => {
+                trace!("received pong message: {:?}", msg);
+            }
+            Message::Frame(f) => {
+                debug!("received frame message: {:?}", f);
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_parsed_messages(
+        &self,
+        messages: Vec<SocketMessage<SocketMessageDe>>,
+        raw: &Message,
+    ) -> Result<()> {
+        for message in messages {
+            match message {
+                SocketMessage::SocketServerInfo(info) => {
+                    tracing::info!("received server info: {:?}", info);
+                }
+                SocketMessage::SocketMessage(msg) => {
+                    if let Err(e) = self.handle_message_data(msg).await {
+                        self.handle_error(e, ustr("")).await?;
+                    }
+                }
+                SocketMessage::Other(value) => {
+                    trace!("receive message: {:?}", value);
+                    if value.is_number() {
+                        trace!("handling ping message: {:?}", value);
+                        if let Err(e) = self.ping(raw).await {
+                            self.handle_error(e, ustr("")).await?;
+                        }
+                    } else {
+                        warn!("unhandled message: {:?}", value);
+                    }
+                }
+                SocketMessage::Unknown(s) => {
+                    warn!("unknown message: {:?}", s);
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m.to_owned());
         self.data_handler.handle_events(event, &message.p).await;
         Ok(())
     }
 
-    async fn handle_error(&self, error: Error) {
-        (self.data_handler.handler.on_error)((error, vec![]));
-    }
-}
-#[bon::bon]
-impl DataHandler {
-    #[builder]
-    pub fn new(res_tx: DataTx) -> Self {
-        let res_tx = Arc::new(res_tx);
-        let handler: TradingViewHandler = create_handler(res_tx);
-        Self {
-            metadata: Metadata::default(),
-            handler,
-        }
-    }
-
-    pub(crate) async fn handle_events(&self, event: TradingViewDataEvent, message: &Vec<Value>) {
-        match event {
-            TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
-                trace!("received raw chart data: {:?}", message);
-                // Avoid cloning the entire HashMap
-                if let Err(e) = self.handle_chart_data(message).await {
-                    error!("chart data parsing error: {:?}", e);
-                    (self.handler.on_error)((e, message.to_owned()));
-                }
-            }
-            TradingViewDataEvent::OnQuoteData => self.handle_quote_data(message).await,
-            TradingViewDataEvent::OnSymbolResolved => {
-                if message.len() > 2 {
-                    match SymbolInfo::deserialize(&message[2]) {
-                        Ok(s) => {
-                            debug!("receive symbol info: {:?}", s);
-                            let mut chart_state = self.metadata.chart_state.write().await;
-                            chart_state.symbol_info.replace(s.clone());
-                            (self.handler.on_symbol_info)(s);
-                        }
-                        Err(e) => {
-                            error!("symbol resolved parsing error: {:?}", e);
-                            (self.handler.on_error)((
-                                Error::JsonParse(Ustr::from(&e.to_string())),
-                                message.to_owned(),
-                            ));
-                        }
-                    }
-                }
-            }
-            TradingViewDataEvent::OnSeriesCompleted => {
-                debug!("series completed: {:?}", message);
-                (self.handler.on_series_completed)(message.to_owned());
-            }
-            TradingViewDataEvent::OnSeriesLoading => {
-                debug!("series loading: {:?}", message);
-                (self.handler.on_series_loading)(message.to_owned());
-            }
-            TradingViewDataEvent::OnQuoteCompleted => {
-                debug!("quote completed: {:?}", message);
-                (self.handler.on_quote_completed)(message.to_owned());
-            }
-            TradingViewDataEvent::OnReplayOk => {
-                debug!("replay ok: {:?}", message);
-                (self.handler.on_replay_ok)(message.to_owned());
-            }
-            TradingViewDataEvent::OnReplayPoint => {
-                debug!("replay point: {:?}", message);
-                (self.handler.on_replay_point)(message.to_owned());
-            }
-            TradingViewDataEvent::OnReplayInstanceId => {
-                debug!("replay instance id: {:?}", message);
-                (self.handler.on_replay_instance_id)(message.to_owned());
-            }
-            TradingViewDataEvent::OnReplayResolutions => {
-                debug!("replay resolutions: {:?}", message);
-                (self.handler.on_replay_resolutions)(message.to_owned());
-            }
-            TradingViewDataEvent::OnReplayDataEnd => {
-                debug!("replay data end: {:?}", message);
-                (self.handler.on_replay_data_end)(message.to_owned());
-            }
-            TradingViewDataEvent::OnStudyLoading => {
-                debug!("study loading: {:?}", message);
-                (self.handler.on_study_loading)(message.to_owned());
-            }
-            TradingViewDataEvent::OnStudyCompleted => {
-                debug!("study completed: {:?}", message);
-                (self.handler.on_study_completed)(message.to_owned());
-            }
-            TradingViewDataEvent::OnError(tradingview_error) => {
-                error!("trading view error: {:?}", tradingview_error);
-                (self.handler.on_error)((
-                    Error::TradingView {
-                        source: tradingview_error,
-                    },
-                    message.to_owned(),
-                ));
-            }
-            TradingViewDataEvent::UnknownEvent(event) => {
-                warn!("unknown event: {:?}", event);
-                (self.handler.on_unknown_event)((event, message.to_owned()));
-            }
-        }
-    }
-
-    async fn handle_study_data(&self, options: &StudyOptions, message_data: &Value) -> Result<()> {
-        for study_entry in self.metadata.studies.iter() {
-            let (k, v) = study_entry.pair();
-            if let Some(resp_data) = message_data.get(v.as_str()) {
-                debug!("study data received: {} - {:?}", k, resp_data);
-                let data = StudyResponseData::deserialize(resp_data)?;
-                (self.handler.on_study_data)((*options, data));
-            }
-        }
-        Ok(())
-    }
-
-    async fn handle_chart_data(&self, message: &[Value]) -> Result<()> {
-        if message.len() < 2 {
-            return Ok(());
-        }
-
-        let message_data = &message[1];
-
-        // Process each series without cloning the entire series map
-        for series_entry in self.metadata.series.iter() {
-            let (id, series_info) = series_entry.pair();
-
-            if let Some(resp_data) = message_data.get(id.as_str()) {
-                let data = ChartResponseData::deserialize(resp_data)?.series;
-
-                // Update chart state
-                {
-                    let mut chart_state = self.metadata.chart_state.write().await;
-                    chart_state
-                        .chart
-                        .replace((series_info.clone(), data.clone()));
-                }
-
-                // Read once for callback
-                let chart_data = self
-                    .metadata
-                    .chart_state
-                    .read()
-                    .await
-                    .chart
-                    .clone()
-                    .unwrap_or_default();
-                (self.handler.on_chart_data)(chart_data);
-
-                // Handle study data if present
-                if let Some(study_options) = &series_info.options.study_config {
-                    self.handle_study_data(study_options, message_data).await?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn handle_quote_data(&self, message: &[Value]) {
-        if message.len() < 2 {
-            return;
-        }
-
-        debug!("received raw quote data: {:?}", message);
-        let qsd = match QuoteData::deserialize(&message[1]) {
-            Ok(data) => data,
-            Err(_) => return,
-        };
-
-        if qsd.status == "ok" {
-            self.metadata
-                .quotes
-                .entry(qsd.name)
-                .and_modify(|prev_quote| {
-                    *prev_quote = merge_quotes(prev_quote, &qsd.value);
-                })
-                .or_insert(qsd.value);
-
-            // Collect quotes once to avoid multiple read locks
-            let quotes: Vec<QuoteValue> = self
-                .metadata
-                .quotes
-                .iter()
-                .map(|entry| *entry.value())
-                .collect();
-            for quote in quotes {
-                (self.handler.on_quote_data)(quote);
-            }
-        } else {
-            error!("quote data status error: {:?}", qsd);
-            (self.handler.on_error)((
-                Error::TradingView {
-                    source: TradingViewError::QuoteDataStatusError(Ustr::from(&qsd.status)),
-                },
-                message.to_owned(),
-            ));
-        }
-    }
-
-    pub fn set_handler(mut self, handler: TradingViewHandler) -> Self {
-        self.handler = handler;
-        self
+    async fn handle_error(&self, _error: Error, _context: Ustr) -> Result<()> {
+        todo!()
     }
 }

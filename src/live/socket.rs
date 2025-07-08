@@ -1,35 +1,17 @@
-use crate::{
-    Result, UA,
-    error::Error,
-    error::TradingViewError,
-    payload,
-    utils::{format_packet, parse_packet},
-};
-use futures_util::{
-    SinkExt, StreamExt,
-    stream::{SplitSink, SplitStream},
-};
+use futures_util::stream::SplitStream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
-use tokio::{
-    net::TcpStream,
-    sync::{Mutex, RwLock},
-};
+use tokio::{net::TcpStream, sync::MutexGuard};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, connect_async_with_config,
+    MaybeTlsStream, WebSocketStream,
     tungstenite::{
-        client::IntoClientRequest,
         http::{HeaderMap, HeaderValue},
-        protocol::{Message, WebSocketConfig},
+        protocol::Message,
     },
 };
-use tracing::{debug, error, info, trace, warn};
-use url::Url;
 use ustr::Ustr;
+
+use crate::{Result, UA, error::Error, error::TradingViewError, utils::format_packet};
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -170,241 +152,31 @@ impl std::fmt::Display for DataServer {
     }
 }
 
-#[derive(Clone)]
-pub struct SocketSession {
-    server: Arc<DataServer>,
-    auth_token: Arc<RwLock<Ustr>>,
-    is_closed: Arc<AtomicBool>,
-    read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
-    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
-}
-
-impl SocketSession {
-    /// Establishes a WebSocket connection to a TradingView data server.
-    ///
-    /// # Arguments
-    ///
-    /// * `server` - A reference to the `DataServer` enum which represents the server to connect to.
-    /// * `auth_token` - A string slice that holds the authentication token.
-    ///
-    /// # Returns
-    ///
-    /// * A `Result` which is:
-    ///     * `Ok` - A tuple containing the split sink and stream of the WebSocket connection.
-    ///     * `Err` - An error that occurred while trying to establish the connection or send the authentication message.
-    ///
-    /// # Asynchronous
-    ///
-    /// This function is asynchronous, it returns a Future that should be awaited.
-    ///
-    /// This function first constructs the URL for the WebSocket connection based on the provided server.
-    /// It then creates a client request from the URL and adds necessary headers.
-    /// The `connect_async` function is used to establish the WebSocket connection.
-    /// The connection is then split into a write and read part.
-    /// An authentication message is sent using the write part of the connection.
-    /// Finally, it returns the write and read parts of the connection.
-    async fn connect(
-        server: DataServer,
-        auth_token: Ustr,
-    ) -> Result<(
-        SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-        SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    )> {
-        let url = Url::parse(&format!(
-            "wss://{server}.tradingview.com/socket.io/websocket"
-        ))?;
-
-        let mut request = url.into_client_request()?;
-        request
-            .headers_mut()
-            .extend(WEBSOCKET_HEADERS.clone().into_iter());
-
-        // Configure WebSocket with larger message size limits
-        let conf = WebSocketConfig::default()
-            .read_buffer_size(1024 * 1024)
-            .write_buffer_size(1024 * 1024);
-
-        let (socket, _response) = connect_async_with_config(request, Some(conf), false).await?;
-
-        let (mut write, read) = socket.split();
-
-        write
-            .send(
-                SocketMessageSer::new("set_auth_token", payload!(auth_token.as_str()))
-                    .to_message()?,
-            )
-            .await?;
-
-        Ok((write, read))
-    }
-
-    pub async fn is_closed(&self) -> bool {
-        self.is_closed.load(Ordering::Relaxed)
-    }
-
-    pub async fn reconnect(&self) -> Result<()> {
-        let auth_token = self.auth_token.read().await;
-        let (write, read) = SocketSession::connect(*self.server, *auth_token).await?;
-        let mut write_guard = self.write.lock().await;
-        let mut read_guard = self.read.lock().await;
-        *write_guard = write;
-        *read_guard = read;
-        self.is_closed.store(false, Ordering::Relaxed);
-        Ok(())
-    }
-
-    pub async fn set_auth_token(&self, auth_token: &str) -> Result<()> {
-        let mut auth_token_ = self.auth_token.write().await;
-        *auth_token_ = Ustr::from(auth_token);
-        self.send("set_auth_token", &payload!(auth_token)).await?;
-        Ok(())
-    }
-
-    pub async fn new(server: DataServer, auth_token: Ustr) -> Result<SocketSession> {
-        let (write_stream, read_stream) = SocketSession::connect(server, auth_token).await?;
-
-        let write = Arc::from(Mutex::new(write_stream));
-        let read = Arc::from(Mutex::new(read_stream));
-        let server = Arc::new(server);
-        let auth_token = Arc::new(RwLock::new(auth_token));
-        let is_closed = Arc::new(AtomicBool::new(false));
-
-        Ok(SocketSession {
-            server,
-            auth_token,
-            write,
-            read,
-            is_closed,
-        })
-    }
-
-    pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
-        let mut write_guard = self.write.lock().await;
-        write_guard
-            .send(SocketMessageSer::new(m, p).to_message()?)
-            .await?;
-        trace!("sent message: {} with payload: {:?}", m, p);
-        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
-        Ok(())
-    }
-
-    pub async fn ping(&self, ping: &Message) -> Result<()> {
-        let mut write_guard = self.write.lock().await;
-        write_guard.send(ping.clone()).await?;
-        trace!("sent ping message {}", ping);
-        if ping.is_close() {
-            self.is_closed.store(true, Ordering::Relaxed);
-            warn!("ping message is close, closing session");
-        }
-        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
-        trace!("ping message sent successfully");
-        Ok(())
-    }
-
-    pub async fn close(&self) -> Result<()> {
-        self.is_closed.store(true, Ordering::Relaxed);
-        self.write.lock().await.close().await?;
-        Ok(())
-    }
-
-    pub async fn update_auth_token(&self, auth_token: &str) -> Result<()> {
-        let mut write_guard = self.write.lock().await;
-        write_guard
-            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
-            .await?;
-        trace!("updated auth token to: {}", auth_token);
-        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
-        Ok(())
-    }
-}
-
-#[async_trait::async_trait]
 pub trait Socket {
-    async fn event_loop(&self, session: &SocketSession) {
-        let read = session.read.clone();
-        let mut read_guard = read.lock().await;
-        loop {
-            trace!("waiting for next message");
-            match read_guard.next().await {
-                Some(Ok(message)) => self.handle_raw_messages(session, message).await,
-                Some(Err(e)) => {
-                    error!("Error reading message: {:#?}", e);
-                    session.is_closed.store(true, Ordering::Relaxed);
-                    self.handle_error(Error::WebSocket(e.to_string().into()))
-                        .await;
-                    break;
-                }
-                None => {
-                    trace!("stream ended");
-                    session.is_closed.store(true, Ordering::Relaxed);
-                    break;
-                }
-            }
-        }
-    }
-
-    async fn handle_raw_messages(&self, session: &SocketSession, raw: Message) {
-        match &raw {
-            Message::Text(text) => {
-                trace!("parsing message: {:?}", text);
-                self.handle_parsed_messages(session, parse_packet(text), &raw)
-                    .await;
-            }
-            Message::Close(msg) => {
-                warn!("connection closed with code: {:?}", msg);
-                session.is_closed.store(true, Ordering::Relaxed);
-            }
-            Message::Binary(msg) => {
-                debug!("received binary message: {:?}", msg);
-                // TODO: handle binary messages
-            }
-            Message::Ping(msg) => {
-                trace!("received ping message: {:?}", msg);
-            }
-            Message::Pong(msg) => {
-                trace!("received pong message: {:?}", msg);
-            }
-            Message::Frame(f) => {
-                debug!("received frame message: {:?}", f);
-            }
-        }
-    }
-
-    async fn handle_parsed_messages(
+    fn event_loop(
         &self,
-        session: &SocketSession,
+        read: MutexGuard<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
+
+    fn handle_raw_messages(
+        &self,
+        raw: Message,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
+
+    fn handle_parsed_messages(
+        &self,
         messages: Vec<SocketMessage<SocketMessageDe>>,
         raw: &Message,
-    ) {
-        for message in messages {
-            match message {
-                SocketMessage::SocketServerInfo(info) => {
-                    info!("received server info: {:?}", info);
-                }
-                SocketMessage::SocketMessage(msg) => {
-                    if let Err(e) = self.handle_message_data(msg).await {
-                        self.handle_error(e).await;
-                    }
-                }
-                SocketMessage::Other(value) => {
-                    trace!("receive message: {:?}", value);
-                    if value.is_number() {
-                        trace!("handling ping message: {:?}", value);
-                        if let Err(e) = session.ping(raw).await {
-                            self.handle_error(e).await;
-                        }
-                    } else {
-                        warn!("unhandled message: {:?}", value);
-                    }
-                }
-                SocketMessage::Unknown(s) => {
-                    warn!("unknown message: {:?}", s);
-                }
-            }
-        }
-    }
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
-    async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()>;
+    fn handle_message_data(
+        &self,
+        message: SocketMessageDe,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 
-    async fn handle_error(&self, error: Error);
+    fn handle_error(
+        &self,
+        error: Error,
+        context: Ustr,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 }

@@ -1,9 +1,9 @@
 use dotenv::dotenv;
 use std::{env, sync::Arc};
 
-use tradingview::{
-    handler::message::{Command, CommandHandler},
-    live::socket::DataServer,
+use tradingview::live::{
+    handler::message::{Command, CommandHandler, TradingViewResponse},
+    socket::DataServer,
     websocket::WebSocketClient,
 };
 
@@ -32,11 +32,11 @@ async fn main() -> anyhow::Result<()> {
 
         while let Some(res) = response_rx.recv().await {
             match res {
-                tradingview::handler::message::TradingViewResponse::QuoteData(quote_value) => {
+                TradingViewResponse::QuoteData(quote_value) => {
                     println!("Quote Data: {quote_value:?}");
                 }
 
-                tradingview::handler::message::TradingViewResponse::Error(error, values) => {
+                TradingViewResponse::Error(error, values) => {
                     eprintln!("Error: {error:?}, Values: {values:?}");
                 }
                 _ => {
