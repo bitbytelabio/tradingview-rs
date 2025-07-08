@@ -20,7 +20,7 @@ pub enum ConnectionState {
 }
 
 /// Error classification for better handling
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum ErrorSeverity {
     /// Temporary errors that should trigger reconnection
     Recoverable,
@@ -83,6 +83,7 @@ impl ExponentialBackoff {
 }
 
 /// Command queue for handling commands during reconnection
+#[derive(Debug)]
 struct CommandQueue {
     queue: Vec<Command>,
     max_size: usize,
@@ -127,7 +128,7 @@ pub struct CommandRunner {
     stats: ConnectionStats,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ConnectionStats {
     reconnect_attempts: u64,
     successful_reconnects: u64,
@@ -286,53 +287,53 @@ impl CommandRunner {
                     self.cleanup().await;
                     Ok(())
                 }
-                Command::SetAuthToken { auth_token } => {
+                SetAuthToken { auth_token } => {
                     self.ws.set_auth_token(&auth_token).await?;
                     Ok(())
                 }
-                Command::SetLocals { language, country } => {
+                SetLocals { language, country } => {
                     self.ws.set_locale((&language, &country)).await?;
                     Ok(())
                 }
-                Command::SetDataQuality { quality } => {
+                SetDataQuality { quality } => {
                     self.ws.set_data_quality(&quality).await?;
                     Ok(())
                 }
-                Command::SetTimeZone { session, timezone } => {
+                SetTimeZone { session, timezone } => {
                     self.ws.set_timezone(&session, timezone).await?;
                     Ok(())
                 }
-                Command::CreateQuoteSession => {
+                CreateQuoteSession => {
                     self.ws.create_quote_session().await?;
                     Ok(())
                 }
-                Command::DeleteQuoteSession => {
+                DeleteQuoteSession => {
                     self.ws.delete_quote_session().await?;
                     Ok(())
                 }
-                Command::SetQuoteFields => {
+                SetQuoteFields => {
                     self.ws.set_fields().await?;
                     Ok(())
                 }
-                Command::QuoteFastSymbols { symbols } => {
+                QuoteFastSymbols { symbols } => {
                     let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
                     self.ws.fast_symbols(&symbols).await?;
                     Ok(())
                 }
-                Command::QuoteRemoveSymbols { symbols } => {
+                QuoteRemoveSymbols { symbols } => {
                     let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
                     self.ws.remove_symbols(&symbols).await?;
                     Ok(())
                 }
-                Command::CreateChartSession { session } => {
+                CreateChartSession { session } => {
                     self.ws.create_chart_session(&session).await?;
                     Ok(())
                 }
-                Command::DeleteChartSession { session } => {
+                DeleteChartSession { session } => {
                     self.ws.delete_chart_session(&session).await?;
                     Ok(())
                 }
-                Command::RequestMoreData {
+                RequestMoreData {
                     session,
                     series_id,
                     bar_count,
@@ -342,7 +343,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::RequestMoreTickMarks {
+                RequestMoreTickMarks {
                     session,
                     series_id,
                     bar_count,
@@ -352,7 +353,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::CreateStudy {
+                CreateStudy {
                     session,
                     study_id,
                     series_id,
@@ -363,7 +364,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::ModifyStudy {
+                ModifyStudy {
                     session,
                     study_id,
                     series_id,
@@ -374,7 +375,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::RemoveStudy {
+                RemoveStudy {
                     session,
                     study_id,
                     series_id,
@@ -383,7 +384,7 @@ impl CommandRunner {
                     self.ws.remove_study(&session, &id).await?;
                     Ok(())
                 }
-                Command::SetStudy {
+                SetStudy {
                     study_options,
                     session,
                     series_id,
@@ -393,7 +394,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::CreateSeries {
+                CreateSeries {
                     session,
                     series_id,
                     series_version,
@@ -411,7 +412,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::ModifySeries {
+                ModifySeries {
                     session,
                     series_id,
                     series_version,
@@ -429,19 +430,19 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::RemoveSeries { session, series_id } => {
+                RemoveSeries { session, series_id } => {
                     self.ws.remove_series(&session, &series_id).await?;
                     Ok(())
                 }
-                Command::CreateReplaySession { session } => {
+                CreateReplaySession { session } => {
                     self.ws.create_replay_session(&session).await?;
                     Ok(())
                 }
-                Command::DeleteReplaySession { session } => {
+                DeleteReplaySession { session } => {
                     self.ws.delete_replay_session(&session).await?;
                     Ok(())
                 }
-                Command::ResolveSymbol {
+                ResolveSymbol {
                     session,
                     symbol,
                     exchange,
@@ -459,7 +460,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::SetReplayStep {
+                SetReplayStep {
                     session,
                     series_id,
                     step,
@@ -467,7 +468,7 @@ impl CommandRunner {
                     self.ws.replay_step(&session, &series_id, step).await?;
                     Ok(())
                 }
-                Command::StartReplay {
+                StartReplay {
                     session,
                     series_id,
                     interval,
@@ -475,11 +476,11 @@ impl CommandRunner {
                     self.ws.replay_start(&session, &series_id, interval).await?;
                     Ok(())
                 }
-                Command::StopReplay { session, series_id } => {
+                StopReplay { session, series_id } => {
                     self.ws.replay_stop(&session, &series_id).await?;
                     Ok(())
                 }
-                Command::ResetReplay {
+                ResetReplay {
                     session,
                     series_id,
                     timestamp,
@@ -489,7 +490,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::SetReplay {
+                SetReplay {
                     symbol,
                     options,
                     chart_session,
@@ -500,7 +501,7 @@ impl CommandRunner {
                         .await?;
                     Ok(())
                 }
-                Command::SetMarket { options } => {
+                SetMarket { options } => {
                     self.ws.set_market(options).await?;
                     Ok(())
                 }
