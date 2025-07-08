@@ -402,7 +402,7 @@ impl CommandRunner {
     // #[instrument(skip(self), fields(runner_id = %std::ptr::addr_of!(*self) as usize))]
     pub async fn run(mut self) -> Result<()> {
         let mut hb = interval(self.config.heartbeat_interval);
-        let mut backoff = ExponentialBackoff::new(self.config.backoff_config.clone());
+        let mut backoff = ExponentialBackoff::new(self.config.backoff_config);
         let mut health_check = interval(self.config.health_check_interval);
         let mut stats_timer = interval(Duration::from_secs(60)); // Log stats every minute
 
@@ -962,7 +962,7 @@ impl CommandRunner {
         if let Some(time_since_success) = self.state.time_since_last_success() {
             if time_since_success > self.config.health_check_timeout {
                 return Err(Error::Internal(
-                    format!("No successful operations for {:?}", time_since_success).into(),
+                    format!("No successful operations for {time_since_success:?}").into(),
                 ));
             }
         }
