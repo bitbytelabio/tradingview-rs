@@ -1,3 +1,3 @@
 pub mod handler;
-pub mod socket;
+pub mod models;
 pub mod websocket;

@@ -3,7 +3,7 @@ use crate::{
     chart::{ChartOptions, StudyOptions, SymbolInfo},
     live::{
         handler::{data::DataHandler, types::DataTx},
-        socket::{
+        models::{
             DataServer, Socket, SocketMessage, SocketMessageDe, SocketMessageSer,
             TradingViewDataEvent, WEBSOCKET_HEADERS,
         },

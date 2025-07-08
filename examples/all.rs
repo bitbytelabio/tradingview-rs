@@ -3,7 +3,7 @@ use std::{env, sync::Arc};
 
 use tradingview::live::{
     handler::message::{Command, TradingViewResponse},
-    socket::DataServer,
+    models::DataServer,
     websocket::WebSocketClient,
 };
 

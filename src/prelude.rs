@@ -1,4 +1,4 @@
-pub use crate::live::socket::DataServer;
+pub use crate::live::models::DataServer;
 pub use crate::models::SymbolType::*;
 pub use crate::models::{
     ChartOptions, CryptoType, FundsType, Interval, MarketSymbol, MarketType, OHLCV, PriceIterable,

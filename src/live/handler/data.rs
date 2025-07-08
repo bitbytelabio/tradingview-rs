@@ -9,7 +9,7 @@ use crate::{
     error::TradingViewError,
     live::{
         handler::types::{DataTx, TradingViewHandler, create_handler},
-        socket::TradingViewDataEvent,
+        models::TradingViewDataEvent,
     },
     quote::utils::merge_quotes,
     websocket::Metadata,
