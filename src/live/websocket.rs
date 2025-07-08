@@ -128,12 +128,12 @@ pub struct SeriesInfo {
 }
 
 pub struct WebSocketClient {
+    pub server: DataServer,
+    pub(crate) auth_token: Arc<RwLock<Ustr>>,
+
     data_handler: DataHandler,
     closed: CancellationToken,
-
     // The following fields are used for the WebSocket connection
-    server: DataServer,
-    auth_token: Arc<RwLock<Ustr>>,
     is_closed: Arc<AtomicBool>,
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
@@ -164,7 +164,7 @@ impl WebSocketClient {
     ) -> Result<Arc<Self>> {
         let auth_token = Ustr::from(auth_token.unwrap_or("unauthorized_user_token"));
 
-        let (write, read) = Self::connect(server, auth_token).await?;
+        let (write, read) = Self::connect(server).await?;
 
         let data_handler = DataHandler::builder().res_tx(data_tx).build();
         let is_closed = Arc::new(AtomicBool::new(false));
@@ -200,7 +200,6 @@ impl WebSocketClient {
 
     async fn connect(
         server: DataServer,
-        auth_token: Ustr,
     ) -> Result<(
         SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
         SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
@@ -219,20 +218,14 @@ impl WebSocketClient {
             .read_buffer_size(1024 * 1024)
             .write_buffer_size(1024 * 1024);
 
-        let (socket, _response) = connect_async_with_config(request, Some(conf), false).await?;
+        let (socket, response) = connect_async_with_config(request, Some(conf), false).await?;
 
-        let (mut write, read) = socket.split();
+        info!("WebSocket connected with status: {}", response.status());
 
-        write
-            .send(
-                SocketMessageSer::new("set_auth_token", payload!(auth_token.as_str()))
-                    .to_message()?,
-            )
-            .await?;
+        let (write, read) = socket.split();
 
         Ok((write, read))
     }
-
     /// Classify error severity for appropriate response
     fn classify_error_severity(&self, error: &Error, context: &str) -> ErrorSeverity {
         match error {
@@ -425,12 +418,13 @@ impl WebSocketClient {
 
     pub async fn reconnect(&self) -> Result<()> {
         let auth_token = self.auth_token.read().await;
-        let (write, read) = Self::connect(self.server, *auth_token).await?;
+        let (write, read) = Self::connect(self.server).await?;
         let mut write_guard = self.write.lock().await;
         let mut read_guard = self.read.lock().await;
         *write_guard = write;
         *read_guard = read;
         self.is_closed.store(false, Ordering::Relaxed);
+        self.set_auth_token(&auth_token).await?;
         Ok(())
     }
 
@@ -992,13 +986,17 @@ impl WebSocketClient {
 
     pub async fn subscribe(&self) -> Result<()> {
         let read = self.read.lock().await;
-        self.event_loop(read).await?;
+        if let Err(e) = self.event_loop(read).await {
+            error!("Event loop failed: {}", e);
+            self.is_closed.store(true, Ordering::Relaxed);
+            self.closed.cancel();
+            return Err(e);
+        }
         Ok(())
     }
 
-    /// Resolves when the reader task detects Close / IO failure.
     pub async fn closed_notifier(&self) {
-        self.closed.cancel();
+        self.closed.cancelled().await;
     }
 
     /// Fire-and-forget ping. Ignores `WouldBlock` when write buffer is full.
@@ -1018,11 +1016,20 @@ impl Socket for WebSocketClient {
         &self,
         mut read: MutexGuard<'_, SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     ) -> Result<()> {
+        info!("WebSocket event loop started");
+
         loop {
+            if self.is_closed.load(Ordering::Relaxed) {
+                info!("WebSocket is closed, ending event loop");
+                break;
+            }
+
             trace!("waiting for next message");
-            match read.next().await {
-                Some(Ok(message)) => {
+            match timeout(Duration::from_secs(30), read.next()).await {
+                Ok(Some(Ok(message))) => {
+                    trace!("Received message: {:?}", message);
                     if let Err(e) = self.handle_raw_messages(message).await {
+                        warn!("Error handling message: {}", e);
                         self.handle_error(e, ustr("handle_raw_messages")).await?;
                     } else {
                         // Reset consecutive errors on successful message processing
@@ -1032,7 +1039,7 @@ impl Socket for WebSocketClient {
                         }
                     }
                 }
-                Some(Err(e)) => {
+                Ok(Some(Err(e))) => {
                     error!("Error reading message: {:#?}", e);
                     self.is_closed.store(true, Ordering::Relaxed);
                     self.handle_error(
@@ -1040,42 +1047,59 @@ impl Socket for WebSocketClient {
                         ustr("event_loop_read"),
                     )
                     .await?;
-
                     return Err(Error::Internal(ustr(&e.to_string())));
                 }
-                None => {
-                    trace!("stream ended");
+                Ok(None) => {
+                    info!("WebSocket stream ended");
                     self.is_closed.store(true, Ordering::Relaxed);
-                    return Ok(());
+                    break;
+                }
+                Err(_) => {
+                    warn!("WebSocket read timeout, checking connection health");
+                    if self.is_closed.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    // Send a ping to check if connection is still alive
+                    if let Err(e) = self.try_ping().await {
+                        warn!("Ping failed during timeout: {}", e);
+                        // Don't break here, continue trying
+                    }
                 }
             }
         }
+
+        info!("WebSocket event loop ended");
+        Ok(())
     }
 
     async fn handle_raw_messages(&self, raw: Message) -> Result<()> {
         match &raw {
             Message::Text(text) => {
-                trace!("parsing message: {:?}", text);
+                debug!("Received text message: {}", text);
                 self.handle_parsed_messages(parse_packet(text), &raw)
                     .await?;
             }
             Message::Close(msg) => {
-                warn!("connection closed with code: {:?}", msg);
+                warn!("Connection closed with code: {:?}", msg);
                 self.is_closed.store(true, Ordering::Relaxed);
                 self.closed.cancel();
             }
             Message::Binary(msg) => {
-                debug!("received binary message: {:?}", msg);
+                debug!("Received binary message: {:?}", msg);
                 // TODO: handle binary messages
             }
             Message::Ping(msg) => {
-                trace!("received ping message: {:?}", msg);
+                trace!("Received ping message: {:?}", msg);
+                // // Send pong response
+                if let Err(e) = self.ping(&Message::Pong(msg.clone())).await {
+                    warn!("Failed to send pong response: {}", e);
+                }
             }
             Message::Pong(msg) => {
-                trace!("received pong message: {:?}", msg);
+                trace!("Received pong message: {:?}", msg);
             }
             Message::Frame(f) => {
-                debug!("received frame message: {:?}", f);
+                debug!("Received frame message: {:?}", f);
             }
         }
         Ok(())
@@ -1089,20 +1113,26 @@ impl Socket for WebSocketClient {
         for message in messages {
             match message {
                 SocketMessage::SocketServerInfo(info) => {
-                    tracing::info!("received server info: {:?}", info);
+                    info!("received server info: {:?}", info);
                 }
                 SocketMessage::SocketMessage(msg) => {
+                    info!(
+                        "Processing socket message: method={}, params={:?}",
+                        msg.m, msg.p
+                    );
                     if let Err(e) = self.handle_message_data(msg).await {
                         self.handle_error(e, ustr("handle_message_data")).await?;
                     }
                 }
                 SocketMessage::Other(value) => {
-                    trace!("receive message: {:?}", value);
+                    info!("Received other message: {:?}", value);
                     if value.is_number() {
-                        trace!("handling ping message: {:?}", value);
+                        debug!("handling heartbeat message: {:?}", value);
                         if let Err(e) = self.ping(raw).await {
                             self.handle_error(e, ustr("ping_response")).await?;
                         }
+                    } else if value.is_string() {
+                        info!("Received string message: {:?}", value);
                     } else {
                         warn!("unhandled message: {:?}", value);
                     }
@@ -1116,7 +1146,13 @@ impl Socket for WebSocketClient {
     }
 
     async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()> {
+        debug!(
+            "Handling message: method={}, params_count={}",
+            message.m,
+            message.p.len()
+        );
         let event = TradingViewDataEvent::from(message.m.to_owned());
+        debug!("Mapped to event: {:?}", event);
         self.data_handler.handle_events(event, &message.p).await;
         Ok(())
     }

@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
+use tracing::{error, info, warn};
 use ustr::Ustr;
 
 use crate::{
@@ -176,42 +177,54 @@ impl DataHandler {
 
     async fn handle_quote_data(&self, message: &[Value]) {
         if message.len() < 2 {
+            warn!("Quote data message too short: {:?}", message);
             return;
         }
 
-        tracing::debug!("received raw quote data: {:?}", message);
-        let qsd = match QuoteData::deserialize(&message[1]) {
-            Ok(data) => data,
-            Err(_) => return,
-        };
+        info!("Processing quote data message: {:?}", message);
 
-        if qsd.status == "ok" {
-            self.metadata
-                .quotes
-                .entry(qsd.name)
-                .and_modify(|prev_quote| {
-                    *prev_quote = merge_quotes(prev_quote, &qsd.value);
-                })
-                .or_insert(qsd.value);
+        // Quote data can come in different formats
+        match QuoteData::deserialize(&message[1]) {
+            Ok(qsd) => {
+                info!("Successfully parsed quote data: {:?}", qsd);
 
-            // Collect quotes once to avoid multiple read locks
-            let quotes: Vec<QuoteValue> = self
-                .metadata
-                .quotes
-                .iter()
-                .map(|entry| *entry.value())
-                .collect();
-            for quote in quotes {
-                (self.handler.on_quote_data)(quote);
+                if qsd.status == "ok" {
+                    // Update local quote storage
+                    self.metadata
+                        .quotes
+                        .entry(qsd.name)
+                        .and_modify(|prev_quote| {
+                            *prev_quote = merge_quotes(prev_quote, &qsd.value);
+                        })
+                        .or_insert(qsd.value);
+
+                    // Send through handler
+                    (self.handler.on_quote_data)(qsd.value);
+                } else {
+                    error!("Quote data status error: {:?}", qsd);
+                    (self.handler.on_error)((
+                        Error::TradingView {
+                            source: TradingViewError::QuoteDataStatusError(Ustr::from(&qsd.status)),
+                        },
+                        message.to_owned(),
+                    ));
+                }
             }
-        } else {
-            tracing::error!("quote data status error: {:?}", qsd);
-            (self.handler.on_error)((
-                Error::TradingView {
-                    source: TradingViewError::QuoteDataStatusError(Ustr::from(&qsd.status)),
-                },
-                message.to_owned(),
-            ));
+            Err(e) => {
+                // Try to handle different quote message formats
+                warn!(
+                    "Failed to parse as QuoteData, trying alternative formats: {:?}",
+                    e
+                );
+
+                // Sometimes quote data comes as direct values
+                if let Ok(direct_quote) = QuoteValue::deserialize(&message[1]) {
+                    info!("Parsed as direct QuoteValue: {:?}", direct_quote);
+                    (self.handler.on_quote_data)(direct_quote);
+                } else {
+                    error!("Failed to parse quote data in any format: {:?}", message);
+                }
+            }
         }
     }
 

@@ -161,8 +161,17 @@ impl CommandRunner {
         // Start the WebSocket reader task
         self.start_reader_task();
 
-        // Wait a moment for WebSocket to be ready
-        sleep(Duration::from_millis(100)).await;
+        // Wait longer for WebSocket to be fully ready
+        // sleep(Duration::from_millis(2000)).await;
+
+        // Send initial authentication if we have a token
+        let auth_token = self.ws.auth_token.read().await.clone();
+        if auth_token != "unauthorized_user_token" {
+            info!("Sending initial authentication token");
+            if let Err(e) = self.ws.set_auth_token(&auth_token).await {
+                warn!("Failed to set initial auth token: {}", e);
+            }
+        }
 
         loop {
             select! {
@@ -176,7 +185,7 @@ impl CommandRunner {
 
                 cmd = self.rx.recv() => match cmd {
                     Some(cmd) => {
-                        tracing::debug!("Processing command: {:?}", cmd);
+                        debug!("Processing command: {:?}", cmd);
                         if let Err(e) = self.handle_command(cmd, &mut backoff).await {
                             self.stats.errors_handled += 1;
                             match self.classify_error(&e) {
@@ -194,7 +203,7 @@ impl CommandRunner {
                             }
                         } else {
                             self.stats.commands_processed += 1;
-                            tracing::debug!("Command processed successfully");
+                            debug!("Command processed successfully");
                         }
                     },
                     None => {
@@ -237,8 +246,11 @@ impl CommandRunner {
         if self.reader_handle.is_none() {
             let ws = Arc::clone(&self.ws);
             self.reader_handle = Some(tokio::spawn(async move {
+                info!("Starting WebSocket reader task");
                 if let Err(e) = ws.subscribe().await {
                     error!("WebSocket reader task failed: {}", e);
+                } else {
+                    info!("WebSocket reader task completed successfully");
                 }
             }));
         }
