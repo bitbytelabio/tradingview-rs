@@ -20,7 +20,6 @@ native-tls = ["reqwest/native-tls", "tokio-tungstenite/native-tls"]
 rustls-tls = ["reqwest/rustls-tls", "tokio-tungstenite/rustls-tls-webpki-roots"]
 
 [dependencies]
-async-trait = "0.1"
 tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
@@ -49,7 +48,6 @@ bon = "3"
 dashmap = { version = "6.1.0", features = ["rayon", "serde", "inline"] }
 ustr = { version = "1.1.0", features = ["serde"] }
 tokio-util = { version = "0.7.15", features = ["futures-util", "tracing"] }
-backoff = { version = "0.4.0", features = ["tokio"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

@@ -68,7 +68,6 @@ pub struct SeriesInfo {
     pub options: ChartOptions,
 }
 
-#[derive(Clone)]
 pub struct WebSocketClient {
     data_handler: DataHandler,
     closed: CancellationToken,
@@ -115,20 +114,7 @@ impl WebSocketClient {
     }
 
     fn spawn_reader_task(self: Arc<Self>) {
-        tokio::spawn(async move {
-            // split() once, drive the read half here…
-            // let mut reader = /* tungstenite SplitStream */;
-            // while let Some(frame) = reader.next().await {
-            //     match frame {
-            //         Ok(Message::Close(_)) | Err(_) => {
-            //             // Notify EVERYBODY that the socket is now dead
-            //             self.closed.cancel();
-            //             break;
-            //         }
-            //         Ok(msg) => self.handle_incoming(msg).await,
-            //     }
-            // }
-        });
+        tokio::spawn(async move { self.subscribe().await });
     }
 
     async fn connect(
@@ -744,16 +730,15 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn subscribe(&self) {
-        // self.event_loop().await;
-        todo!()
+    pub async fn subscribe(&self) -> Result<()> {
+        let read = self.read.lock().await;
+        self.event_loop(read).await?;
+        Ok(())
     }
 
     /// Resolves when the reader task detects Close / IO failure.
     pub async fn closed_notifier(&self) {
-        if self.is_closed().await {
-            return;
-        }
+        self.closed.cancel();
     }
 
     /// Fire-and-forget ping. Ignores `WouldBlock` when write buffer is full.
