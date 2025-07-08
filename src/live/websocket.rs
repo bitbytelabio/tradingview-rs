@@ -409,13 +409,6 @@ impl WebSocketClient {
         self.is_closed.load(Ordering::Relaxed)
     }
 
-    pub async fn send_batch(&self, messages: Vec<(&str, &Vec<Value>)>) -> Result<()> {
-        for (method, payload) in messages {
-            self.send(method, payload).await?;
-        }
-        Ok(())
-    }
-
     pub async fn reconnect(&self) -> Result<()> {
         let auth_token = self.auth_token.read().await;
         let (write, read) = Self::connect(self.server).await?;
@@ -486,6 +479,10 @@ impl WebSocketClient {
     }
 
     pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
+        if self.is_closed.load(Ordering::Relaxed) {
+            return Err(Error::Internal("WebSocket is closed".into()));
+        }
+        debug!("Sending message: {} with payload: {:?}", m, p);
         let mut write_guard = self.write.lock().await;
         write_guard
             .send(SocketMessageSer::new(m, p).to_message()?)

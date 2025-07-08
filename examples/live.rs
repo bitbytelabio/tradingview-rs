@@ -22,7 +22,11 @@ use ustr::ustr;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();
-    tracing_subscriber::fmt::init();
+
+    // Use debug level to see more details
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
 
     let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
 
