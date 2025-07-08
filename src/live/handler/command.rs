@@ -162,7 +162,7 @@ impl CommandRunner {
         self.start_reader_task();
 
         // Send initial authentication if we have a token
-        let auth_token = self.ws.auth_token.read().await.clone();
+        let auth_token = *self.ws.auth_token.read().await;
         if auth_token != "unauthorized_user_token" {
             info!("Sending initial authentication token");
             if let Err(e) = self.ws.set_auth_token(&auth_token).await {
@@ -673,7 +673,7 @@ impl CommandRunner {
         // Stop reader task
         if let Some(handle) = self.reader_handle.take() {
             handle.abort();
-            if let Err(_) = timeout(Duration::from_secs(2), handle).await {
+            if (timeout(Duration::from_secs(2), handle).await).is_err() {
                 warn!("Reader task did not stop gracefully");
             }
         }

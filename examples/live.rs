@@ -221,21 +221,16 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
         // Add more symbols at different intervals to test
         if i == 6 {
             info!("➕ Adding more symbols...");
-            command_tx.send(Command::FastSymbols {
+            command_tx.send(Command::AddSymbols {
                 symbols: vec![ustr("NASDAQ:AAPL"), ustr("NYSE:TSLA")],
             })?;
         }
 
         if i == 12 {
             info!("➕ Adding forex symbols...");
-            command_tx.send(Command::FastSymbols {
+            command_tx.send(Command::AddSymbols {
                 symbols: vec![ustr("FX:GBPUSD"), ustr("FX:USDJPY")],
             })?;
-        }
-
-        if i % 4 == 0 {
-            // Ping every 20 seconds
-            command_tx.send(Command::Ping)?;
         }
     }
 
