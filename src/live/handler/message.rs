@@ -1,14 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
 use ustr::Ustr;
 
 use crate::{
     ChartOptions, DataPoint, Error, Interval, QuoteValue, Result, StudyOptions, StudyResponseData,
-    SymbolInfo, Timezone,
-    live::handler::types::CommandRx,
-    pine_indicator::PineIndicator,
-    websocket::{SeriesInfo, WebSocketClient},
+    SymbolInfo, Timezone, pine_indicator::PineIndicator, websocket::SeriesInfo,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,11 +30,13 @@ pub enum TradingViewResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     Delete,
+    Ping,
     SetAuthToken {
         auth_token: Ustr,
     },
     SetLocals {
-        locals: (Ustr, Ustr),
+        language: Ustr,
+        country: Ustr,
     },
     SetDataQuality {
         quality: Ustr,
@@ -252,224 +250,5 @@ impl LoadingMsg {
 
     pub fn is_study(&self) -> bool {
         matches!(self, Self::Study(_))
-    }
-}
-
-pub struct CommandHandler {
-    receiver: CommandRx,
-    websocket: Arc<WebSocketClient>,
-}
-
-impl CommandHandler {
-    pub fn new(receiver: CommandRx, websocket: Arc<WebSocketClient>) -> Self {
-        Self {
-            receiver,
-            websocket,
-        }
-    }
-
-    pub async fn handle_commands(&mut self) -> Result<()> {
-        while let Some(command) = self.receiver.recv().await {
-            tracing::info!("Received command: {:?}", command);
-            match command {
-                Command::Delete => {
-                    self.websocket.delete().await?;
-                }
-                Command::SetAuthToken { auth_token } => {
-                    self.websocket.set_auth_token(&auth_token).await?;
-                }
-                Command::SetLocals { locals } => {
-                    self.websocket.set_locale((&locals.0, &locals.1)).await?;
-                }
-                Command::SetDataQuality { quality } => {
-                    self.websocket.set_data_quality(&quality).await?;
-                }
-                Command::SetTimeZone { session, timezone } => {
-                    self.websocket.set_timezone(&session, timezone).await?;
-                }
-                Command::CreateQuoteSession => {
-                    self.websocket.create_quote_session().await?;
-                }
-                Command::DeleteQuoteSession => {
-                    self.websocket.delete_quote_session().await?;
-                }
-                Command::SetQuoteFields => {
-                    self.websocket.set_fields().await?;
-                }
-                Command::QuoteFastSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.websocket.fast_symbols(&symbols).await?;
-                }
-                Command::QuoteRemoveSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.websocket.remove_symbols(&symbols).await?;
-                }
-                Command::CreateChartSession { session } => {
-                    self.websocket.create_chart_session(&session).await?;
-                }
-                Command::DeleteChartSession { session } => {
-                    self.websocket.delete_chart_session(&session).await?;
-                }
-                Command::RequestMoreData {
-                    session,
-                    series_id,
-                    bar_count,
-                } => {
-                    self.websocket
-                        .request_more_data(&session, &series_id, bar_count)
-                        .await?;
-                }
-                Command::RequestMoreTickMarks {
-                    session,
-                    series_id,
-                    bar_count,
-                } => {
-                    self.websocket
-                        .request_more_tickmarks(&session, &series_id, bar_count)
-                        .await?;
-                }
-                Command::CreateStudy {
-                    session,
-                    study_id,
-                    series_id,
-                    indicator,
-                } => {
-                    self.websocket
-                        .create_study(&session, &study_id, &series_id, indicator)
-                        .await?;
-                }
-                Command::ModifyStudy {
-                    session,
-                    study_id,
-                    series_id,
-                    indicator,
-                } => {
-                    self.websocket
-                        .modify_study(&session, &study_id, &series_id, indicator)
-                        .await?;
-                }
-                Command::RemoveStudy {
-                    session,
-                    study_id,
-                    series_id,
-                } => {
-                    let id = format!("{series_id}_{study_id}");
-                    self.websocket.remove_study(&session, &id).await?;
-                }
-                Command::SetStudy {
-                    study_options,
-                    session,
-                    series_id,
-                } => {
-                    self.websocket
-                        .set_study(study_options, &session, &series_id)
-                        .await?;
-                }
-                Command::CreateSeries {
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config,
-                } => {
-                    self.websocket
-                        .create_series(
-                            &session,
-                            &series_id,
-                            &series_version,
-                            &series_symbol_id,
-                            config,
-                        )
-                        .await?;
-                }
-                Command::ModifySeries {
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config,
-                } => {
-                    self.websocket
-                        .modify_series(
-                            &session,
-                            &series_id,
-                            &series_version,
-                            &series_symbol_id,
-                            config,
-                        )
-                        .await?;
-                }
-                Command::RemoveSeries { session, series_id } => {
-                    self.websocket.remove_series(&session, &series_id).await?;
-                }
-                Command::CreateReplaySession { session } => {
-                    self.websocket.create_replay_session(&session).await?;
-                }
-                Command::DeleteReplaySession { session } => {
-                    self.websocket.delete_replay_session(&session).await?;
-                }
-                Command::ResolveSymbol {
-                    session,
-                    symbol,
-                    exchange,
-                    opts,
-                    replay_session,
-                } => {
-                    self.websocket
-                        .resolve_symbol(
-                            &session,
-                            &symbol,
-                            &exchange,
-                            opts,
-                            replay_session.as_deref(),
-                        )
-                        .await?;
-                }
-                Command::SetReplayStep {
-                    session,
-                    series_id,
-                    step,
-                } => {
-                    self.websocket
-                        .replay_step(&session, &series_id, step)
-                        .await?;
-                }
-                Command::StartReplay {
-                    session,
-                    series_id,
-                    interval,
-                } => {
-                    self.websocket
-                        .replay_start(&session, &series_id, interval)
-                        .await?;
-                }
-                Command::StopReplay { session, series_id } => {
-                    self.websocket.replay_stop(&session, &series_id).await?;
-                }
-                Command::ResetReplay {
-                    session,
-                    series_id,
-                    timestamp,
-                } => {
-                    self.websocket
-                        .replay_reset(&session, &series_id, timestamp)
-                        .await?;
-                }
-                Command::SetReplay {
-                    symbol,
-                    options,
-                    chart_session,
-                    symbol_series_id,
-                } => {
-                    self.websocket
-                        .set_replay(&symbol, options, &chart_session, &symbol_series_id)
-                        .await?;
-                }
-                Command::SetMarket { options } => {
-                    self.websocket.set_market(options).await?;
-                }
-            }
-        }
-        Ok(())
     }
 }

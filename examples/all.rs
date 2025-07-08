@@ -2,7 +2,7 @@ use dotenv::dotenv;
 use std::{env, sync::Arc};
 
 use tradingview::live::{
-    handler::message::{Command, CommandHandler, TradingViewResponse},
+    handler::message::{Command, TradingViewResponse},
     socket::DataServer,
     websocket::WebSocketClient,
 };
