@@ -3,7 +3,7 @@
 use crate::{
     Error,
     chart::{DataPoint, StudyOptions, StudyResponseData, SymbolInfo},
-    handler::message::{LoadingMsg, Command, TradingViewResponse},
+    live::handler::message::{Command, LoadingMsg, TradingViewResponse},
     quote::models::QuoteValue,
     websocket::SeriesInfo,
 };
