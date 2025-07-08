@@ -128,20 +128,30 @@ impl DataHandler {
 
         debug!("receive symbol info: {:?}", symbol_info);
 
-        // Update chart state
-        let mut chart_state = self.metadata.chart_state.write().await;
-        chart_state.symbol_info.replace(symbol_info.clone());
-        drop(chart_state); // Release lock early
+        // Update chart state with shorter lock scope
+        {
+            let mut chart_state = self.metadata.chart_state.write().await;
+            chart_state.symbol_info.replace(symbol_info.clone());
+        }
 
         (self.handler.on_symbol_info)(symbol_info);
         Ok(())
     }
 
     async fn handle_study_data(&self, options: &StudyOptions, message_data: &Value) -> Result<()> {
+        // Pre-allocate vector if we know the capacity
+        let studies_len = self.metadata.studies.len();
+        if studies_len == 0 {
+            return Ok(());
+        }
+
         for study_entry in self.metadata.studies.iter() {
             let (k, v) = study_entry.pair();
             if let Some(resp_data) = message_data.get(v.as_str()) {
-                debug!("study data received: {} - {:?}", k, resp_data);
+                // Avoid debug logging in hot path unless explicitly enabled
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!("study data received: {} - {:?}", k, resp_data);
+                }
                 let data = StudyResponseData::deserialize(resp_data)?;
                 (self.handler.on_study_data)((*options, data));
             }
@@ -156,6 +166,11 @@ impl DataHandler {
 
         let message_data = &message[1];
 
+        // Early return if no series to process
+        if self.metadata.series.is_empty() {
+            return Ok(());
+        }
+
         // Process each series
         for series_entry in self.metadata.series.iter() {
             let (id, series_info) = series_entry.pair();
@@ -164,18 +179,17 @@ impl DataHandler {
                 let chart_response = ChartResponseData::deserialize(resp_data)?;
                 let data = chart_response.series;
 
-                // Update chart state with explicit scope
-                {
+                // Clone series_info once outside the lock
+                let series_info_clone = series_info.clone();
+                let data_clone = data.clone();
+
+                // Update chart state with minimal lock scope
+                let chart_data = {
                     let mut chart_state = self.metadata.chart_state.write().await;
                     chart_state
                         .chart
-                        .replace((series_info.clone(), data.clone()));
-                }
-
-                // Get chart data for callback
-                let chart_data = {
-                    let chart_state = self.metadata.chart_state.read().await;
-                    chart_state.chart.clone().unwrap_or_default()
+                        .replace((series_info_clone.clone(), data_clone.clone()));
+                    (series_info_clone, data_clone)
                 };
 
                 (self.handler.on_chart_data)(chart_data);
@@ -196,12 +210,14 @@ impl DataHandler {
             return;
         }
 
-        debug!("Processing quote data message: {:?}", message);
+        // Reduce debug logging overhead
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!("Processing quote data message: {:?}", message);
+        }
 
         // Try primary format first
-        match self.try_parse_quote_data(&message[1]).await {
-            Ok(()) => return,
-            Err(e) => warn!("Primary quote parsing failed: {:?}", e),
+        if self.try_parse_quote_data(&message[1]).await.is_ok() {
+            return;
         }
 
         // Try alternative format
@@ -218,7 +234,10 @@ impl DataHandler {
         let qsd = QuoteData::deserialize(data)
             .map_err(|e| Error::JsonParse(Ustr::from(&e.to_string())))?;
 
-        info!("Successfully parsed quote data: {:?}", qsd);
+        // Reduce info logging overhead in hot paths
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!("Successfully parsed quote data: {:?}", qsd);
+        }
 
         if qsd.status != "ok" {
             return Err(Error::TradingView {
@@ -226,16 +245,20 @@ impl DataHandler {
             });
         }
 
-        // Update local quote storage
-        self.metadata
-            .quotes
-            .entry(qsd.name)
-            .and_modify(|prev_quote| {
-                *prev_quote = merge_quotes(prev_quote, &qsd.value);
-            })
-            .or_insert(qsd.value.clone());
+        // Optimize quote storage update with entry API
+        let name = qsd.name;
+        let value = qsd.value.clone();
 
-        (self.handler.on_quote_data)(qsd.value);
+        match self.metadata.quotes.get_mut(&name) {
+            Some(mut prev_quote) => {
+                *prev_quote = merge_quotes(&prev_quote, &value);
+            }
+            None => {
+                self.metadata.quotes.insert(name, value.clone());
+            }
+        }
+
+        (self.handler.on_quote_data)(value);
         Ok(())
     }
 
@@ -243,7 +266,9 @@ impl DataHandler {
         let direct_quote = QuoteValue::deserialize(data)
             .map_err(|e| Error::JsonParse(Ustr::from(&e.to_string())))?;
 
-        info!("Parsed as direct QuoteValue: {:?}", direct_quote);
+        if tracing::enabled!(tracing::Level::INFO) {
+            info!("Parsed as direct QuoteValue: {:?}", direct_quote);
+        }
         (self.handler.on_quote_data)(direct_quote);
         Ok(())
     }
