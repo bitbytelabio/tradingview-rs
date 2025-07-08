@@ -345,12 +345,17 @@ impl CommandRunner {
                     self.ws.set_fields().await?;
                     Ok(())
                 }
-                QuoteFastSymbols { symbols } => {
+                FastSymbols { symbols } => {
                     let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
                     self.ws.fast_symbols(&symbols).await?;
                     Ok(())
                 }
-                QuoteRemoveSymbols { symbols } => {
+                AddSymbols { symbols } => {
+                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
+                    self.ws.add_symbols(&symbols).await?;
+                    Ok(())
+                }
+                RemoveSymbols { symbols } => {
                     let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
                     self.ws.remove_symbols(&symbols).await?;
                     Ok(())

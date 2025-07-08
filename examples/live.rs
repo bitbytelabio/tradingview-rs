@@ -202,7 +202,7 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
         .build();
 
     // Try symbols that are more likely to have data during market hours
-    command_tx.send(Command::QuoteFastSymbols {
+    command_tx.send(Command::AddSymbols {
         symbols: vec![
             ustr("TVC:GOLD"),
             // ustr("FX_IDC:EURUSD"), // Forex - 24/7
@@ -221,14 +221,14 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
         // Add more symbols at different intervals to test
         if i == 6 {
             info!("➕ Adding more symbols...");
-            command_tx.send(Command::QuoteFastSymbols {
+            command_tx.send(Command::FastSymbols {
                 symbols: vec![ustr("NASDAQ:AAPL"), ustr("NYSE:TSLA")],
             })?;
         }
 
         if i == 12 {
             info!("➕ Adding forex symbols...");
-            command_tx.send(Command::QuoteFastSymbols {
+            command_tx.send(Command::FastSymbols {
                 symbols: vec![ustr("FX:GBPUSD"), ustr("FX:USDJPY")],
             })?;
         }

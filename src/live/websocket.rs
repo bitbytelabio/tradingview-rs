@@ -455,13 +455,17 @@ impl WebSocketClient {
     }
 
     pub async fn add_symbols(&self, symbols: &[&str]) -> Result<()> {
+        // Ensure quote session exists first
+        self.ensure_quote_session().await?;
+
         let quote_session = self.quote_session.read().await.to_string();
 
-        let mut payloads = payload!(quote_session);
+        let mut payloads = payload![quote_session];
         payloads.extend(symbols.iter().map(|s| Value::from(*s)));
 
-        self.send("quote_add_symbols", &payload!(payloads)).await?;
+        self.send("quote_add_symbols", &payloads).await?;
 
+        info!("Added {} symbols to quote session", symbols.len());
         Ok(())
     }
 
@@ -516,6 +520,8 @@ impl WebSocketClient {
     }
 
     pub async fn fast_symbols(&self, symbols: &[&str]) -> Result<()> {
+        self.ensure_quote_session().await?;
+
         let quote_session = self.quote_session.read().await.to_string();
 
         let mut payloads = payload![quote_session];
@@ -968,6 +974,18 @@ impl WebSocketClient {
         self.ping(&Message::Ping(Vec::new().into()))
             .await
             .map_err(|e| Error::WebSocket(ustr(&format!("{e}"))))?;
+        Ok(())
+    }
+
+    pub async fn ensure_quote_session(&self) -> Result<()> {
+        let quote_session = self.quote_session.read().await;
+        if quote_session.is_empty() {
+            drop(quote_session); // Release read lock
+
+            info!("Creating quote session");
+            self.create_quote_session().await?;
+            self.set_fields().await?;
+        }
         Ok(())
     }
 }

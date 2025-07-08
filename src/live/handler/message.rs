@@ -48,10 +48,13 @@ pub enum Command {
     CreateQuoteSession,
     DeleteQuoteSession,
     SetQuoteFields,
-    QuoteFastSymbols {
+    FastSymbols {
         symbols: Vec<Ustr>,
     },
-    QuoteRemoveSymbols {
+    AddSymbols {
+        symbols: Vec<Ustr>,
+    },
+    RemoveSymbols {
         symbols: Vec<Ustr>,
     },
 
