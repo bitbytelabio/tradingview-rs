@@ -20,3 +20,4 @@ Cargo.lock
 _data
 tmp
 .DS_Store
+.idea

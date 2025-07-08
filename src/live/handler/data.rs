@@ -34,90 +34,107 @@ impl DataHandler {
         }
     }
 
-    pub(crate) async fn handle_events(&self, event: TradingViewDataEvent, message: &Vec<Value>) {
+    pub(crate) async fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]) {
+        if let Err(e) = self.process_event(event, message).await {
+            error!("Event processing error: {:?}", e);
+            self.notify_error(e, message);
+        }
+    }
+
+    async fn process_event(&self, event: TradingViewDataEvent, message: &[Value]) -> Result<()> {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
                 tracing::trace!("received raw chart data: {:?}", message);
-                // Avoid cloning the entire HashMap
-                if let Err(e) = self.handle_chart_data(message).await {
-                    error!("chart data parsing error: {:?}", e);
-                    (self.handler.on_error)((e, message.to_owned()));
-                }
+                self.handle_chart_data(message).await
             }
-            TradingViewDataEvent::OnQuoteData => self.handle_quote_data(message).await,
-            TradingViewDataEvent::OnSymbolResolved => {
-                if message.len() > 2 {
-                    match SymbolInfo::deserialize(&message[2]) {
-                        Ok(s) => {
-                            debug!("receive symbol info: {:?}", s);
-                            let mut chart_state = self.metadata.chart_state.write().await;
-                            chart_state.symbol_info.replace(s.clone());
-                            (self.handler.on_symbol_info)(s);
-                        }
-                        Err(e) => {
-                            error!("symbol resolved parsing error: {:?}", e);
-                            (self.handler.on_error)((
-                                Error::JsonParse(Ustr::from(&e.to_string())),
-                                message.to_owned(),
-                            ));
-                        }
-                    }
-                }
+            TradingViewDataEvent::OnQuoteData => {
+                self.handle_quote_data(message).await;
+                Ok(())
             }
+            TradingViewDataEvent::OnSymbolResolved => self.handle_symbol_resolved(message).await,
             TradingViewDataEvent::OnSeriesCompleted => {
                 debug!("series completed: {:?}", message);
-                (self.handler.on_series_completed)(message.to_owned());
+                (self.handler.on_series_completed)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnSeriesLoading => {
                 debug!("series loading: {:?}", message);
-                (self.handler.on_series_loading)(message.to_owned());
+                (self.handler.on_series_loading)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnQuoteCompleted => {
                 debug!("quote completed: {:?}", message);
-                (self.handler.on_quote_completed)(message.to_owned());
+                (self.handler.on_quote_completed)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnReplayOk => {
                 debug!("replay ok: {:?}", message);
-                (self.handler.on_replay_ok)(message.to_owned());
+                (self.handler.on_replay_ok)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnReplayPoint => {
                 debug!("replay point: {:?}", message);
-                (self.handler.on_replay_point)(message.to_owned());
+                (self.handler.on_replay_point)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnReplayInstanceId => {
                 debug!("replay instance id: {:?}", message);
-                (self.handler.on_replay_instance_id)(message.to_owned());
+                (self.handler.on_replay_instance_id)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnReplayResolutions => {
                 debug!("replay resolutions: {:?}", message);
-                (self.handler.on_replay_resolutions)(message.to_owned());
+                (self.handler.on_replay_resolutions)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnReplayDataEnd => {
                 debug!("replay data end: {:?}", message);
-                (self.handler.on_replay_data_end)(message.to_owned());
+                (self.handler.on_replay_data_end)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnStudyLoading => {
                 debug!("study loading: {:?}", message);
-                (self.handler.on_study_loading)(message.to_owned());
+                (self.handler.on_study_loading)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnStudyCompleted => {
                 debug!("study completed: {:?}", message);
-                (self.handler.on_study_completed)(message.to_owned());
+                (self.handler.on_study_completed)(message.to_vec());
+                Ok(())
             }
             TradingViewDataEvent::OnError(tradingview_error) => {
                 error!("trading view error: {:?}", tradingview_error);
-                (self.handler.on_error)((
-                    Error::TradingView {
-                        source: tradingview_error,
-                    },
-                    message.to_owned(),
-                ));
+                let error = Error::TradingView {
+                    source: tradingview_error,
+                };
+                self.notify_error(error, message);
+                Ok(())
             }
             TradingViewDataEvent::UnknownEvent(event) => {
                 warn!("unknown event: {:?}", event);
-                (self.handler.on_unknown_event)((event, message.to_owned()));
+                (self.handler.on_unknown_event)((event, message.to_vec()));
+                Ok(())
             }
         }
+    }
+
+    async fn handle_symbol_resolved(&self, message: &[Value]) -> Result<()> {
+        if message.len() <= 2 {
+            return Ok(());
+        }
+
+        let symbol_info = SymbolInfo::deserialize(&message[2])
+            .map_err(|e| Error::JsonParse(Ustr::from(&e.to_string())))?;
+
+        debug!("receive symbol info: {:?}", symbol_info);
+
+        // Update chart state
+        let mut chart_state = self.metadata.chart_state.write().await;
+        chart_state.symbol_info.replace(symbol_info.clone());
+        drop(chart_state); // Release lock early
+
+        (self.handler.on_symbol_info)(symbol_info);
+        Ok(())
     }
 
     async fn handle_study_data(&self, options: &StudyOptions, message_data: &Value) -> Result<()> {
@@ -139,14 +156,15 @@ impl DataHandler {
 
         let message_data = &message[1];
 
-        // Process each series without cloning the entire series map
+        // Process each series
         for series_entry in self.metadata.series.iter() {
             let (id, series_info) = series_entry.pair();
 
             if let Some(resp_data) = message_data.get(id.as_str()) {
-                let data = ChartResponseData::deserialize(resp_data)?.series;
+                let chart_response = ChartResponseData::deserialize(resp_data)?;
+                let data = chart_response.series;
 
-                // Update chart state
+                // Update chart state with explicit scope
                 {
                     let mut chart_state = self.metadata.chart_state.write().await;
                     chart_state
@@ -154,15 +172,12 @@ impl DataHandler {
                         .replace((series_info.clone(), data.clone()));
                 }
 
-                // Read once for callback
-                let chart_data = self
-                    .metadata
-                    .chart_state
-                    .read()
-                    .await
-                    .chart
-                    .clone()
-                    .unwrap_or_default();
+                // Get chart data for callback
+                let chart_data = {
+                    let chart_state = self.metadata.chart_state.read().await;
+                    chart_state.chart.clone().unwrap_or_default()
+                };
+
                 (self.handler.on_chart_data)(chart_data);
 
                 // Handle study data if present
@@ -176,55 +191,65 @@ impl DataHandler {
     }
 
     async fn handle_quote_data(&self, message: &[Value]) {
-        debug!(
-            "Processing quote data message: {:?}, len: {}",
-            message,
-            message.len()
-        );
-
-        // Quote data can come in different formats
-        match QuoteData::deserialize(&message[1]) {
-            Ok(qsd) => {
-                info!("Successfully parsed quote data: {:?}", qsd);
-
-                if qsd.status == "ok" {
-                    // Update local quote storage
-                    self.metadata
-                        .quotes
-                        .entry(qsd.name)
-                        .and_modify(|prev_quote| {
-                            *prev_quote = merge_quotes(prev_quote, &qsd.value);
-                        })
-                        .or_insert(qsd.value);
-
-                    // Send through handler
-                    (self.handler.on_quote_data)(qsd.value);
-                } else {
-                    error!("Quote data status error: {:?}", qsd);
-                    (self.handler.on_error)((
-                        Error::TradingView {
-                            source: TradingViewError::QuoteDataStatusError(Ustr::from(&qsd.status)),
-                        },
-                        message.to_owned(),
-                    ));
-                }
-            }
-            Err(e) => {
-                // Try to handle different quote message formats
-                warn!(
-                    "Failed to parse as QuoteData, trying alternative formats: {:?}",
-                    e
-                );
-
-                // Sometimes quote data comes as direct values
-                if let Ok(direct_quote) = QuoteValue::deserialize(&message[1]) {
-                    info!("Parsed as direct QuoteValue: {:?}", direct_quote);
-                    (self.handler.on_quote_data)(direct_quote);
-                } else {
-                    error!("Failed to parse quote data in any format: {:?}", message);
-                }
-            }
+        if message.len() < 2 {
+            warn!("Quote message too short: {}", message.len());
+            return;
         }
+
+        debug!("Processing quote data message: {:?}", message);
+
+        // Try primary format first
+        match self.try_parse_quote_data(&message[1]).await {
+            Ok(()) => return,
+            Err(e) => warn!("Primary quote parsing failed: {:?}", e),
+        }
+
+        // Try alternative format
+        if let Err(e) = self.try_parse_direct_quote(&message[1]).await {
+            error!("All quote parsing attempts failed: {:?}", e);
+            self.notify_error(
+                Error::JsonParse(Ustr::from("Failed to parse quote data")),
+                message,
+            );
+        }
+    }
+
+    async fn try_parse_quote_data(&self, data: &Value) -> Result<()> {
+        let qsd = QuoteData::deserialize(data)
+            .map_err(|e| Error::JsonParse(Ustr::from(&e.to_string())))?;
+
+        info!("Successfully parsed quote data: {:?}", qsd);
+
+        if qsd.status != "ok" {
+            return Err(Error::TradingView {
+                source: TradingViewError::QuoteDataStatusError(Ustr::from(&qsd.status)),
+            });
+        }
+
+        // Update local quote storage
+        self.metadata
+            .quotes
+            .entry(qsd.name)
+            .and_modify(|prev_quote| {
+                *prev_quote = merge_quotes(prev_quote, &qsd.value);
+            })
+            .or_insert(qsd.value.clone());
+
+        (self.handler.on_quote_data)(qsd.value);
+        Ok(())
+    }
+
+    async fn try_parse_direct_quote(&self, data: &Value) -> Result<()> {
+        let direct_quote = QuoteValue::deserialize(data)
+            .map_err(|e| Error::JsonParse(Ustr::from(&e.to_string())))?;
+
+        info!("Parsed as direct QuoteValue: {:?}", direct_quote);
+        (self.handler.on_quote_data)(direct_quote);
+        Ok(())
+    }
+
+    fn notify_error(&self, error: Error, message: &[Value]) {
+        (self.handler.on_error)((error, message.to_vec()));
     }
 
     pub fn set_handler(mut self, handler: TradingViewHandler) -> Self {
