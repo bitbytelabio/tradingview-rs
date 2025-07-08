@@ -120,7 +120,7 @@ pub struct SocketServerInfo {
     pub auth_scheme_vsn: i64,
     pub protocol: String,
     pub via: String,
-    pub javastudies: Vec<String>,
+    pub sjavastudies: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -156,27 +156,27 @@ pub trait Socket {
     fn event_loop(
         &self,
         read: MutexGuard<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
-    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_raw_messages(
         &self,
         raw: Message,
-    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_parsed_messages(
         &self,
         messages: Vec<SocketMessage<SocketMessageDe>>,
         raw: &Message,
-    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_message_data(
         &self,
         message: SocketMessageDe,
-    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_error(
         &self,
         error: Error,
         context: Ustr,
-    ) -> impl std::future::Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>> + Send;
 }

@@ -166,7 +166,7 @@ impl CommandQueue {
             // Handle normal commands
             let max_normal_capacity = self.max_size / 2;
 
-            // Drop oldest normal command if queue is full
+            // Drop the oldest normal command if queue is full
             if self.normal_queue.len() >= max_normal_capacity {
                 if let Some(_dropped) = self.normal_queue.pop_front() {
                     self.dropped_count += 1;
@@ -831,10 +831,7 @@ impl CommandRunner {
         })
         .await;
 
-        match result {
-            Ok(cmd_result) => cmd_result,
-            Err(_) => Err(Error::Internal("Command timeout".into())),
-        }
+        result.unwrap_or_else(|_| Err(Error::Internal("Command timeout".into())))
     }
 
     fn is_critical_command(&self, cmd: &Command) -> bool {

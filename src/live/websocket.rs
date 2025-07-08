@@ -197,7 +197,7 @@ impl WebSocketClient {
     pub fn spawn_reader_task(self: Arc<Self>) {
         tokio::spawn(async move {
             if let Err(e) = self.subscribe().await {
-                tracing::error!("Reader task failed: {}", e);
+                error!("Reader task failed: {}", e);
             }
         });
     }

@@ -40,7 +40,7 @@ impl DataHandler {
                 tracing::trace!("received raw chart data: {:?}", message);
                 // Avoid cloning the entire HashMap
                 if let Err(e) = self.handle_chart_data(message).await {
-                    tracing::error!("chart data parsing error: {:?}", e);
+                    error!("chart data parsing error: {:?}", e);
                     (self.handler.on_error)((e, message.to_owned()));
                 }
             }
@@ -49,13 +49,13 @@ impl DataHandler {
                 if message.len() > 2 {
                     match SymbolInfo::deserialize(&message[2]) {
                         Ok(s) => {
-                            tracing::debug!("receive symbol info: {:?}", s);
+                            debug!("receive symbol info: {:?}", s);
                             let mut chart_state = self.metadata.chart_state.write().await;
                             chart_state.symbol_info.replace(s.clone());
                             (self.handler.on_symbol_info)(s);
                         }
                         Err(e) => {
-                            tracing::error!("symbol resolved parsing error: {:?}", e);
+                            error!("symbol resolved parsing error: {:?}", e);
                             (self.handler.on_error)((
                                 Error::JsonParse(Ustr::from(&e.to_string())),
                                 message.to_owned(),
@@ -65,47 +65,47 @@ impl DataHandler {
                 }
             }
             TradingViewDataEvent::OnSeriesCompleted => {
-                tracing::debug!("series completed: {:?}", message);
+                debug!("series completed: {:?}", message);
                 (self.handler.on_series_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnSeriesLoading => {
-                tracing::debug!("series loading: {:?}", message);
+                debug!("series loading: {:?}", message);
                 (self.handler.on_series_loading)(message.to_owned());
             }
             TradingViewDataEvent::OnQuoteCompleted => {
-                tracing::debug!("quote completed: {:?}", message);
+                debug!("quote completed: {:?}", message);
                 (self.handler.on_quote_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayOk => {
-                tracing::debug!("replay ok: {:?}", message);
+                debug!("replay ok: {:?}", message);
                 (self.handler.on_replay_ok)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayPoint => {
-                tracing::debug!("replay point: {:?}", message);
+                debug!("replay point: {:?}", message);
                 (self.handler.on_replay_point)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayInstanceId => {
-                tracing::debug!("replay instance id: {:?}", message);
+                debug!("replay instance id: {:?}", message);
                 (self.handler.on_replay_instance_id)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayResolutions => {
-                tracing::debug!("replay resolutions: {:?}", message);
+                debug!("replay resolutions: {:?}", message);
                 (self.handler.on_replay_resolutions)(message.to_owned());
             }
             TradingViewDataEvent::OnReplayDataEnd => {
-                tracing::debug!("replay data end: {:?}", message);
+                debug!("replay data end: {:?}", message);
                 (self.handler.on_replay_data_end)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyLoading => {
-                tracing::debug!("study loading: {:?}", message);
+                debug!("study loading: {:?}", message);
                 (self.handler.on_study_loading)(message.to_owned());
             }
             TradingViewDataEvent::OnStudyCompleted => {
-                tracing::debug!("study completed: {:?}", message);
+                debug!("study completed: {:?}", message);
                 (self.handler.on_study_completed)(message.to_owned());
             }
             TradingViewDataEvent::OnError(tradingview_error) => {
-                tracing::error!("trading view error: {:?}", tradingview_error);
+                error!("trading view error: {:?}", tradingview_error);
                 (self.handler.on_error)((
                     Error::TradingView {
                         source: tradingview_error,
@@ -114,7 +114,7 @@ impl DataHandler {
                 ));
             }
             TradingViewDataEvent::UnknownEvent(event) => {
-                tracing::warn!("unknown event: {:?}", event);
+                warn!("unknown event: {:?}", event);
                 (self.handler.on_unknown_event)((event, message.to_owned()));
             }
         }
@@ -124,7 +124,7 @@ impl DataHandler {
         for study_entry in self.metadata.studies.iter() {
             let (k, v) = study_entry.pair();
             if let Some(resp_data) = message_data.get(v.as_str()) {
-                tracing::debug!("study data received: {} - {:?}", k, resp_data);
+                debug!("study data received: {} - {:?}", k, resp_data);
                 let data = StudyResponseData::deserialize(resp_data)?;
                 (self.handler.on_study_data)((*options, data));
             }
