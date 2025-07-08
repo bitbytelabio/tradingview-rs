@@ -6,7 +6,7 @@ use ustr::Ustr;
 use crate::{
     ChartOptions, DataPoint, Error, Interval, QuoteValue, Result, StudyOptions, StudyResponseData,
     SymbolInfo, Timezone,
-    handler::types::CommandRx,
+    live::handler::types::CommandRx,
     pine_indicator::PineIndicator,
     websocket::{SeriesInfo, WebSocketClient},
 };
@@ -218,8 +218,7 @@ impl LoadingMsg {
         }
 
         Err(Error::Internal(Ustr::from(&format!(
-            "Invalid series ID format: {} and {}",
-            series_id1, series_id2
+            "Invalid series ID format: {series_id1} and {series_id2}"
         ))))
     }
 

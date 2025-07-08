@@ -2,11 +2,8 @@ use dotenv::dotenv;
 use std::{env, sync::Arc};
 
 use tradingview::{
-    Interval,
-    chart::ChartOptions,
     handler::message::{Command, CommandHandler},
-    pine_indicator::ScriptType,
-    socket::DataServer,
+    live::socket::DataServer,
     websocket::WebSocketClient,
 };
 
@@ -26,106 +23,53 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .await?;
 
-    websocket.subscribe().await;
+    let websocket = Arc::new(websocket);
 
-    let arc_websocket = Arc::new(websocket);
+    let shared_websocket = websocket.clone();
 
-    let mut command_handler = CommandHandler::new(command_rx, arc_websocket.clone());
+    tokio::spawn(async move {
+        shared_websocket.subscribe().await;
+
+        while let Some(res) = response_rx.recv().await {
+            match res {
+                tradingview::handler::message::TradingViewResponse::QuoteData(quote_value) => {
+                    println!("Quote Data: {quote_value:?}");
+                }
+
+                tradingview::handler::message::TradingViewResponse::Error(error, values) => {
+                    eprintln!("Error: {error:?}, Values: {values:?}");
+                }
+                _ => {
+                    println!("Received response: {res:?}");
+                }
+            };
+        }
+    });
+
+    let mut command_handler = CommandHandler::new(command_rx, websocket.clone());
     tokio::spawn(async move {
         if let Err(e) = command_handler.handle_commands().await {
             tracing::error!("Error handling commands: {:?}", e);
         }
     });
 
-    tokio::spawn(async move {
-        while let Some(res) = response_rx.recv().await {
-            match res {
-                tradingview::handler::message::TradingViewResponse::ChartData(
-                    series_info,
-                    data_points,
-                ) => {
-                    println!(
-                        "Chart Data: Series Info: {:?}, Data Points: {:?}",
-                        series_info, data_points
-                    );
-                }
-                tradingview::handler::message::TradingViewResponse::QuoteData(quote_value) => {
-                    println!("Quote Data: {:?}", quote_value);
-                }
-                tradingview::handler::message::TradingViewResponse::StudyData(
-                    study_options,
-                    study_response_data,
-                ) => {
-                    println!(
-                        "Study Data: Options: {:?}, Response Data: {:?}",
-                        study_options, study_response_data
-                    );
-                }
-                tradingview::handler::message::TradingViewResponse::Error(error, values) => {
-                    eprintln!("Error: {:?}, Values: {:?}", error, values);
-                }
-                tradingview::handler::message::TradingViewResponse::SymbolInfo(symbol_info) => {
-                    println!("Symbol Info: {:?}", symbol_info);
-                }
-                tradingview::handler::message::TradingViewResponse::SeriesCompleted(values) => {
-                    println!("Series Completed: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::SeriesLoading(loading_msg) => {
-                    println!("Series Loading: {:?}", loading_msg);
-                }
-                tradingview::handler::message::TradingViewResponse::QuoteCompleted(values) => {
-                    println!("Quote Completed: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::ReplayOk(values) => {
-                    println!("Replay OK: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::ReplayPoint(values) => {
-                    println!("Replay Point: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::ReplayInstanceId(values) => {
-                    println!("Replay Instance ID: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::ReplayResolutions(values) => {
-                    println!("Replay Resolutions: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::ReplayDataEnd(values) => {
-                    println!("Replay Data End: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::StudyLoading(loading_msg) => {
-                    println!("Study Loading: {:?}", loading_msg);
-                }
-                tradingview::handler::message::TradingViewResponse::StudyCompleted(values) => {
-                    println!("Study Completed: {:?}", values);
-                }
-                tradingview::handler::message::TradingViewResponse::UnknownEvent(ustr, values) => {
-                    println!("Unknown Event: {:?}, Values: {:?}", ustr, values);
-                }
-            };
-        }
-    });
-
     command_tx.send(Command::CreateQuoteSession)?;
     command_tx.send(Command::SetQuoteFields)?;
     command_tx.send(Command::QuoteFastSymbols {
-        symbols: vec![
-            "BINANCE:BTCUSDT".into(),
-            // "BINANCE:ETHUSDT".into(),
-            // "BITSTAMP:ETHUSD".into(),
-            // "NASDAQ:TSLA".into(),
-        ],
+        symbols: vec!["BINANCE:BTCUSDT".into()],
     })?;
 
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(90)).await;
-        command_tx.send(Command::QuoteFastSymbols {
-            symbols: vec![
-                // "BINANCE:BTCUSDT".into(),
-                // "BINANCE:ETHUSDT".into(),
-                // "BITSTAMP:ETHUSD".into(),
-                "NASDAQ:TSLA".into(),
-            ],
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        command_tx.send(Command::QuoteRemoveSymbols {
+            symbols: vec!["BINANCE:BTCUSDT".into()],
         })?;
-    }
 
-    Ok(())
+        command_tx.send(Command::QuoteRemoveSymbols {
+            symbols: vec!["BINANCE:BTCUSDT".into()],
+        })?;
+
+        // Simulate some other commands
+        command_tx.send(Command::Delete).unwrap();
+    }
 }

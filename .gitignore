@@ -19,3 +19,4 @@ Cargo.lock
 # test data files
 _data
 tmp
+.DS_Store

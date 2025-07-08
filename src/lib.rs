@@ -1,11 +1,9 @@
 pub mod chart;
 pub mod client;
 pub mod error;
-pub mod handler;
 pub mod models;
 pub mod prelude;
 pub mod quote;
-pub mod socket;
 
 #[cfg(feature = "user")]
 pub mod user;
@@ -18,7 +16,7 @@ pub use crate::client::misc::*;
 pub use chart::history;
 
 pub mod websocket {
-    pub use crate::client::websocket::*;
+    pub use crate::live::websocket::*;
 }
 
 pub use crate::models::*;
@@ -30,3 +28,5 @@ pub use error::Error;
 // Re-exporting some commonly used types
 pub use async_trait::async_trait;
 pub use iso_currency::{Country, Currency, CurrencySymbol};
+
+pub mod live;
