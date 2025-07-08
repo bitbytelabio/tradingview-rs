@@ -204,7 +204,7 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
     // Try symbols that are more likely to have data during market hours
     command_tx.send(Command::QuoteFastSymbols {
         symbols: vec![
-            ustr("BINANCE:BTCUSDT"),
+            ustr("TVC:GOLD"),
             // ustr("FX_IDC:EURUSD"), // Forex - 24/7
             // ustr("CRYPTO:BTCUSD"), // Alternative BTC
         ],
@@ -233,10 +233,10 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
             })?;
         }
 
-        // if i % 4 == 0 {
-        //     // Ping every 20 seconds
-        //     command_tx.send(Command::Ping)?;
-        // }
+        if i % 4 == 0 {
+            // Ping every 20 seconds
+            command_tx.send(Command::Ping)?;
+        }
     }
 
     info!("🧹 Cleaning up...");

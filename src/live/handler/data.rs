@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use ustr::Ustr;
 
 use crate::{
@@ -176,12 +176,11 @@ impl DataHandler {
     }
 
     async fn handle_quote_data(&self, message: &[Value]) {
-        if message.len() < 2 {
-            warn!("Quote data message too short: {:?}", message);
-            return;
-        }
-
-        info!("Processing quote data message: {:?}", message);
+        debug!(
+            "Processing quote data message: {:?}, len: {}",
+            message,
+            message.len()
+        );
 
         // Quote data can come in different formats
         match QuoteData::deserialize(&message[1]) {
