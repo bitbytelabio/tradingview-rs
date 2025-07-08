@@ -247,14 +247,14 @@ impl DataHandler {
 
         // Optimize quote storage update with entry API
         let name = qsd.name;
-        let value = qsd.value.clone();
+        let value = qsd.value;
 
         match self.metadata.quotes.get_mut(&name) {
             Some(mut prev_quote) => {
                 *prev_quote = merge_quotes(&prev_quote, &value);
             }
             None => {
-                self.metadata.quotes.insert(name, value.clone());
+                self.metadata.quotes.insert(name, value);
             }
         }
 

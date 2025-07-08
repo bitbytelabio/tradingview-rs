@@ -17,7 +17,6 @@ use tradingview::{
         websocket::WebSocketClient,
     },
 };
-use ustr::ustr;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -202,15 +201,9 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
         .build();
 
     // Try symbols that are more likely to have data during market hours
-    command_tx.send(Command::AddSymbols {
-        symbols: vec![
-            ustr("TVC:GOLD"),
-            // ustr("FX_IDC:EURUSD"), // Forex - 24/7
-            // ustr("CRYPTO:BTCUSD"), // Alternative BTC
-        ],
-    })?;
+    command_tx.send(Command::add_symbol("TVC:GOLD"))?;
 
-    command_tx.send(Command::SetMarket { options })?;
+    command_tx.send(Command::set_market(options))?;
 
     // Monitor for longer - 2 minutes to give time for data
     for i in 0..24 {
@@ -221,16 +214,16 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
         // Add more symbols at different intervals to test
         if i == 6 {
             info!("➕ Adding more symbols...");
-            command_tx.send(Command::AddSymbols {
-                symbols: vec![ustr("NASDAQ:AAPL")],
-            })?;
+            command_tx.send(Command::add_symbols(&[
+                "NASDAQ:AAPL",
+                "NASDAQ:GOOGL",
+                "NYSE:TSLA",
+            ]))?;
         }
 
         if i == 12 {
             info!("➕ Adding forex symbols...");
-            command_tx.send(Command::AddSymbols {
-                symbols: vec![ustr("HOSE:VIC")],
-            })?;
+            command_tx.send(Command::remove_symbol("TVC:GOLD"))?;
         }
     }
 

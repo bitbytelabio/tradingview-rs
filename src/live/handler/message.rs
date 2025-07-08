@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use ustr::Ustr;
+use ustr::{Ustr, ustr};
 
 use crate::{
     ChartOptions, DataPoint, Error, Interval, QuoteValue, Result, StudyOptions, StudyResponseData,
@@ -156,6 +156,51 @@ pub enum Command {
     SetMarket {
         options: ChartOptions,
     },
+}
+
+impl Command {
+    /// Create AddSymbols command from string slice
+    pub fn add_symbols<S: AsRef<str>>(symbols: &[S]) -> Self {
+        Self::AddSymbols {
+            symbols: symbols.iter().map(|s| ustr(s.as_ref())).collect(),
+        }
+    }
+
+    /// Create AddSymbols command from a single symbol
+    pub fn add_symbol<S: AsRef<str>>(symbol: S) -> Self {
+        Self::AddSymbols {
+            symbols: vec![ustr(symbol.as_ref())],
+        }
+    }
+
+    /// Create RemoveSymbols command from string slice
+    pub fn remove_symbols<S: AsRef<str>>(symbols: &[S]) -> Self {
+        Self::RemoveSymbols {
+            symbols: symbols.iter().map(|s| ustr(s.as_ref())).collect(),
+        }
+    }
+
+    /// Create RemoveSymbols command from a single symbol
+    pub fn remove_symbol<S: AsRef<str>>(symbol: S) -> Self {
+        Self::RemoveSymbols {
+            symbols: vec![ustr(symbol.as_ref())],
+        }
+    }
+
+    /// Create SetMarket command with builder pattern
+    pub fn set_market(options: ChartOptions) -> Self {
+        Self::SetMarket { options }
+    }
+
+    /// Create Delete command
+    pub fn delete() -> Self {
+        Self::Delete
+    }
+
+    /// Create DeleteQuoteSession command
+    pub fn delete_quote_session() -> Self {
+        Self::DeleteQuoteSession
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
