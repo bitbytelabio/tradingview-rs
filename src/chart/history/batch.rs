@@ -30,7 +30,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use ustr::{Ustr, ustr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BatchCompletionSignal {
     Success,
     Error(Ustr),
