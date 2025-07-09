@@ -1,3 +1,4 @@
+// TODO: FIX this shit is very buggy
 use crate::{
     DataPoint, DataServer, Error, Interval, MarketSymbol, OHLCV as _, Result, SymbolInfo,
     chart::ChartOptions,
@@ -53,6 +54,10 @@ struct BatchTracker {
     any_data_received: Arc<AtomicBool>,
     // Track timeout for completion
     last_activity: Arc<Mutex<std::time::Instant>>,
+    // Track series that have received substantial data (initial load)
+    series_initial_load: Arc<DashMap<Ustr, bool>>,
+    // Track last data size for each series
+    series_data_count: Arc<DashMap<Ustr, usize>>,
 }
 
 impl BatchTracker {
@@ -67,32 +72,53 @@ impl BatchTracker {
             completion_tx: Arc::new(Mutex::new(Some(completion_tx))),
             any_data_received: Arc::new(AtomicBool::new(false)),
             last_activity: Arc::new(Mutex::new(std::time::Instant::now())),
+            series_initial_load: Arc::new(DashMap::new()),
+            series_data_count: Arc::new(DashMap::new()),
         }
     }
 
-    async fn update_activity(&self) {
-        let mut last_activity = self.last_activity.lock().await;
-        *last_activity = std::time::Instant::now();
-    }
+    async fn check_initial_load_complete(&self, series_id: &str, data_count: usize) -> bool {
+        let series_id_ustr = ustr(series_id);
 
-    async fn register_series(&self, series_id: &str, symbol: &str) {
-        self.series_map.insert(ustr(series_id), ustr(symbol));
-        self.update_activity().await;
-        tracing::debug!("Registered series {} for symbol {}", series_id, symbol);
-    }
+        // Get previous count
+        let prev_count = self
+            .series_data_count
+            .get(&series_id_ustr)
+            .map(|v| *v)
+            .unwrap_or(0);
 
-    fn mark_data_received(&self) {
-        self.any_data_received.store(true, Ordering::Relaxed);
-    }
+        // Update current count
+        self.series_data_count.insert(series_id_ustr, data_count);
 
-    async fn mark_completed(&self, series_id: &str, has_data: bool) -> bool {
+        // More conservative approach: require at least 50 points for initial load
+        // or substantial data with minimal growth pattern
+        let is_initial_load = data_count >= 50 && prev_count < 50;
+        let is_minimal_growth =
+            prev_count >= 50 && data_count > prev_count && (data_count - prev_count) <= 3;
+
+        if is_initial_load || is_minimal_growth {
+            if !self.series_initial_load.contains_key(&series_id_ustr) {
+                self.series_initial_load.insert(series_id_ustr, true);
+                tracing::debug!(
+                    "Series {} initial load complete (count: {}, prev: {})",
+                    series_id,
+                    data_count,
+                    prev_count
+                );
+                return true;
+            }
+        }
+
+        false
+    }
+    async fn mark_series_ready(&self, series_id: &str, has_data: bool) -> bool {
         let series_id_ustr = ustr(series_id);
         let mut done_series = self.completed_series.lock().await;
         let mut completed = self.completed.lock().await;
 
         // Check if already completed
         if done_series.contains(&series_id_ustr) {
-            tracing::debug!("Series {} already completed", series_id);
+            tracing::debug!("Series {} already marked ready", series_id);
             return self.remaining.load(Ordering::Relaxed) == 0;
         }
 
@@ -121,7 +147,7 @@ impl BatchTracker {
         self.update_activity().await;
 
         tracing::debug!(
-            "Series {} (symbol {}) completed, remaining: {}",
+            "Series {} (symbol {}) marked ready, remaining: {}",
             series_id,
             symbol,
             remaining
@@ -132,6 +158,51 @@ impl BatchTracker {
             self.signal_completion(BatchCompletionSignal::Success).await;
         }
         is_done
+    }
+
+    async fn check_all_series_ready(&self) -> bool {
+        let series_count = self.series_map.len();
+        let ready_count = self.series_initial_load.len();
+        let expected_series = self.remaining.load(Ordering::Relaxed) + ready_count;
+
+        tracing::debug!(
+            "Series ready check: {}/{} series have initial loads (expected: {})",
+            ready_count,
+            series_count,
+            expected_series
+        );
+
+        // Only complete when ALL expected series have received their initial loads
+        // AND we have data for all of them
+        if series_count >= expected_series && ready_count >= expected_series && expected_series > 0
+        {
+            let any_data = self.any_data_received.load(Ordering::Relaxed);
+            if any_data {
+                tracing::info!(
+                    "All {} series have received initial data loads",
+                    expected_series
+                );
+                self.force_completion("all series have initial data").await;
+                return true;
+            }
+        }
+
+        false
+    }
+
+    async fn update_activity(&self) {
+        let mut last_activity = self.last_activity.lock().await;
+        *last_activity = std::time::Instant::now();
+    }
+
+    async fn register_series(&self, series_id: &str, symbol: &str) {
+        self.series_map.insert(ustr(series_id), ustr(symbol));
+        self.update_activity().await;
+        tracing::debug!("Registered series {} for symbol {}", series_id, symbol);
+    }
+
+    fn mark_data_received(&self) {
+        self.any_data_received.store(true, Ordering::Relaxed);
     }
 
     // Add method to force completion after timeout
@@ -346,14 +417,14 @@ async fn process_batch_data_events(
     collector: BatchDataCollector,
     tracker: BatchTracker,
 ) {
-    // Start timeout checker task with shorter intervals
+    // Start timeout checker task with more conservative timeout
     let timeout_tracker = tracker.clone();
     let timeout_task = spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
         loop {
             interval.tick().await;
             if timeout_tracker.check_timeout(60).await {
-                // Reduced timeout to 60s
+                // Increased to 60s
                 break;
             }
             if timeout_tracker.is_done() {
@@ -362,18 +433,36 @@ async fn process_batch_data_events(
         }
     });
 
+    // Start a task to check for completion based on data patterns - less aggressive
+    let pattern_tracker = tracker.clone();
+    let pattern_task = spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(10)); // Increased interval
+        loop {
+            interval.tick().await;
+            if pattern_tracker.check_all_series_ready().await {
+                break;
+            }
+            if pattern_tracker.is_done() {
+                break;
+            }
+        }
+    });
+
     let mut message_count = 0;
+    let mut no_data_count = 0;
+
     while let Some(response) = data_rx.recv().await {
         message_count += 1;
-        tracing::debug!(
-            "Received batch data response #{}: {:?}",
-            message_count,
-            response
-        );
+
+        // Log less frequently to reduce noise
+        if message_count % 10 == 1 {
+            tracing::debug!("Received batch data response #{}", message_count);
+        }
 
         match response {
             TradingViewResponse::ChartData(series_info, data_points) => {
                 handle_batch_chart_data(&collector, &tracker, series_info, data_points).await;
+                no_data_count = 0; // Reset no-data counter
             }
             TradingViewResponse::SymbolInfo(symbol_info) => {
                 handle_batch_symbol_info(&collector, symbol_info).await;
@@ -389,6 +478,15 @@ async fn process_batch_data_events(
             _ => {
                 tracing::debug!("Received unhandled response type: {:?}", response);
                 tracker.update_activity().await;
+                no_data_count += 1;
+
+                // If we get too many non-data messages in a row, check if we should timeout
+                if no_data_count > 50 {
+                    tracing::warn!("Received {} consecutive non-data messages", no_data_count);
+                    if tracker.check_all_series_ready().await {
+                        break;
+                    }
+                }
             }
         }
 
@@ -400,6 +498,7 @@ async fn process_batch_data_events(
     }
 
     timeout_task.abort();
+    pattern_task.abort();
     tracing::debug!(
         "Batch data receiver task completed after {} messages",
         message_count
@@ -427,12 +526,15 @@ async fn handle_batch_chart_data(
     ));
     let series_id = ustr(series_info.chart_session.as_ref());
 
-    tracing::debug!(
-        "Received {} points for series {} (symbol {})",
-        data_points.len(),
-        series_id,
-        symbol
-    );
+    // Only log for substantial data batches
+    if data_points.len() > 5 {
+        tracing::debug!(
+            "Received {} points for series {} (symbol {})",
+            data_points.len(),
+            series_id,
+            symbol
+        );
+    }
 
     // Mark that we've received data
     tracker.mark_data_received();
@@ -446,16 +548,31 @@ async fn handle_batch_chart_data(
     collector.series_info.insert(symbol, series_info);
 
     // Store data points
-    collector
-        .data
-        .entry(symbol)
-        .or_default()
-        .extend(data_points.iter().cloned());
+    let total_points = {
+        let mut entry = collector.data.entry(symbol).or_default();
+        entry.extend(data_points.iter().cloned());
+        entry.len()
+    };
 
     // Track data received
     collector
         .data_received
         .insert(series_id, !data_points.is_empty());
+
+    // Check if this series has received its initial load
+    if tracker
+        .check_initial_load_complete(series_id.as_ref(), total_points)
+        .await
+    {
+        tracker
+            .mark_series_ready(series_id.as_ref(), total_points > 0)
+            .await;
+    }
+
+    // Only check all series ready for substantial data batches
+    if data_points.len() > 5 {
+        tracker.check_all_series_ready().await;
+    }
 
     if data_points.is_empty() {
         tracing::warn!("Empty data for series {} (symbol {})", series_id, symbol);
@@ -475,37 +592,24 @@ async fn handle_batch_series_completed(
 ) {
     tracing::debug!("Series completed: {:?}", message);
 
-    // Try multiple strategies to extract series ID
-    let series_id = extract_series_id(&message)
-        .or_else(|| {
-            // Fallback: look for any string that might be a series ID
-            for value in &message {
-                if let Some(s) = value.as_str() {
-                    if s.contains("cs_") || s.starts_with("series_") {
-                        return Some(ustr(s));
-                    }
-                }
-            }
-            None
-        })
-        .unwrap_or_else(|| {
-            // Last resort: generate a unique ID based on message hash
-            let msg_str = format!("{message:?}");
-            // let hash = std::collections::hash_map::DefaultHasher::new();
-            ustr(&format!("fallback_{}", msg_str.len()))
-        });
+    // Extract series ID but don't rely on completion messages for batch completion
+    if let Some(series_id) = extract_series_id(&message) {
+        tracing::debug!("Explicit completion for series {}", series_id);
 
-    tracing::debug!("Extracted series ID: {}", series_id);
+        // Check if series has data
+        let has_data = collector
+            .data_received
+            .get(&series_id)
+            .map(|v| *v)
+            .unwrap_or(false);
 
-    // Check if series has data
-    let has_data = collector
-        .data_received
-        .get(&series_id)
-        .map(|v| *v)
-        .unwrap_or(false);
+        // Mark as ready if not already done
+        tracker
+            .mark_series_ready(series_id.as_ref(), has_data)
+            .await;
+    }
 
-    // Mark as completed and check if all done
-    tracker.mark_completed(series_id.as_ref(), has_data).await;
+    tracker.update_activity().await;
 }
 
 async fn handle_batch_error(tracker: &BatchTracker, error: Error, message: Vec<Value>) {
