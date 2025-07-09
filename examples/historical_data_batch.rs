@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         .market_type(MarketType::Stocks(StocksType::Common))
         .country(Country::VN)
         .call()
-        .await?[0..100]
+        .await?[0..15]
         .to_vec();
     // let symbols = vec![
     //     Symbol::builder().symbol("XAUUSD").exchange("OANDA").build(),

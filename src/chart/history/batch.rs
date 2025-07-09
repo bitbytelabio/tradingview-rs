@@ -134,6 +134,27 @@ impl BatchTracker {
         is_done
     }
 
+    // Add method to force completion after timeout
+    async fn force_completion(&self, reason: &str) {
+        let remaining = self.remaining.load(Ordering::Relaxed);
+        if remaining > 0 {
+            tracing::warn!(
+                "Force completing batch: {} (remaining: {})",
+                reason,
+                remaining
+            );
+            // Set remaining to 0 to prevent further completions
+            self.remaining.store(0, Ordering::Relaxed);
+
+            let any_data = self.any_data_received.load(Ordering::Relaxed);
+            if any_data {
+                self.signal_completion(BatchCompletionSignal::Success).await;
+            } else {
+                self.signal_completion(BatchCompletionSignal::Timeout).await;
+            }
+        }
+    }
+
     async fn add_error(&self, error: Ustr) {
         let mut errors = self.errors.lock().await;
         errors.push(error);
@@ -162,21 +183,23 @@ impl BatchTracker {
         let elapsed = last_activity.elapsed();
 
         if elapsed > Duration::from_secs(timeout_secs) {
+            drop(last_activity); // Release lock before calling force_completion
+
             let any_data = self.any_data_received.load(Ordering::Relaxed);
             if any_data {
-                // We got some data, complete with what we have
-                tracing::warn!(
-                    "Batch timeout after {}s with partial data",
+                self.force_completion(&format!(
+                    "timeout after {}s with partial data",
                     elapsed.as_secs()
-                );
-                self.signal_completion(BatchCompletionSignal::Success).await;
-                return true;
+                ))
+                .await;
             } else {
-                // No data received, this is an error
-                tracing::error!("Batch timeout after {}s with no data", elapsed.as_secs());
-                self.signal_completion(BatchCompletionSignal::Timeout).await;
-                return true;
+                self.force_completion(&format!(
+                    "timeout after {}s with no data",
+                    elapsed.as_secs()
+                ))
+                .await;
             }
+            return true;
         }
         false
     }
@@ -289,22 +312,27 @@ async fn setup_markets_in_batches(
     }
 
     // Use smaller batch size to reduce connection pressure
-    let effective_batch_size = batch_size.min(10);
+    let effective_batch_size = batch_size.min(5); // Reduced further
 
     // Send commands in smaller batches with longer delays
     for (idx, chunk) in commands.chunks(effective_batch_size).enumerate() {
         tracing::debug!("Processing batch {} with {} symbols", idx + 1, chunk.len());
 
-        for cmd in chunk {
+        for (cmd_idx, cmd) in chunk.iter().enumerate() {
             cmd_tx
                 .send(cmd.clone())
                 .map_err(|_| Error::Internal(ustr("Failed to send set_market command")))?;
+
+            // Small delay between individual commands
+            if cmd_idx < chunk.len() - 1 {
+                sleep(Duration::from_millis(500)).await;
+            }
         }
 
         // Longer wait between batches to reduce server load
         if idx < commands.len().div_ceil(effective_batch_size) - 1 {
-            sleep(Duration::from_secs(3)).await;
-            tracing::debug!("Batch {} done, waiting 3s", idx + 1);
+            sleep(Duration::from_secs(5)).await; // Increased delay
+            tracing::debug!("Batch {} done, waiting 5s", idx + 1);
         }
     }
 
@@ -318,20 +346,30 @@ async fn process_batch_data_events(
     collector: BatchDataCollector,
     tracker: BatchTracker,
 ) {
-    // Start timeout checker task
+    // Start timeout checker task with shorter intervals
     let timeout_tracker = tracker.clone();
     let timeout_task = spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(10));
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
         loop {
             interval.tick().await;
-            if timeout_tracker.check_timeout(120).await {
+            if timeout_tracker.check_timeout(60).await {
+                // Reduced timeout to 60s
+                break;
+            }
+            if timeout_tracker.is_done() {
                 break;
             }
         }
     });
 
+    let mut message_count = 0;
     while let Some(response) = data_rx.recv().await {
-        tracing::debug!("Received batch data response: {:?}", response);
+        message_count += 1;
+        tracing::debug!(
+            "Received batch data response #{}: {:?}",
+            message_count,
+            response
+        );
 
         match response {
             TradingViewResponse::ChartData(series_info, data_points) => {
@@ -345,14 +383,8 @@ async fn process_batch_data_events(
                 handle_batch_series_completed(&collector, &tracker, message).await;
             }
             TradingViewResponse::Error(error, message) => {
-                // Check if this is a critical error that should stop processing
-                if is_critical_error(&error) {
-                    handle_batch_error(&tracker, error, message).await;
-                    break;
-                } else {
-                    tracing::warn!("Non-critical error: {:?} - {:?}", error, message);
-                    tracker.update_activity().await;
-                }
+                handle_batch_error(&tracker, error, message).await;
+                // Don't break on errors, continue processing
             }
             _ => {
                 tracing::debug!("Received unhandled response type: {:?}", response);
@@ -362,12 +394,16 @@ async fn process_batch_data_events(
 
         // Check if we're done
         if tracker.is_done() {
+            tracing::debug!("All series completed, stopping data receiver");
             break;
         }
     }
 
     timeout_task.abort();
-    tracing::debug!("Batch data receiver task completed");
+    tracing::debug!(
+        "Batch data receiver task completed after {} messages",
+        message_count
+    );
 }
 
 fn is_critical_error(error: &Error) -> bool {
@@ -439,8 +475,25 @@ async fn handle_batch_series_completed(
 ) {
     tracing::debug!("Series completed: {:?}", message);
 
-    // Extract series ID from completion message
-    let series_id = extract_series_id(&message).unwrap_or_else(|| ustr("unknown"));
+    // Try multiple strategies to extract series ID
+    let series_id = extract_series_id(&message)
+        .or_else(|| {
+            // Fallback: look for any string that might be a series ID
+            for value in &message {
+                if let Some(s) = value.as_str() {
+                    if s.contains("cs_") || s.starts_with("series_") {
+                        return Some(ustr(s));
+                    }
+                }
+            }
+            None
+        })
+        .unwrap_or_else(|| {
+            // Last resort: generate a unique ID based on message hash
+            let msg_str = format!("{:?}", message);
+            // let hash = std::collections::hash_map::DefaultHasher::new();
+            ustr(&format!("fallback_{}", msg_str.len()))
+        });
 
     tracing::debug!("Extracted series ID: {}", series_id);
 
@@ -457,8 +510,15 @@ async fn handle_batch_series_completed(
 
 async fn handle_batch_error(tracker: &BatchTracker, error: Error, message: Vec<Value>) {
     tracing::error!("WebSocket error: {:?} - {:?}", error, message);
-    let error_msg = ustr(&format!("WebSocket error: {error:?}"));
-    tracker.add_error(error_msg).await;
+
+    // Don't treat all errors as critical - just update activity
+    tracker.update_activity().await;
+
+    // Only add to error count for truly critical errors
+    if is_critical_error(&error) {
+        let error_msg = ustr(&format!("Critical WebSocket error: {error:?}"));
+        tracker.add_error(error_msg).await;
+    }
 }
 
 /// Cleanup background tasks

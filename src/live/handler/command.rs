@@ -514,7 +514,7 @@ impl CommandRunner {
             Ok(Err(e)) => {
                 warn!("Health check ping failed: {}", e);
                 Err(Error::Internal(
-                    format!("Health check ping failed: {}", e).into(),
+                    format!("Health check ping failed: {e}").into(),
                 ))
             }
             Err(_) => {
@@ -1011,7 +1011,7 @@ impl CommandRunner {
             }
             Ok(Err(e)) => {
                 warn!("Heartbeat ping failed: {}", e);
-                Err(Error::Internal(format!("Heartbeat failed: {}", e).into()))
+                Err(Error::Internal(format!("Heartbeat failed: {e}").into()))
             }
             Err(_) => {
                 warn!("Heartbeat ping timed out after {:?}", heartbeat_timeout);
