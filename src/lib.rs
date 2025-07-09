@@ -19,6 +19,7 @@ pub mod websocket {
     pub use crate::live::websocket::*;
 }
 
+pub use crate::live::models::*;
 pub use crate::models::*;
 
 pub type Result<T> = std::result::Result<T, Error>;
