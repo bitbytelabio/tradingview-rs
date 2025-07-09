@@ -24,7 +24,7 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum TradingViewDataEvent {
     OnChartData,
     OnChartDataUpdate,
@@ -41,7 +41,7 @@ pub enum TradingViewDataEvent {
     OnStudyLoading,
     OnStudyCompleted,
     OnError(TradingViewError),
-    UnknownEvent(String),
+    UnknownEvent(Ustr),
 }
 
 impl From<String> for TradingViewDataEvent {
@@ -74,7 +74,7 @@ impl From<String> for TradingViewDataEvent {
             "protocol_error" => TradingViewDataEvent::OnError(TradingViewError::ProtocolError),
             "replay_error" => TradingViewDataEvent::OnError(TradingViewError::ReplayError),
 
-            s => TradingViewDataEvent::UnknownEvent(s.to_string()),
+            s => TradingViewDataEvent::UnknownEvent(s.into()),
         }
     }
 }
@@ -87,7 +87,7 @@ pub struct SocketMessageSer {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SocketMessageDe {
-    pub m: String,
+    pub m: Ustr,
     pub p: Vec<Value>,
 }
 

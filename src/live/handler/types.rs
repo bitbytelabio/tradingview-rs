@@ -1,5 +1,3 @@
-// TODO: Implement a more robust error handling strategy
-
 use crate::{
     Error,
     chart::{DataPoint, StudyOptions, StudyResponseData, SymbolInfo},
@@ -11,6 +9,7 @@ use bon::Builder;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use ustr::Ustr;
 
 pub type DataTx = UnboundedSender<TradingViewResponse>;
 pub type DataRx = UnboundedReceiver<TradingViewResponse>;
@@ -90,8 +89,8 @@ pub struct TradingViewHandler {
     #[builder(default= default_callback::<(Error, Vec<Value>)>("ON_ERROR"))]
     pub on_error: Arc<CallbackFn<(Error, Vec<Value>)>>,
 
-    #[builder(default= default_callback::<(String, Vec<Value>)>("ON_UNKNOWN_EVENT"))]
-    pub on_unknown_event: Arc<CallbackFn<(String, Vec<Value>)>>,
+    #[builder(default= default_callback::<(Ustr, Vec<Value>)>("ON_UNKNOWN_EVENT"))]
+    pub on_unknown_event: Arc<CallbackFn<(Ustr, Vec<Value>)>>,
 }
 
 impl Default for TradingViewHandler {
@@ -116,7 +115,7 @@ impl TradingViewHandler {
     event_setter!(on_replay_data_end, Vec<Value>);
     event_setter!(on_study_loading, Vec<Value>);
     event_setter!(on_study_completed, Vec<Value>);
-    event_setter!(on_unknown_event, (String, Vec<Value>));
+    event_setter!(on_unknown_event, (Ustr, Vec<Value>));
 }
 
 pub fn create_handler(tx: Arc<DataTx>) -> TradingViewHandler {
@@ -253,7 +252,7 @@ pub fn create_handler(tx: Arc<DataTx>) -> TradingViewHandler {
         })
         .on_unknown_event({
             let tx = tx.clone();
-            Arc::new(Box::new(move |(event, values): (String, Vec<Value>)| {
+            Arc::new(Box::new(move |(event, values): (Ustr, Vec<Value>)| {
                 if let Err(e) = tx.send(TradingViewResponse::UnknownEvent(event.into(), values)) {
                     tracing::error!("Failed to send UnknownEvent response: {}", e);
                 }

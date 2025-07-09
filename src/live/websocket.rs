@@ -48,11 +48,10 @@ use url::Url;
 use ustr::{Ustr, ustr};
 
 // Error recovery configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct ErrorRecoveryConfig {
     max_consecutive_errors: u64,
     error_reset_interval: Duration,
-    _critical_error_threshold: Duration,
 }
 
 impl Default for ErrorRecoveryConfig {
@@ -60,7 +59,6 @@ impl Default for ErrorRecoveryConfig {
         Self {
             max_consecutive_errors: 5,
             error_reset_interval: Duration::from_secs(60),
-            _critical_error_threshold: Duration::from_secs(30),
         }
     }
 }
