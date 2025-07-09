@@ -1,6 +1,5 @@
 use crate::{
-    DataPoint, DataServer, Error, Interval, MarketSymbol, MarketTicker, OHLCV as _, Result,
-    SymbolInfo,
+    DataPoint, DataServer, Error, Interval, MarketSymbol, OHLCV as _, Result, SymbolInfo, Ticker,
     chart::ChartOptions,
     error::TradingViewError,
     history::resolve_auth_token,
@@ -71,7 +70,7 @@ struct ReplayState {
 #[builder]
 pub async fn retrieve(
     auth_token: Option<&str>,
-    ticker: Option<&MarketTicker>,
+    ticker: Option<Ticker>,
     symbol: Option<&str>,
     exchange: Option<&str>,
     interval: Interval,
@@ -175,7 +174,7 @@ pub async fn retrieve(
 }
 
 fn extract_symbol_exchange(
-    ticker: Option<&MarketTicker>,
+    ticker: Option<Ticker>,
     symbol: Option<&str>,
     exchange: Option<&str>,
 ) -> Result<(String, String)> {

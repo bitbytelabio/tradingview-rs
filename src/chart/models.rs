@@ -263,7 +263,7 @@ pub struct SeriesCompletedMessage {
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug, Default, Builder, Copy)]
-pub struct MarketTicker {
+pub struct Ticker {
     pub symbol: Ustr,
     pub exchange: Ustr,
     pub currency: Option<Currency>,
@@ -271,7 +271,7 @@ pub struct MarketTicker {
     pub market_type: Option<MarketType>,
 }
 
-impl MarketTicker {
+impl Ticker {
     pub fn new(symbol: &str, exchange: &str) -> Self {
         Self {
             symbol: Ustr::from(symbol),
@@ -283,7 +283,7 @@ impl MarketTicker {
     }
 }
 
-impl MarketSymbol for MarketTicker {
+impl MarketSymbol for Ticker {
     fn symbol(&self) -> &str {
         &self.symbol
     }
@@ -307,7 +307,7 @@ impl MarketSymbol for MarketTicker {
     }
 }
 
-impl From<&SymbolInfo> for MarketTicker {
+impl From<&SymbolInfo> for Ticker {
     fn from(symbol_info: &SymbolInfo) -> Self {
         Self {
             symbol: symbol_info.name,
@@ -319,9 +319,9 @@ impl From<&SymbolInfo> for MarketTicker {
     }
 }
 
-impl From<SymbolInfo> for MarketTicker {
+impl From<SymbolInfo> for Ticker {
     fn from(val: SymbolInfo) -> Self {
-        MarketTicker::from(&val)
+        Ticker::from(&val)
     }
 }
 
