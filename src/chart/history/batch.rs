@@ -37,17 +37,18 @@ pub enum BatchCompletionSignal {
     Timeout,
 }
 
-/// Simplified batch tracker using patterns from single implementation
 #[derive(Debug, Clone)]
 struct BatchTracker {
     total_symbols: usize,
     completed_symbols: Arc<DashMap<Ustr, bool>>,
+    failed_symbols: Arc<DashMap<Ustr, bool>>,
     is_complete: Arc<AtomicBool>,
     completion_tx: Arc<Mutex<Option<oneshot::Sender<BatchCompletionSignal>>>>,
     error_count: Arc<AtomicUsize>,
 
     // Series tracking
     series_to_symbol: Arc<DashMap<Ustr, Ustr>>,
+    symbol_by_index: Arc<DashMap<usize, Ustr>>,
 }
 
 impl BatchTracker {
@@ -55,11 +56,18 @@ impl BatchTracker {
         Self {
             total_symbols: symbol_count,
             completed_symbols: Arc::new(DashMap::with_capacity(symbol_count)),
+            failed_symbols: Arc::new(DashMap::with_capacity(symbol_count)),
             is_complete: Arc::new(AtomicBool::new(false)),
             completion_tx: Arc::new(Mutex::new(Some(completion_tx))),
             error_count: Arc::new(AtomicUsize::new(0)),
             series_to_symbol: Arc::new(DashMap::with_capacity(symbol_count)),
+            symbol_by_index: Arc::new(DashMap::with_capacity(symbol_count)),
         }
+    }
+
+    fn register_symbol_by_index(&self, index: usize, symbol: Ustr) {
+        self.symbol_by_index.insert(index, symbol);
+        tracing::debug!("Registered symbol {} at index {}", symbol, index);
     }
 
     fn register_series(&self, series_id: Ustr, symbol: Ustr) {
@@ -74,17 +82,55 @@ impl BatchTracker {
 
         if self.completed_symbols.insert(symbol, true).is_none() {
             let completed_count = self.completed_symbols.len();
+            let failed_count = self.failed_symbols.len();
+            let total_processed = completed_count + failed_count;
+
             tracing::debug!(
-                "Symbol {} completed ({}/{})",
+                "Symbol {} completed ({}/{}), {} failed",
                 symbol,
                 completed_count,
+                self.total_symbols,
+                failed_count
+            );
+
+            // Check for overall completion (completed + failed = total)
+            if total_processed >= self.total_symbols {
+                self.try_complete(BatchCompletionSignal::Success);
+            }
+        }
+    }
+
+    fn mark_symbol_failed(&self, symbol: Ustr, reason: &str) {
+        if self.is_complete.load(Ordering::Relaxed) {
+            return;
+        }
+
+        if self.failed_symbols.insert(symbol, true).is_none() {
+            let completed_count = self.completed_symbols.len();
+            let failed_count = self.failed_symbols.len();
+            let total_processed = completed_count + failed_count;
+
+            tracing::warn!(
+                "Symbol {} failed: {} ({} completed, {} failed, {}/{})",
+                symbol,
+                reason,
+                completed_count,
+                failed_count,
+                total_processed,
                 self.total_symbols
             );
 
-            // Check for overall completion
-            if completed_count >= self.total_symbols {
+            // Check for overall completion (completed + failed = total)
+            if total_processed >= self.total_symbols {
                 self.try_complete(BatchCompletionSignal::Success);
             }
+        }
+    }
+
+    fn mark_symbol_failed_by_index(&self, symbol_index: usize, reason: &str) {
+        if let Some(entry) = self.symbol_by_index.get(&symbol_index) {
+            let symbol = *entry.value();
+            self.mark_symbol_failed(symbol, reason);
         }
     }
 
@@ -121,10 +167,11 @@ impl BatchTracker {
         self.is_complete.load(Ordering::Relaxed)
     }
 
-    fn get_completion_stats(&self) -> (usize, usize, usize) {
+    fn get_completion_stats(&self) -> (usize, usize, usize, usize) {
         let completed = self.completed_symbols.len();
+        let failed = self.failed_symbols.len();
         let errors = self.error_count.load(Ordering::Relaxed);
-        (completed, self.total_symbols, errors)
+        (completed, failed, self.total_symbols, errors)
     }
 }
 
@@ -210,11 +257,15 @@ async fn setup_markets_in_batches(
     range: Option<Range>,
     num_bars: Option<u64>,
     batch_size: usize,
+    tracker: &BatchTracker, // Add tracker parameter
 ) -> Result<()> {
     let mut commands = Vec::with_capacity(symbols.len());
 
-    // Prepare all market commands
-    for symbol in symbols {
+    // Prepare all market commands and register symbols by index
+    for (index, symbol) in symbols.iter().enumerate() {
+        let symbol_ustr = ustr(&format!("{}:{}", symbol.exchange(), symbol.symbol()));
+        tracker.register_symbol_by_index(index, symbol_ustr);
+
         let options = ChartOptions::builder()
             .symbol(symbol.symbol().into())
             .exchange(symbol.exchange().into())
@@ -255,6 +306,21 @@ async fn setup_markets_in_batches(
     Ok(())
 }
 
+// Helper function to extract symbol index from message
+fn extract_symbol_index(message: &[Value]) -> Option<usize> {
+    // Look for patterns like "sds_sym_3" to extract the index
+    for value in message {
+        if let Some(s) = value.as_str() {
+            if s.starts_with("sds_sym_") {
+                if let Ok(index) = s.strip_prefix("sds_sym_").unwrap_or("").parse::<usize>() {
+                    return Some(index);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Process batch data events - simplified using single implementation patterns
 async fn process_batch_data_events(
     mut data_rx: DataRx,
@@ -290,14 +356,15 @@ async fn process_batch_data_events(
             }
         }
 
-        // Periodic logging
+        // Periodic logging with updated stats
         if message_count % 50 == 0 {
-            let (completed, total, errors) = tracker.get_completion_stats();
+            let (completed, failed, total, errors) = tracker.get_completion_stats();
             tracing::debug!(
-                "Processed {} messages, {}/{} symbols completed, {} errors",
+                "Processed {} messages, {}/{} symbols completed, {} failed, {} errors",
                 message_count,
                 completed,
                 total,
+                failed,
                 errors
             );
         }
@@ -353,11 +420,47 @@ async fn handle_series_completed(tracker: &BatchTracker, message: &[Value]) {
 async fn handle_error(tracker: &BatchTracker, error: Error, message: Vec<Value>) {
     tracing::error!("WebSocket error: {:?} - {:?}", error, message);
 
-    // Use same critical error logic as single implementation
+    // Handle SymbolError specifically - these occur before series registration
+    if matches!(
+        error,
+        Error::TradingView {
+            source: TradingViewError::SymbolError
+        }
+    ) {
+        if let Some(symbol_index) = extract_symbol_index(&message) {
+            tracker.mark_symbol_failed_by_index(symbol_index, "Symbol resolution failed");
+            return;
+        }
+    }
+
+    // Extract series ID and symbol from error message to mark as failed
+    if let Some(series_id) = extract_series_id(&message) {
+        if let Some(entry) = tracker.series_to_symbol.get(&series_id) {
+            let symbol = *entry.value();
+            let error_reason = extract_error_reason(&message);
+            tracker.mark_symbol_failed(symbol, &error_reason);
+            return; // Don't count as general error if we can attribute it to a specific symbol
+        }
+    }
+
+    // For unattributed errors, use the original logic
     if is_critical_error(&error) {
         let error_msg = ustr(&format!("Critical error: {error:?}"));
         tracker.add_error(error_msg).await;
     }
+}
+
+// Helper function to extract error reason from message
+fn extract_error_reason(message: &[Value]) -> String {
+    // Look for error description in the message
+    for value in message {
+        if let Some(s) = value.as_str() {
+            if s.contains("invalid symbol") || s.contains("resolve error") || s.contains("error") {
+                return s.to_string();
+            }
+        }
+    }
+    "Unknown error".to_string()
 }
 
 fn is_critical_error(error: &Error) -> bool {
@@ -441,7 +544,10 @@ pub async fn retrieve(
 
     // Setup session and send market commands
     setup_initial_session(&cmd_tx).await?;
-    setup_markets_in_batches(&cmd_tx, symbols, interval, range, num_bars, batch_size).await?;
+    setup_markets_in_batches(
+        &cmd_tx, symbols, interval, range, num_bars, batch_size, &tracker,
+    )
+    .await?;
 
     // Wait for completion with timeout
     let result = timeout(timeout_duration, completion_rx).await;
@@ -451,7 +557,9 @@ pub async fn retrieve(
 
     // Process results
     match result {
-        Ok(Ok(BatchCompletionSignal::Success)) => build_final_results(collector, tracker).await,
+        Ok(Ok(BatchCompletionSignal::Success)) => {
+            build_final_results(collector, tracker, symbols).await
+        }
         Ok(Ok(BatchCompletionSignal::Error(error))) => Err(Error::Internal(error)),
         Ok(Ok(BatchCompletionSignal::Timeout)) => Err(Error::Timeout(ustr("Batch timeout"))),
         Ok(Err(_)) => Err(Error::Internal(ustr("Completion channel closed"))),
@@ -462,8 +570,22 @@ pub async fn retrieve(
 async fn build_final_results(
     collector: BatchDataCollector,
     tracker: BatchTracker,
+    symbols: &[impl MarketSymbol],
 ) -> Result<HashMap<String, (SymbolInfo, Vec<DataPoint>)>> {
     let mut results = HashMap::with_capacity(collector.data.len());
+
+    // First, mark any symbols that have no data as failed
+    for symbol in symbols {
+        let symbol_ustr = ustr(&format!("{}:{}", symbol.exchange(), symbol.symbol()));
+
+        // If symbol has no data and wasn't already marked as failed, mark it as failed
+        if !collector.data.contains_key(&symbol_ustr)
+            && !tracker.failed_symbols.contains_key(&symbol_ustr)
+            && !tracker.completed_symbols.contains_key(&symbol_ustr)
+        {
+            tracker.mark_symbol_failed(symbol_ustr, "No data received");
+        }
+    }
 
     for entry in collector.data.iter() {
         let (symbol, data_points) = entry.pair();
@@ -489,12 +611,14 @@ async fn build_final_results(
         results.insert(symbol_str, (symbol_info, points));
     }
 
-    let (_, total, errors) = tracker.get_completion_stats();
+    let (completed, failed, total, errors) = tracker.get_completion_stats();
 
     tracing::info!(
-        "Batch completed: {}/{} symbols retrieved, {} errors",
+        "Batch completed: {}/{} symbols retrieved, {} completed, {} failed, {} errors",
         results.len(),
         total,
+        completed,
+        failed,
         errors,
     );
 

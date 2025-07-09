@@ -1054,7 +1054,7 @@ impl Socket for WebSocketClient {
     async fn handle_raw_messages(&self, raw: Message) -> Result<()> {
         match &raw {
             Message::Text(text) => {
-                debug!("Received text message: {}", text);
+                trace!("Received text message: {}", text);
                 self.handle_parsed_messages(parse_packet(text), &raw)
                     .await?;
             }
