@@ -103,7 +103,7 @@ impl BatchTracker {
             .series_map
             .get(&series_id_ustr)
             .map(|entry| *entry)
-            .unwrap_or_else(|| ustr(&format!("unknown_{}", series_id)));
+            .unwrap_or_else(|| ustr(&format!("unknown_{series_id}")));
 
         let remaining = self.remaining.fetch_sub(1, Ordering::Relaxed) - 1;
         completed.push(symbol);
@@ -389,7 +389,7 @@ async fn handle_batch_chart_data(
         "{}:{}",
         series_info.options.exchange, series_info.options.symbol
     ));
-    let series_id = ustr(&series_info.chart_session.to_string());
+    let series_id = ustr(series_info.chart_session.as_ref());
 
     tracing::debug!(
         "Received {} points for series {} (symbol {})",
@@ -403,7 +403,7 @@ async fn handle_batch_chart_data(
 
     // Register series to symbol mapping
     tracker
-        .register_series(&series_id.to_string(), &symbol.to_string())
+        .register_series(series_id.as_ref(), symbol.as_ref())
         .await;
 
     // Store series info
@@ -413,7 +413,7 @@ async fn handle_batch_chart_data(
     collector
         .data
         .entry(symbol)
-        .or_insert_with(Vec::new)
+        .or_default()
         .extend(data_points.iter().cloned());
 
     // Track data received
@@ -452,14 +452,12 @@ async fn handle_batch_series_completed(
         .unwrap_or(false);
 
     // Mark as completed and check if all done
-    tracker
-        .mark_completed(&series_id.to_string(), has_data)
-        .await;
+    tracker.mark_completed(series_id.as_ref(), has_data).await;
 }
 
 async fn handle_batch_error(tracker: &BatchTracker, error: Error, message: Vec<Value>) {
     tracing::error!("WebSocket error: {:?} - {:?}", error, message);
-    let error_msg = ustr(&format!("WebSocket error: {:?}", error));
+    let error_msg = ustr(&format!("WebSocket error: {error:?}"));
     tracker.add_error(error_msg).await;
 }
 

@@ -127,7 +127,7 @@ pub async fn retrieve(
         data_collector.clone(),
         Arc::clone(&replay_state),
         cmd_tx.clone(),
-        options.clone(),
+        options,
     ));
 
     // Send initial commands to set up the session
@@ -215,7 +215,7 @@ async fn setup_websocket(
 async fn setup_initial_session(cmd_tx: &CommandTx, options: &ChartOptions) -> Result<()> {
     // Set market configuration
     cmd_tx
-        .send(Command::set_market(options.clone()))
+        .send(Command::set_market(*options))
         .map_err(|_| Error::Internal(ustr("Failed to send set_market command")))?;
 
     // Create quote session
@@ -348,7 +348,7 @@ async fn handle_error(collector: &DataCollector, error: Error, message: Vec<Valu
 
     // Signal completion on critical errors or too many errors
     if is_critical_error(&error) || *error_count > 5 {
-        let error_msg = format!("Critical error or too many errors: {:?}", error);
+        let error_msg = format!("Critical error or too many errors: {error:?}");
         collector
             .signal_completion(CompletionSignal::Error(error_msg))
             .await;
@@ -380,7 +380,7 @@ async fn handle_replay_setup(
             .earliest_ts
             .unwrap_or_else(|| data_points.iter().map(|p| p.timestamp()).min().unwrap_or(0));
 
-        let mut replay_options = options.clone();
+        let mut replay_options = *options;
         replay_options.replay_mode = true;
         replay_options.replay_from = earliest_ts;
 
