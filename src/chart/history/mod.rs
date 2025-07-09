@@ -11,7 +11,9 @@ fn resolve_auth_token(auth_token: Option<&str>) -> Result<String> {
             tracing::warn!("No auth token provided, using environment variable");
             std::env::var("TV_AUTH_TOKEN").map_err(|_| {
                 tracing::error!("TV_AUTH_TOKEN environment variable is not set");
-                Error::LoginError(LoginError::InvalidSession)
+                Error::Login {
+                    source: LoginError::MissingAuthToken,
+                }
             })
         }
     }

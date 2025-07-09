@@ -14,11 +14,9 @@ pub trait MarketSymbol {
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self;
     fn symbol(&self) -> &str;
     fn exchange(&self) -> &str;
-    fn currency(&self) -> &str;
     fn id(&self) -> String {
         format!("{}:{}", self.exchange(), self.symbol())
     }
-    fn market_type(&self) -> MarketType;
 }
 
 impl MarketSymbol for Symbol {
@@ -29,15 +27,6 @@ impl MarketSymbol for Symbol {
     fn exchange(&self) -> &str {
         &self.exchange
     }
-
-    fn currency(&self) -> &str {
-        &self.currency_code
-    }
-
-    fn market_type(&self) -> MarketType {
-        MarketType::from(self.market_type.as_str())
-    }
-
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {
         Self {
             symbol: symbol.into(),
@@ -81,27 +70,17 @@ pub struct ChartDrawingSourceStatePoint {
     price: f64,
 }
 
-#[cfg_attr(not(feature = "protobuf"), derive(Debug, Default))]
-#[cfg_attr(feature = "protobuf", derive(prost::Message))]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct UserCookies {
-    #[cfg_attr(feature = "protobuf", prost(uint32, tag = "1"))]
     pub id: u32,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "2"))]
     pub username: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "3"))]
     pub private_channel: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "4"))]
     pub auth_token: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "5"))]
     #[serde(default)]
     pub session: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "6"))]
     #[serde(default)]
     pub session_signature: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "7"))]
     pub session_hash: String,
-    #[cfg_attr(feature = "protobuf", prost(string, tag = "8"))]
     #[serde(default)]
     pub device_token: String,
 }

@@ -1,3 +1,4 @@
+pub use crate::live::models::DataServer;
 pub use crate::models::SymbolType::*;
 pub use crate::models::{
     ChartOptions, CryptoType, FundsType, Interval, MarketSymbol, MarketType, OHLCV, PriceIterable,
@@ -16,5 +17,4 @@ pub use crate::models::{
     StocksType::Common as CommonStock, StocksType::DepositoryReceipt as DepositoryReceiptStock,
     StocksType::Preferred as PreferredStock, StocksType::Warrant as WarrantStock,
 };
-pub use crate::socket::DataServer;
 pub use crate::{Country, Currency};

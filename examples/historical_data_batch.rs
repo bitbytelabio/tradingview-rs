@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         .market_type(MarketType::Stocks(StocksType::Common))
         .country(Country::VN)
         .call()
-        .await?[0..100]
+        .await?[0..15]
         .to_vec();
     // let symbols = vec![
     //     Symbol::builder().symbol("XAUUSD").exchange("OANDA").build(),
@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
     println!("{}", "✅ Data retrieved successfully!".green());
     println!("{}", "----------------------------------------".dimmed());
 
-    for (symbol_info, interval, ticker_data) in datamap.values() {
+    for (symbol_info, ticker_data) in datamap.values() {
         println!(
             "{} | {} | {} | {} | {}",
             format!("Symbol: {}", symbol_info.name).bright_cyan().bold(),
@@ -77,10 +77,9 @@ async fn main() -> anyhow::Result<()> {
         println!("{}", "----------------------------------------".dimmed());
 
         println!(
-            "{} Total data points: {}, intervals: {}",
+            "{} Total data points: {}",
             "📊".bright_yellow(),
             ticker_data.len().to_string().bright_blue(),
-            interval
         );
 
         // for (i, ohlcv) in bar.data.iter().rev().enumerate() {

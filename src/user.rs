@@ -56,7 +56,9 @@ impl UserCookies {
                 });
         if session.is_none() || signature.is_none() {
             error!("unable to login, username or password is invalid");
-            return Err(Error::LoginError(LoginError::InvalidCredentials));
+            return Err(Error::Login {
+                source: LoginError::InvalidCredentials,
+            });
         }
 
         #[derive(Debug, Deserialize)]
@@ -78,7 +80,9 @@ impl UserCookies {
         } else if response["error"] == *"2FA_required" {
             if totp_secret.is_none() {
                 error!("2FA is enabled for this account, but no TOTP secret was provided");
-                return Err(Error::LoginError(LoginError::OTPSecretNotFound));
+                return Err(Error::Login {
+                    source: LoginError::OTPSecretNotFound,
+                });
             }
 
             let response = Self::handle_mfa(
@@ -127,7 +131,9 @@ impl UserCookies {
             });
         } else {
             error!("unable to login, username or password is invalid");
-            return Err(Error::LoginError(LoginError::InvalidCredentials));
+            return Err(Error::Login {
+                source: LoginError::InvalidCredentials,
+            });
         }
 
         Ok(UserCookies {
@@ -140,7 +146,9 @@ impl UserCookies {
 
     async fn handle_mfa(totp_secret: &str, session: &str, signature: &str) -> Result<Response> {
         if totp_secret.is_empty() {
-            return Err(Error::LoginError(LoginError::OTPSecretNotFound));
+            return Err(Error::Login {
+                source: LoginError::OTPSecretNotFound,
+            });
         }
 
         let client = build_request(Some(&format!(
@@ -156,7 +164,9 @@ impl UserCookies {
                     Ok(code) => code,
                     Err(e) => {
                         error!("Error generating TOTP code: {}", e);
-                        return Err(Error::LoginError(LoginError::InvalidOTPSecret));
+                        return Err(Error::Login {
+                            source: LoginError::InvalidOTPSecret,
+                        });
                     }
                 }
             ))
@@ -166,7 +176,9 @@ impl UserCookies {
         if response.status().is_success() {
             Ok(response)
         } else {
-            Err(Error::LoginError(LoginError::InvalidOTPSecret))
+            Err(Error::Login {
+                source: LoginError::InvalidOTPSecret,
+            })
         }
     }
 }

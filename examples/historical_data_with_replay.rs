@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
         .symbol(symbol)
         .exchange(exchange)
         .interval(interval)
-        .with_replay(true)
+        .with_replay(false)
         .server(DataServer::ProData)
         .call()
         .await?;

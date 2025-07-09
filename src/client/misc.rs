@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::debug;
 use urlencoding::encode;
+use ustr::Ustr;
 
 static SEARCH_BASE_URL: &str = "https://symbol-search.tradingview.com/symbol_search/v3/";
 static DEFAULT_LANGUAGE: &str = "en";
@@ -176,17 +177,21 @@ pub async fn advanced_search_symbol(
 
     // Validate URL length (most browsers/servers have ~8KB limit)
     if url.len() > 8000 {
-        return Err(Error::Generic(
-            "URL too long - please reduce search parameters".to_string(),
-        ));
+        return Err(Error::Internal(Ustr::from(
+            "URL too long - please reduce search parameters",
+        )));
     }
 
     let search_data: SymbolSearchResponse = get(None, &url)
         .await
-        .map_err(|e| Error::Generic(format!("Failed to fetch symbol search: {e}")))?
+        .map_err(|e| Error::Internal(Ustr::from(&format!("Failed to fetch symbol search: {e}"))))?
         .json()
         .await
-        .map_err(|e| Error::Generic(format!("Failed to parse symbol search response: {e}")))?;
+        .map_err(|e| {
+            Error::Internal(Ustr::from(&format!(
+                "Failed to parse symbol search response: {e}"
+            )))
+        })?;
 
     Ok(search_data)
 }
@@ -273,10 +278,9 @@ pub async fn list_symbols(
         let semaphore = Arc::clone(&semaphore);
 
         let task = tokio::spawn(async move {
-            let _permit = semaphore
-                .acquire()
-                .await
-                .map_err(|e| Error::Generic(format!("Failed to acquire semaphore: {e}")))?;
+            let _permit = semaphore.acquire().await.map_err(|e| {
+                Error::Internal(Ustr::from(&format!("Failed to acquire semaphore: {e}")))
+            })?;
 
             advanced_search_symbol()
                 .exchange(&exchange)
@@ -289,7 +293,9 @@ pub async fn list_symbols(
                 .await
                 .map(|resp| resp.symbols)
                 .map_err(|e| {
-                    Error::Generic(format!("Failed to fetch symbols at offset {i}: {e}"))
+                    Error::Internal(Ustr::from(&format!(
+                        "Failed to fetch symbols for batch starting at {i}: {e}"
+                    )))
                 })
         });
 
@@ -302,9 +308,9 @@ pub async fn list_symbols(
             Ok(Ok(batch_symbols)) => symbols.extend(batch_symbols),
             Ok(Err(e)) => return Err(e),
             Err(join_err) => {
-                return Err(Error::Generic(format!(
-                    "Task {index} panicked: {join_err}"
-                )));
+                return Err(Error::Internal(Ustr::from(&format!(
+                    "Task join failed for batch {index}: {join_err}"
+                ))));
             }
         }
     }
@@ -484,7 +490,9 @@ pub async fn search_indicator(
     debug!("Response: {:?}", resp);
 
     if resp.results.is_empty() {
-        return Err(Error::Generic("No results found".to_string()));
+        return Err(Error::Internal(Ustr::from(
+            "No indicators found for the given search query",
+        )));
     }
 
     Ok(resp.results)
@@ -536,7 +544,7 @@ pub async fn get_indicator_metadata(
         return Ok(resp.result);
     }
 
-    Err(Error::Generic(
-        "Failed to get indicator metadata".to_string(),
-    ))
+    Err(Error::Internal(Ustr::from(&format!(
+        "Failed to retrieve metadata for Pine script ID: {pinescript_id}, Version: {pinescript_version}"
+    ))))
 }

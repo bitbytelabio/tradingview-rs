@@ -1,13 +1,13 @@
 [package]
 name = "tradingview-rs"
 authors = ["Nguyen Thanh Dat <dat.nguyen@bitbytelab.io>"]
-version = "0.0.5"
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/bitbytelabio/tradingview-rs"
 readme = "README.md"
 description = "Tradingview datafeed api `tradingview-rs` project."
-resolver = "2"
+resolver = "3"
 
 [lib]
 name = "tradingview"
@@ -16,12 +16,10 @@ path = "src/lib.rs"
 [features]
 default = ["user", "rustls-tls"]
 user = ["dep:google-authenticator"]
-protobuf = ["dep:prost"]
 native-tls = ["reqwest/native-tls", "tokio-tungstenite/native-tls"]
 rustls-tls = ["reqwest/rustls-tls", "tokio-tungstenite/rustls-tls-webpki-roots"]
 
 [dependencies]
-async-trait = "0.1"
 tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
@@ -46,8 +44,10 @@ iso_currency = { version = "0.5", features = ["with-serde"] }
 zip = "4"
 base64 = "0.22"
 google-authenticator = { version = "0.4", optional = true }
-prost = { version = "0.14", optional = true }
 bon = "3"
+dashmap = { version = "6.1.0", features = ["rayon", "serde", "inline"] }
+ustr = { version = "1.1.0", features = ["serde"] }
+tokio-util = { version = "0.7.15", features = ["futures-util", "tracing"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

@@ -15,12 +15,9 @@ pub fn merge_quotes(quote_old: &QuoteValue, quote_new: &QuoteValue) -> QuoteValu
         price: quote_new.price.or(quote_old.price),
         timestamp: quote_new.timestamp.or(quote_old.timestamp),
         volume: quote_new.volume.or(quote_old.volume),
-        currency: quote_new.currency.clone().or(quote_old.currency.clone()),
-        symbol: quote_new.symbol.clone().or(quote_old.symbol.clone()),
-        exchange: quote_new.exchange.clone().or(quote_old.exchange.clone()),
-        market_type: quote_new
-            .market_type
-            .clone()
-            .or(quote_old.market_type.clone()),
+        currency: quote_new.currency.or(quote_old.currency),
+        symbol: quote_new.symbol.or(quote_old.symbol),
+        exchange: quote_new.exchange.or(quote_old.exchange),
+        market_type: quote_new.market_type.or(quote_old.market_type),
     }
 }
