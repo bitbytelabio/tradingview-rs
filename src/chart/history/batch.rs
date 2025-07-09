@@ -482,7 +482,7 @@ async fn cleanup_batch_tasks(
     shutdown_token.cancel();
 
     // Wait for tasks to complete with timeout
-    let cleanup_timeout = Duration::from_secs(5);
+    let cleanup_timeout = Duration::from_secs(2);
 
     if let Err(e) = timeout(cleanup_timeout, runner_task).await {
         tracing::debug!("Command runner cleanup timeout: {:?}", e);

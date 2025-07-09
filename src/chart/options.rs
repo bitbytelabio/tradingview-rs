@@ -74,7 +74,7 @@ impl Default for ChartOptions {
 
 impl ChartOptions {
     pub fn new() -> Self {
-        Self::default()
+        Self::builder().build()
     }
 
     pub fn new_with(symbol: &str, exchange: &str, interval: Interval) -> Self {
@@ -82,7 +82,6 @@ impl ChartOptions {
             symbol: Ustr::from(symbol),
             exchange: Ustr::from(exchange),
             interval,
-            bar_count: 500_000,
             ..Default::default()
         }
     }

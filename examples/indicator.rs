@@ -1,3 +1,5 @@
+// TODO: FIX data series loading
+
 use dotenv::dotenv;
 use std::{env, sync::Arc, time::Duration};
 use tokio::{
@@ -6,7 +8,7 @@ use tokio::{
 };
 use tracing::{error, info, warn};
 use tradingview::{
-    ChartOptions, Interval, OHLCV,
+    ChartOptions, Interval, StudyOptions, get_builtin_indicators,
     live::{
         handler::{
             command::CommandRunner,
@@ -16,6 +18,7 @@ use tradingview::{
         models::DataServer,
         websocket::WebSocketClient,
     },
+    pine_indicator::{BuiltinIndicators, ScriptType},
 };
 
 #[tokio::main]
@@ -34,7 +37,6 @@ async fn main() -> anyhow::Result<()> {
     let (command_tx, command_rx) = mpsc::unbounded_channel();
 
     info!("Starting TradingView WebSocket client...");
-
     // Create WebSocket client
     let ws_client = WebSocketClient::builder()
         .auth_token(&auth_token)
@@ -42,8 +44,6 @@ async fn main() -> anyhow::Result<()> {
         .data_tx(response_tx)
         .build()
         .await?;
-
-    info!("WebSocket client created successfully");
 
     // Create command runner
     let command_runner = CommandRunner::new(command_rx, Arc::clone(&ws_client));
@@ -100,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
     let _ = timeout(shutdown_timeout, response_handle).await;
 
     info!("Shutdown complete");
+
     Ok(())
 }
 
@@ -113,43 +114,20 @@ async fn handle_responses(mut response_rx: DataRx) {
                     Some(response) => {
                         match response {
                             TradingViewResponse::ChartData(series_info, data_points) => {
+                                // Study data will be send via ChartData
                                 info!(
-                                    "📊 Chart Data - Session: {}, Points: {}",
-                                    series_info.chart_session,
-                                    data_points.len()
+                                    "📊 Chart Data: {} - {} points",
+                                    series_info.options.symbol, data_points.len()
                                 );
 
-                                if !data_points.is_empty() {
-                                    let last_point = &data_points[data_points.len() - 1];
-                                    info!(
-                                        "   Latest: Time: {}, Open: {}, High: {}, Low: {}, Close: {}, Volume: {}",
-                                        last_point.timestamp(),
-                                        last_point.open(),
-                                        last_point.high(),
-                                        last_point.low(),
-                                        last_point.close(),
-                                        last_point.volume()
+                                for (i, point) in data_points.iter().enumerate() {
+                                   warn!(
+                                      "Data Point i:{} , value:{:?}",
+                                        i,
+                                        point
                                     );
                                 }
-                            }
 
-                            TradingViewResponse::QuoteData(quote) => {
-                                info!("💱 Quote Data: {:#?}", quote);
-                            }
-
-                            TradingViewResponse::SymbolInfo(symbol_info) => {
-                                info!(
-                                    "ℹ️  Symbol Info: {} - {}",
-                                    symbol_info.name, symbol_info.description
-                                );
-                            }
-
-                            TradingViewResponse::SeriesLoading(loading_msg) => {
-                                info!("⏳ Series Loading: {:?}", loading_msg);
-                            }
-
-                            TradingViewResponse::SeriesCompleted(data) => {
-                                info!("✅ Series Completed: {:?}", data);
                             }
 
                             TradingViewResponse::StudyData(study_options, study_data) => {
@@ -158,14 +136,6 @@ async fn handle_responses(mut response_rx: DataRx) {
                                     study_options,
                                     study_data.studies.len()
                                 );
-                            }
-
-                            TradingViewResponse::Error(error, context) => {
-                                error!("❌ Error: {} - Context: {:?}", error, context);
-                            }
-
-                            TradingViewResponse::UnknownEvent(event, data) => {
-                                warn!("❓ Unknown Event: {} - Data: {:?}", event, data);
                             }
 
                             _ => {
@@ -187,38 +157,34 @@ async fn handle_responses(mut response_rx: DataRx) {
 
 async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
     info!("🔧 Running simple example...");
-
-    let options = ChartOptions::builder()
+    let buildins = get_builtin_indicators(BuiltinIndicators::Standard).await?;
+    if buildins.is_empty() {
+        error!("No built-in indicators found");
+        return Ok(());
+    }
+    info!("Found {} built-in indicators", buildins.len());
+    info!(
+        "Using first built-in indicator: {} v{}",
+        buildins[0].script_id, buildins[0].script_version
+    );
+    let opts = ChartOptions::builder()
         .symbol("BTCUSDT".into())
         .exchange("BINANCE".into())
-        .interval(Interval::OneMinute)
+        .interval(Interval::OneDay)
+        .bar_count(20)
+        .study_config(StudyOptions {
+            script_id: (&buildins[0].script_id).into(),
+            script_version: (&buildins[0].script_version).into(),
+            script_type: ScriptType::IntervalScript,
+        })
         .build();
 
-    // Try symbols that are more likely to have data during market hours
-    command_tx.send(Command::add_symbol("TVC:GOLD"))?;
-
-    command_tx.send(Command::set_market(options))?;
+    command_tx.send(Command::set_market(opts))?;
 
     // Monitor for longer - 2 minutes to give time for data
-    for i in 0..24 {
+    for _ in 0..24 {
         // Increased to 24 (2 minutes)
         sleep(Duration::from_secs(5)).await;
-        info!("⏰ Simple monitoring {} of 24", i + 1);
-
-        // Add more symbols at different intervals to test
-        if i == 6 {
-            info!("➕ Adding more symbols...");
-            command_tx.send(Command::add_symbols(&[
-                "NASDAQ:AAPL",
-                "NASDAQ:GOOGL",
-                "NYSE:TSLA",
-            ]))?;
-        }
-
-        if i == 12 {
-            info!("➕ Adding forex symbols...");
-            command_tx.send(Command::remove_symbol("TVC:GOLD"))?;
-        }
     }
 
     info!("🧹 Cleaning up...");
