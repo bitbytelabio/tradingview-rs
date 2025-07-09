@@ -1,5 +1,5 @@
 use crate::{
-    DataPoint, Error, Interval, Result, Timezone,
+    DataPoint, Error, Interval, Result, SocketServerInfo, Timezone,
     chart::{ChartOptions, StudyOptions, SymbolInfo},
     live::{
         handler::{data::DataHandler, types::DataTx},
@@ -1112,8 +1112,10 @@ impl Socket for WebSocketClient {
                         }
                     } else if value.is_string() {
                         trace!("Received string message: {:?}", value);
+                    } else if let Ok(server_info) = SocketServerInfo::deserialize(&value) {
+                        info!("{}", server_info);
                     } else {
-                        warn!("unhandled message: {:?}", value);
+                        warn!("Received unrecognized message: {:?}", value);
                     }
                 }
                 SocketMessage::Unknown(s) => {

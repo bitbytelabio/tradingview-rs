@@ -1,3 +1,5 @@
+use core::fmt;
+
 use futures_util::stream::SplitStream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -110,17 +112,35 @@ impl SocketMessageSer {
 #[serde(rename_all = "camelCase")]
 pub struct SocketServerInfo {
     #[serde(rename = "session_id")]
-    pub session_id: String,
+    pub session_id: Ustr,
     pub timestamp: i64,
     pub timestamp_ms: i64,
-    pub release: String,
+    pub release: Ustr,
     #[serde(rename = "studies_metadata_hash")]
-    pub studies_metadata_hash: String,
+    pub studies_metadata_hash: Ustr,
     #[serde(rename = "auth_scheme_vsn")]
     pub auth_scheme_vsn: i64,
-    pub protocol: String,
-    pub via: String,
-    pub sjavastudies: Vec<String>,
+    pub protocol: Ustr,
+    pub via: Ustr,
+    pub sjavastudies: Vec<Ustr>,
+}
+
+impl fmt::Display for SocketServerInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "SocketServerInfo {{ session_id: {}, timestamp: {}, timestamp_ms: {}, release: {}, studies_metadata_hash: {}, auth_scheme_vsn: {}, protocol: {}, via: {}, sjavastudies: {:?} }}",
+            self.session_id,
+            self.timestamp,
+            self.timestamp_ms,
+            self.release,
+            self.studies_metadata_hash,
+            self.auth_scheme_vsn,
+            self.protocol,
+            self.via,
+            self.sjavastudies
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -158,10 +178,7 @@ pub trait Socket {
         read: MutexGuard<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     ) -> impl Future<Output = Result<()>> + Send;
 
-    fn handle_raw_messages(
-        &self,
-        raw: Message,
-    ) -> impl Future<Output = Result<()>> + Send;
+    fn handle_raw_messages(&self, raw: Message) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_parsed_messages(
         &self,
@@ -174,9 +191,5 @@ pub trait Socket {
         message: SocketMessageDe,
     ) -> impl Future<Output = Result<()>> + Send;
 
-    fn handle_error(
-        &self,
-        error: Error,
-        context: Ustr,
-    ) -> impl Future<Output = Result<()>> + Send;
+    fn handle_error(&self, error: Error, context: Ustr) -> impl Future<Output = Result<()>> + Send;
 }
