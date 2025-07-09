@@ -1092,10 +1092,10 @@ impl Socket for WebSocketClient {
         for message in messages {
             match message {
                 SocketMessage::SocketServerInfo(info) => {
-                    info!("received server info: {:?}", info);
+                    trace!("received server info: {:?}", info);
                 }
                 SocketMessage::SocketMessage(msg) => {
-                    info!(
+                    trace!(
                         "Processing socket message: method={}, params={:?}",
                         msg.m, msg.p
                     );
@@ -1104,14 +1104,14 @@ impl Socket for WebSocketClient {
                     }
                 }
                 SocketMessage::Other(value) => {
-                    info!("Received other message: {:?}", value);
+                    trace!("Received other message: {:?}", value);
                     if value.is_number() {
                         debug!("handling heartbeat message: {:?}", value);
                         if let Err(e) = self.ping(raw).await {
                             self.handle_error(e, ustr("ping_response")).await?;
                         }
                     } else if value.is_string() {
-                        info!("Received string message: {:?}", value);
+                        trace!("Received string message: {:?}", value);
                     } else {
                         warn!("unhandled message: {:?}", value);
                     }

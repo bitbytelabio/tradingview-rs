@@ -490,7 +490,7 @@ async fn handle_batch_series_completed(
         })
         .unwrap_or_else(|| {
             // Last resort: generate a unique ID based on message hash
-            let msg_str = format!("{:?}", message);
+            let msg_str = format!("{message:?}");
             // let hash = std::collections::hash_map::DefaultHasher::new();
             ustr(&format!("fallback_{}", msg_str.len()))
         });
