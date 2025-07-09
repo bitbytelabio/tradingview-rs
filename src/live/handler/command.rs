@@ -1,4 +1,3 @@
-use crate::{Error, Result, error::TradingViewError, live::handler::message::Command};
 use std::{collections::VecDeque, sync::Arc};
 use tokio::{
     select,
@@ -9,7 +8,12 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 use ustr::ustr;
 
-use crate::{live::handler::types::CommandRx, websocket::WebSocketClient};
+use crate::{
+    Error, Result,
+    error::TradingViewError,
+    live::handler::{message::Command, types::CommandRx},
+    websocket::WebSocketClient,
+};
 
 /// Connection state tracking with timestamps for better monitoring
 #[derive(Debug, Clone, PartialEq, Copy, Eq)]
