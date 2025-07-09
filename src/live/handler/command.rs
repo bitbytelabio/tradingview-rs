@@ -743,9 +743,9 @@ impl CommandRunner {
                     series_id,
                     indicator,
                 } => {
-                    self.ws
-                        .modify_study(&session, &study_id, &series_id, indicator)
-                        .await?;
+                    // self.ws
+                    //     .modify_study(&session, &study_id, &series_id, indicator)
+                    //     .await?;
                     Ok(())
                 }
                 RemoveStudy {
@@ -772,16 +772,20 @@ impl CommandRunner {
                     series_id,
                     series_version,
                     series_symbol_id,
-                    config,
+                    interval,
+                    bar_count,
+                    range,
                 } => {
                     self.ws
-                        .create_series(
-                            &session,
-                            &series_id,
-                            &series_version,
-                            &series_symbol_id,
-                            config,
-                        )
+                        .create_series()
+                        .session(&session)
+                        .series_id(&series_id)
+                        .series_version(&series_version)
+                        .series_symbol_id(&series_symbol_id)
+                        .interval(interval)
+                        .bar_count(bar_count)
+                        .maybe_range(range)
+                        .call()
                         .await?;
                     Ok(())
                 }
@@ -790,16 +794,20 @@ impl CommandRunner {
                     series_id,
                     series_version,
                     series_symbol_id,
-                    config,
+                    interval,
+                    bar_count,
+                    range,
                 } => {
                     self.ws
-                        .modify_series(
-                            &session,
-                            &series_id,
-                            &series_version,
-                            &series_symbol_id,
-                            config,
-                        )
+                        .modify_series()
+                        .session(&session)
+                        .series_id(&series_id)
+                        .series_version(&series_version)
+                        .series_symbol_id(&series_symbol_id)
+                        .interval(interval)
+                        .bar_count(bar_count)
+                        .maybe_range(range)
+                        .call()
                         .await?;
                     Ok(())
                 }
@@ -822,15 +830,18 @@ impl CommandRunner {
                     opts,
                     replay_session,
                 } => {
-                    self.ws
-                        .resolve_symbol(
-                            &session,
-                            &symbol,
-                            &exchange,
-                            opts,
-                            replay_session.as_deref(),
-                        )
-                        .await?;
+                    //   &session,
+                    // &symbol,
+                    // &exchange,
+                    // opts,
+                    // replay_session.as_deref(),
+                    // self.ws
+                    //     .resolve_symbol()
+                    //     .session(&session)
+                    //     .symbol(&symbol)
+
+                    //     .call()
+                    //     .await?;
                     Ok(())
                 }
                 SetReplayStep {
@@ -869,13 +880,16 @@ impl CommandRunner {
                     chart_session,
                     symbol_series_id,
                 } => {
-                    self.ws
-                        .set_replay(&symbol, options, &chart_session, &symbol_series_id)
-                        .await?;
+                    // &symbol, options, &chart_session, &symbol_series_id
+                    // self.ws.set_replay().symbol(s).call().await?;
                     Ok(())
                 }
                 SetMarket { options } => {
                     self.ws.set_market(options).await?;
+                    Ok(())
+                }
+                SendRawMessage { message } => {
+                    self.ws.send_raw_message(&message).await?;
                     Ok(())
                 }
             }

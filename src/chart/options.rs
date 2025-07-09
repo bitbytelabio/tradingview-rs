@@ -1,3 +1,4 @@
+use std::fmt;
 use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType};
 use bon::Builder;
 use iso_currency::Currency;
@@ -14,9 +15,7 @@ pub struct ChartOptions {
     pub interval: Interval,
     #[builder(default = 500_000)]
     pub bar_count: u64,
-    pub range: Option<Ustr>,
-    pub from: Option<u64>,
-    pub to: Option<u64>,
+    pub range: Option<Range>,
     #[builder(default = false)]
     pub replay_mode: bool,
     #[builder(default = 0)]
@@ -40,6 +39,65 @@ pub enum Range {
     OneYear,
     FiveYears,
     All,
+}
+
+impl Range {
+    pub fn from_to(from: u64, to: u64) -> Self {
+        Range::FromTo(from, to)
+    }
+
+    pub fn one_day() -> Self {
+        Range::OneDay
+    }
+
+    pub fn five_days() -> Self {
+        Range::FiveDays
+    }
+
+    pub fn one_month() -> Self {
+        Range::OneMonth
+    }
+
+    pub fn three_months() -> Self {
+        Range::ThreeMonths
+    }
+
+    pub fn six_months() -> Self {
+        Range::SixMonths
+    }
+
+    pub fn year_to_date() -> Self {
+        Range::YearToDate
+    }
+
+    pub fn one_year() -> Self {
+        Range::OneYear
+    }
+
+    pub fn five_years() -> Self {
+        Range::FiveYears
+    }
+
+    pub fn all() -> Self {
+        Range::All
+    }
+}
+
+impl fmt::Display for Range {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Range::FromTo(from, to) => write!(f, "r,{from}:{to}"),
+            Range::OneDay => write!(f, "1D"),
+            Range::FiveDays => write!(f, "5d"),
+            Range::OneMonth => write!(f, "1M"),
+            Range::ThreeMonths => write!(f, "3M"),
+            Range::SixMonths => write!(f, "6M"),
+            Range::YearToDate => write!(f, "YTD"),
+            Range::OneYear => write!(f, "12M"),
+            Range::FiveYears => write!(f, "60M"),
+            Range::All => write!(f, "ALL"),
+        }
+    }
 }
 
 impl From<Range> for Ustr {
@@ -122,18 +180,8 @@ impl ChartOptions {
     }
 
     /// range: |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
-    pub fn range(mut self, range: &str) -> Self {
-        self.range = Some(Ustr::from(range));
-        self
-    }
-
-    pub fn from(mut self, from: u64) -> Self {
-        self.from = Some(from);
-        self
-    }
-
-    pub fn to(mut self, to: u64) -> Self {
-        self.to = Some(to);
+    pub fn range(mut self, range: Range) -> Self {
+        self.range = Some(range);
         self
     }
 

@@ -1,25 +1,10 @@
-use crate::{
-    DataPoint, Error, Interval, Result, SocketServerInfo, Timezone,
-    chart::{ChartOptions, StudyOptions, SymbolInfo},
-    live::{
-        handler::{data::DataHandler, types::DataTx},
-        models::{
-            DataServer, Socket, SocketMessage, SocketMessageDe, SocketMessageSer,
-            TradingViewDataEvent, WEBSOCKET_HEADERS,
-        },
-    },
-    payload,
-    pine_indicator::PineIndicator,
-    quote::{ALL_QUOTE_FIELDS, models::QuoteValue},
-    utils::{gen_id, gen_session_id, parse_packet, symbol_init},
-};
-
 use dashmap::DashMap;
 use futures_util::{
     SinkExt, StreamExt,
     future::join_all,
     stream::{SplitSink, SplitStream},
 };
+use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -46,6 +31,22 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 use ustr::{Ustr, ustr};
+
+use crate::{
+    DataPoint, Error, Interval, MarketAdjustment, Result, SessionType, SocketServerInfo, Timezone,
+    chart::{ChartOptions, StudyOptions, SymbolInfo, options::Range},
+    live::{
+        handler::{data::DataHandler, types::DataTx},
+        models::{
+            DataServer, Socket, SocketMessage, SocketMessageDe, SocketMessageSer,
+            TradingViewDataEvent, WEBSOCKET_HEADERS,
+        },
+    },
+    payload,
+    pine_indicator::PineIndicator,
+    quote::{ALL_QUOTE_FIELDS, models::QuoteValue},
+    utils::{gen_id, gen_session_id, parse_packet, symbol_init},
+};
 
 // Error recovery configuration
 #[derive(Debug, Clone, Copy)]
@@ -474,6 +475,18 @@ impl WebSocketClient {
         Ok(())
     }
 
+    pub async fn send_raw_message(&self, message: &str) -> Result<()> {
+        if self.is_closed.load(Ordering::Relaxed) {
+            return Err(Error::Internal("WebSocket is closed".into()));
+        }
+        debug!("Sending raw message: {}", message);
+        let mut write_guard = self.write.lock().await;
+        write_guard.send(Message::Text(message.into())).await?;
+        trace!("sent raw message: {}", message);
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
+        Ok(())
+    }
+
     pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
         if self.is_closed.load(Ordering::Relaxed) {
             return Err(Error::Internal("WebSocket is closed".into()));
@@ -540,9 +553,7 @@ impl WebSocketClient {
 
         Ok(())
     }
-    // End TradingView WebSocket Quote methods
 
-    // Begin TradingView WebSocket Chart methods
     /// Example: local = ("en", "US")
     pub async fn set_locale(&self, local: (&str, &str)) -> Result<()> {
         self.send("set_locale", &payload!(local.0, local.1)).await?;
@@ -575,26 +586,30 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[builder]
     pub async fn add_replay_series(
         &self,
         session: &str,
         series_id: &str,
         symbol: &str,
-        config: ChartOptions,
+        adjustment: Option<MarketAdjustment>,
+        session_type: Option<SessionType>,
+        currency: Option<Currency>,
+        interval: Interval,
     ) -> Result<()> {
         self.send(
             "replay_add_series",
+            // symbol, adjustment, currency, session_type, Some(replay)
             &payload!(
                 session,
                 series_id,
-                symbol_init(
-                    symbol,
-                    config.adjustment,
-                    config.currency,
-                    config.session_type,
-                    None
-                )?,
-                config.interval.to_string()
+                symbol_init()
+                    .symbol(symbol)
+                    .maybe_adjustment(adjustment)
+                    .maybe_currency(currency)
+                    .maybe_session_type(session_type)
+                    .call()?,
+                interval.to_string()
             ),
         )
         .await?;
@@ -682,16 +697,17 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[builder]
     pub async fn modify_study(
         &self,
-        session: &str,
+        chart_session: &str,
         study_id: &str,
         series_id: &str,
         indicator: PineIndicator,
     ) -> Result<()> {
         let inputs = indicator.to_study_inputs()?;
         let payloads: Vec<Value> = vec![
-            Value::from(session),
+            Value::from(chart_session),
             Value::from(study_id),
             Value::from("st1"),
             Value::from(series_id),
@@ -707,20 +723,21 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[builder]
     pub async fn create_series(
         &self,
         session: &str,
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        config: ChartOptions,
+        interval: Interval,
+        bar_count: u64,
+        range: Option<Range>,
     ) -> Result<()> {
-        let range = match (&config.range, config.from, config.to) {
-            (Some(range), _, _) => range.to_string(),
-            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
-            _ => Default::default(),
+        let range = match range {
+            Some(r) => r.to_string(),
+            None => Default::default(),
         };
-
         self.send(
             "create_series",
             &payload!(
@@ -728,8 +745,8 @@ impl WebSocketClient {
                 series_id,
                 series_version,
                 series_symbol_id,
-                config.interval.to_string(),
-                config.bar_count,
+                interval.to_string(),
+                bar_count,
                 range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
             ),
         )
@@ -738,20 +755,21 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[builder]
     pub async fn modify_series(
         &self,
         session: &str,
         series_id: &str,
         series_version: &str,
         series_symbol_id: &str,
-        config: ChartOptions,
+        interval: Interval,
+        bar_count: u64,
+        range: Option<Range>,
     ) -> Result<()> {
-        let range = match (&config.range, config.from, config.to) {
-            (Some(range), _, _) => range.to_string(),
-            (None, Some(from), Some(to)) => format!("r,{from}:{to}"),
-            _ => Default::default(),
+        let range = match range {
+            Some(r) => r.to_string(),
+            None => Default::default(),
         };
-
         self.send(
             "modify_series",
             &payload!(
@@ -759,8 +777,8 @@ impl WebSocketClient {
                 series_id,
                 series_version,
                 series_symbol_id,
-                config.interval.to_string(),
-                config.bar_count,
+                interval.to_string(),
+                bar_count,
                 range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
             ),
         )
@@ -775,12 +793,15 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[builder]
     pub async fn resolve_symbol(
         &self,
         session: &str,
         symbol_series_id: &str,
         symbol: &str,
-        config: ChartOptions,
+        adjustment: Option<MarketAdjustment>,
+        currency: Option<Currency>,
+        session_type: Option<SessionType>,
         replay_session: Option<&str>,
     ) -> Result<()> {
         self.send(
@@ -788,13 +809,13 @@ impl WebSocketClient {
             &payload!(
                 session,
                 symbol_series_id,
-                symbol_init(
-                    symbol,
-                    config.adjustment,
-                    config.currency,
-                    config.session_type,
-                    replay_session
-                )?
+                symbol_init()
+                    .symbol(symbol)
+                    .maybe_adjustment(adjustment)
+                    .maybe_currency(currency)
+                    .maybe_session_type(session_type)
+                    .maybe_replay(replay_session)
+                    .call()?
             ),
         )
         .await?;
@@ -854,8 +875,7 @@ impl WebSocketClient {
         Ok(())
     }
 
-    // End TradingView WebSocket methods
-
+    #[builder]
     pub async fn set_replay(
         &self,
         symbol: &str,
@@ -867,18 +887,29 @@ impl WebSocketClient {
         let replay_session = gen_session_id("rs");
 
         self.create_replay_session(&replay_session).await?;
-        self.add_replay_series(&replay_session, &replay_series_id, symbol, options)
+        self.add_replay_series()
+            .session(&replay_session)
+            .series_id(&replay_series_id)
+            .symbol(symbol)
+            .interval(options.interval)
+            .maybe_adjustment(options.adjustment)
+            .maybe_currency(options.currency)
+            .maybe_session_type(options.session_type)
+            .call()
             .await?;
+
         self.replay_reset(&replay_session, &replay_series_id, options.replay_from)
             .await?;
-        self.resolve_symbol(
-            chart_session,
-            symbol_series_id,
-            &options.symbol,
-            options,
-            Some(&replay_session),
-        )
-        .await?;
+
+        self.resolve_symbol()
+            .symbol(options.symbol.as_str())
+            .session(chart_session)
+            .symbol_series_id(symbol_series_id)
+            .maybe_adjustment(options.adjustment)
+            .maybe_currency(options.currency)
+            .replay_session(&replay_session)
+            .call()
+            .await?;
 
         Ok(())
     }
@@ -897,9 +928,10 @@ impl WebSocketClient {
             .fetch(&study.script_id, &study.script_version, study.script_type)
             .await?;
 
-        let key = Ustr::from(&indicator.metadata.data.id);
-
-        self.data_handler.metadata.studies.insert(key, study_id);
+        self.data_handler
+            .metadata
+            .studies
+            .insert(indicator.metadata.data.id, study_id);
 
         self.create_study(chart_session, &study_id, series_id, indicator)
             .await?;
@@ -916,21 +948,35 @@ impl WebSocketClient {
         self.create_chart_session(&chart_session).await?;
 
         if options.replay_mode {
-            self.set_replay(&symbol, options, &chart_session, &symbol_series_id)
+            self.set_replay()
+                .symbol(&symbol)
+                .options(options)
+                .chart_session(&chart_session)
+                .symbol_series_id(&symbol_series_id)
+                .call()
                 .await?;
         } else {
-            self.resolve_symbol(&chart_session, &symbol_series_id, &symbol, options, None)
+            self.resolve_symbol()
+                .session(&chart_session)
+                .symbol_series_id(&symbol_series_id)
+                .symbol(&symbol)
+                .maybe_adjustment(options.adjustment)
+                .maybe_currency(options.currency)
+                .maybe_session_type(options.session_type)
+                .call()
                 .await?;
         }
 
-        self.create_series(
-            &chart_session,
-            &series_id,
-            &series_version,
-            &symbol_series_id,
-            options,
-        )
-        .await?;
+        self.create_series()
+            .session(&chart_session)
+            .series_id(&series_id)
+            .series_version(&series_version)
+            .series_symbol_id(&symbol_series_id)
+            .interval(options.interval)
+            .bar_count(options.bar_count)
+            .maybe_range(options.range)
+            .call()
+            .await?;
 
         if let Some(study) = options.study_config {
             self.set_study(study, &chart_session, &series_id).await?;
@@ -1067,10 +1113,6 @@ impl Socket for WebSocketClient {
             }
             Message::Ping(msg) => {
                 trace!("Received ping message: {:?}", msg);
-                // // Send pong response
-                if let Err(e) = self.ping(&Message::Pong("".into())).await {
-                    warn!("Failed to send pong response: {}", e);
-                }
             }
             Message::Pong(msg) => {
                 trace!("Received pong message: {:?}", msg);

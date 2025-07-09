@@ -33,13 +33,13 @@ impl std::fmt::Display for BuiltinIndicators {
 #[serde(rename_all = "camelCase")]
 pub struct PineInfo {
     pub user_id: i64,
-    pub script_name: String,
-    pub script_source: String,
+    pub script_name: Ustr,
+    pub script_source: Ustr,
     #[serde(rename(deserialize = "scriptIdPart"))]
-    pub script_id: String,
-    pub script_access: String,
+    pub script_id: Ustr,
+    pub script_access: Ustr,
     #[serde(rename(deserialize = "version"))]
-    pub script_version: String,
+    pub script_version: Ustr,
     pub extra: PineInfoExtra,
 }
 
@@ -47,8 +47,8 @@ pub struct PineInfo {
 #[serde(default, rename_all = "camelCase")]
 pub struct PineInfoExtra {
     pub financial_period: Option<FinancialPeriod>,
-    pub fund_id: Option<String>,
-    pub fundamental_category: Option<String>,
+    pub fund_id: Option<Ustr>,
+    pub fundamental_category: Option<Ustr>,
     pub is_auto: bool,
     pub is_beta: bool,
     pub is_built_in: bool,
@@ -59,10 +59,10 @@ pub struct PineInfoExtra {
     pub is_new: bool,
     pub is_pine_editor_new_template: bool,
     pub is_updated: bool,
-    pub kind: String,
-    pub short_description: String,
+    pub kind: Ustr,
+    pub short_description: Ustr,
     pub source_inputs_count: i64,
-    pub tags: Vec<String>,
+    pub tags: Vec<Ustr>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -136,37 +136,37 @@ pub struct PineMetadataInfo {
     pub is_tv_script_stub: bool,
     pub is_price_study: bool,
     pub inputs: Vec<PineInput>,
-    pub defaults: HashMap<String, Value>,
-    pub palettes: HashMap<String, Value>,
-    pub pine: HashMap<String, String>,
+    pub defaults: HashMap<Ustr, Value>,
+    pub palettes: HashMap<Ustr, Value>,
+    pub pine: HashMap<Ustr, Ustr>,
     pub plots: Vec<Plot>,
-    pub styles: HashMap<String, Value>,
+    pub styles: HashMap<Ustr, Value>,
     pub uses_private_lib: bool,
     pub warnings: Vec<Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default, Copy)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Plot {
-    pub id: String,
-    pub plot_type: String,
-    pub target: Option<String>,
+    pub id: Ustr,
+    pub plot_type: Ustr,
+    pub target: Option<Ustr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PineInput {
-    pub name: String,
-    pub inline: String,
-    pub id: String,
+    pub name: Ustr,
+    pub inline: Ustr,
+    pub id: Ustr,
     pub defval: Value,
     pub is_hidden: bool,
     pub is_fake: bool,
     pub optional: bool,
-    pub options: Vec<String>,
-    pub tooltip: Option<String>,
+    pub options: Vec<Ustr>,
+    pub tooltip: Option<Ustr>,
     #[serde(rename(deserialize = "type"))]
-    pub input_type: String,
+    pub input_type: Ustr,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize, Copy)]
@@ -276,7 +276,7 @@ impl PineIndicator {
                 IndicatorInput::IndicatorInput(InputValue {
                     v: input.defval.clone(),
                     f: Value::from(input.is_fake),
-                    t: Value::from(input.input_type.clone()),
+                    t: Value::from(input.input_type.to_string()),
                 }),
             );
         });

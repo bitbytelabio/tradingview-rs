@@ -4,6 +4,7 @@ use crate::{
     models::{MarketAdjustment, SessionType},
 };
 use base64::engine::{Engine as _, general_purpose::STANDARD as BASE64};
+use bon::builder;
 use iso_currency::Currency;
 use rand::{Rng, distr::Alphanumeric};
 use regex::Regex;
@@ -117,7 +118,7 @@ pub fn format_packet<T: Serialize>(packet: T) -> Result<Message> {
     Ok(Message::Text(formatted_message.into()))
 }
 
-#[inline]
+#[builder]
 pub fn symbol_init(
     symbol: &str,
     adjustment: Option<MarketAdjustment>,
@@ -204,17 +205,17 @@ mod tests {
 
     #[test]
     fn test_symbol_init() {
-        let test1 = symbol_init("NSE:NIFTY", None, None, None, None);
+        let test1 = symbol_init().symbol("NSE:NIFTY").call();
         assert!(test1.is_ok());
         assert_eq!(test1.unwrap(), r#"={"symbol":"NSE:NIFTY"}"#.to_string());
 
-        let test2 = symbol_init(
-            "HOSE:FPT",
-            Some(MarketAdjustment::Dividends),
-            Some(Currency::USD),
-            Some(SessionType::Extended),
-            Some("aaaaaaaaaaaa"),
-        );
+        let test2 = symbol_init()
+            .symbol("HOSE:FPT")
+            .adjustment(MarketAdjustment::Dividends)
+            .currency(Currency::USD)
+            .session_type(SessionType::Extended)
+            .replay("aaaaaaaaaaaa")
+            .call();
         assert!(test2.is_ok());
         let test2_json: Value = serde_json::from_str(&test2.unwrap().replace('=', "")).unwrap();
         let expected2_json = json!({

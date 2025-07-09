@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ustr::{Ustr, ustr};
 
+use crate::chart::options::Range;
 use crate::{
     ChartOptions, DataPoint, Error, Interval, QuoteValue, Result, StudyOptions, StudyResponseData,
     SymbolInfo, Timezone, pine_indicator::PineIndicator, websocket::SeriesInfo,
@@ -48,6 +49,9 @@ pub enum Command {
     CreateQuoteSession,
     DeleteQuoteSession,
     SetQuoteFields,
+    SendRawMessage {
+        message: Ustr,
+    },
     FastSymbols {
         symbols: Vec<Ustr>,
     },
@@ -102,14 +106,18 @@ pub enum Command {
         series_id: Ustr,
         series_version: Ustr,
         series_symbol_id: Ustr,
-        config: ChartOptions,
+        interval: Interval,
+        bar_count: u64,
+        range: Option<Range>,
     },
     ModifySeries {
         session: Ustr,
         series_id: Ustr,
         series_version: Ustr,
         series_symbol_id: Ustr,
-        config: ChartOptions,
+        interval: Interval,
+        bar_count: u64,
+        range: Option<Range>,
     },
     RemoveSeries {
         session: Ustr,
@@ -159,6 +167,54 @@ pub enum Command {
 }
 
 impl Command {
+    pub fn ping() -> Self {
+        Self::Ping
+    }
+
+    pub fn set_auth_token<S: AsRef<str>>(auth_token: S) -> Self {
+        Self::SetAuthToken {
+            auth_token: ustr(auth_token.as_ref()),
+        }
+    }
+
+    pub fn set_locals<S: AsRef<str>>(language: S, country: S) -> Self {
+        Self::SetLocals {
+            language: ustr(language.as_ref()),
+            country: ustr(country.as_ref()),
+        }
+    }
+
+    pub fn set_data_quality<S: AsRef<str>>(quality: S) -> Self {
+        Self::SetDataQuality {
+            quality: ustr(quality.as_ref()),
+        }
+    }
+
+    pub fn set_timezone<S: AsRef<str>>(session: S, timezone: Timezone) -> Self {
+        Self::SetTimeZone {
+            session: ustr(session.as_ref()),
+            timezone,
+        }
+    }
+
+    pub fn create_quote_session() -> Self {
+        Self::CreateQuoteSession
+    }
+
+    pub fn delete_quote_session() -> Self {
+        Self::DeleteQuoteSession
+    }
+
+    pub fn set_quote_fields() -> Self {
+        Self::SetQuoteFields
+    }
+
+    pub fn send_raw_message<S: AsRef<str>>(message: S) -> Self {
+        Self::SendRawMessage {
+            message: ustr(message.as_ref()),
+        }
+    }
+
     /// Create AddSymbols command from string slice
     pub fn add_symbols<S: AsRef<str>>(symbols: &[S]) -> Self {
         Self::AddSymbols {
@@ -195,11 +251,6 @@ impl Command {
     /// Create Delete command
     pub fn delete() -> Self {
         Self::Delete
-    }
-
-    /// Create DeleteQuoteSession command
-    pub fn delete_quote_session() -> Self {
-        Self::DeleteQuoteSession
     }
 }
 

@@ -173,8 +173,8 @@ async fn run_simple_example(command_tx: CommandTx) -> anyhow::Result<()> {
         .interval(Interval::OneDay)
         .bar_count(20)
         .study_config(StudyOptions {
-            script_id: (&buildins[0].script_id).into(),
-            script_version: (&buildins[0].script_version).into(),
+            script_id: buildins[0].script_id,
+            script_version: buildins[0].script_version,
             script_type: ScriptType::IntervalScript,
         })
         .build();

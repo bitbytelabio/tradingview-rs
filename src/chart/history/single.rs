@@ -20,7 +20,7 @@ use tokio::{
     time::timeout,
 };
 use tokio_util::sync::CancellationToken;
-use ustr::{Ustr, ustr};
+use ustr::ustr;
 
 #[derive(Debug)]
 pub enum CompletionSignal {
@@ -81,7 +81,6 @@ pub async fn retrieve(
     #[builder(default = Duration::from_secs(30))] timeout_duration: Duration,
 ) -> Result<(SymbolInfo, Vec<DataPoint>)> {
     let auth_token = resolve_auth_token(auth_token)?;
-    let range: Option<Ustr> = range.map(|r| r.into());
 
     let (symbol, exchange) = extract_symbol_exchange(ticker, symbol, exchange)?;
 
