@@ -1,4 +1,3 @@
-// TODO: FIX this shit is very buggy
 use crate::{
     DataPoint, DataServer, Error, Interval, MarketSymbol, OHLCV as _, Result, SymbolInfo,
     chart::ChartOptions,
@@ -38,295 +37,141 @@ pub enum BatchCompletionSignal {
     Timeout,
 }
 
-/// Tracks completion state and errors for batch processing
+/// Simplified batch tracker using patterns from single implementation
 #[derive(Debug, Clone)]
 struct BatchTracker {
-    remaining: Arc<AtomicUsize>,
-    errors: Arc<Mutex<Vec<Ustr>>>,
-    completed: Arc<Mutex<Vec<Ustr>>>,
-    empty: Arc<Mutex<Vec<Ustr>>>,
-    // Track mapping between series ID and symbol
-    series_map: Arc<DashMap<Ustr, Ustr>>,
-    // Track completed series IDs
-    completed_series: Arc<Mutex<Vec<Ustr>>>,
+    total_symbols: usize,
+    completed_symbols: Arc<DashMap<Ustr, bool>>,
+    is_complete: Arc<AtomicBool>,
     completion_tx: Arc<Mutex<Option<oneshot::Sender<BatchCompletionSignal>>>>,
-    // Track if we've received any data at all
-    any_data_received: Arc<AtomicBool>,
-    // Track timeout for completion
-    last_activity: Arc<Mutex<std::time::Instant>>,
-    // Track series that have received substantial data (initial load)
-    series_initial_load: Arc<DashMap<Ustr, bool>>,
-    // Track last data size for each series
-    series_data_count: Arc<DashMap<Ustr, usize>>,
+    error_count: Arc<AtomicUsize>,
+
+    // Series tracking
+    series_to_symbol: Arc<DashMap<Ustr, Ustr>>,
 }
 
 impl BatchTracker {
-    fn new(count: usize, completion_tx: oneshot::Sender<BatchCompletionSignal>) -> Self {
+    fn new(symbol_count: usize, completion_tx: oneshot::Sender<BatchCompletionSignal>) -> Self {
         Self {
-            remaining: Arc::new(AtomicUsize::new(count)),
-            errors: Arc::new(Mutex::new(Vec::new())),
-            completed: Arc::new(Mutex::new(Vec::new())),
-            empty: Arc::new(Mutex::new(Vec::new())),
-            series_map: Arc::new(DashMap::new()),
-            completed_series: Arc::new(Mutex::new(Vec::new())),
+            total_symbols: symbol_count,
+            completed_symbols: Arc::new(DashMap::with_capacity(symbol_count)),
+            is_complete: Arc::new(AtomicBool::new(false)),
             completion_tx: Arc::new(Mutex::new(Some(completion_tx))),
-            any_data_received: Arc::new(AtomicBool::new(false)),
-            last_activity: Arc::new(Mutex::new(std::time::Instant::now())),
-            series_initial_load: Arc::new(DashMap::new()),
-            series_data_count: Arc::new(DashMap::new()),
+            error_count: Arc::new(AtomicUsize::new(0)),
+            series_to_symbol: Arc::new(DashMap::with_capacity(symbol_count)),
         }
     }
 
-    async fn check_initial_load_complete(&self, series_id: &str, data_count: usize) -> bool {
-        let series_id_ustr = ustr(series_id);
-
-        // Get previous count
-        let prev_count = self
-            .series_data_count
-            .get(&series_id_ustr)
-            .map(|v| *v)
-            .unwrap_or(0);
-
-        // Update current count
-        self.series_data_count.insert(series_id_ustr, data_count);
-
-        // More conservative approach: require at least 50 points for initial load
-        // or substantial data with minimal growth pattern
-        let is_initial_load = data_count >= 50 && prev_count < 50;
-        let is_minimal_growth =
-            prev_count >= 50 && data_count > prev_count && (data_count - prev_count) <= 3;
-
-        if is_initial_load || is_minimal_growth {
-            if !self.series_initial_load.contains_key(&series_id_ustr) {
-                self.series_initial_load.insert(series_id_ustr, true);
-                tracing::debug!(
-                    "Series {} initial load complete (count: {}, prev: {})",
-                    series_id,
-                    data_count,
-                    prev_count
-                );
-                return true;
-            }
-        }
-
-        false
-    }
-    async fn mark_series_ready(&self, series_id: &str, has_data: bool) -> bool {
-        let series_id_ustr = ustr(series_id);
-        let mut done_series = self.completed_series.lock().await;
-        let mut completed = self.completed.lock().await;
-
-        // Check if already completed
-        if done_series.contains(&series_id_ustr) {
-            tracing::debug!("Series {} already marked ready", series_id);
-            return self.remaining.load(Ordering::Relaxed) == 0;
-        }
-
-        done_series.push(series_id_ustr);
-
-        // Get symbol for this series
-        let symbol = self
-            .series_map
-            .get(&series_id_ustr)
-            .map(|entry| *entry)
-            .unwrap_or_else(|| ustr(&format!("unknown_{series_id}")));
-
-        let remaining = self.remaining.fetch_sub(1, Ordering::Relaxed) - 1;
-        completed.push(symbol);
-
-        if !has_data {
-            let mut empty = self.empty.lock().await;
-            empty.push(symbol);
-            tracing::warn!(
-                "Series {} (symbol {}) completed with no data",
-                series_id,
-                symbol
-            );
-        }
-
-        self.update_activity().await;
-
-        tracing::debug!(
-            "Series {} (symbol {}) marked ready, remaining: {}",
-            series_id,
-            symbol,
-            remaining
-        );
-
-        let is_done = remaining == 0;
-        if is_done {
-            self.signal_completion(BatchCompletionSignal::Success).await;
-        }
-        is_done
-    }
-
-    async fn check_all_series_ready(&self) -> bool {
-        let series_count = self.series_map.len();
-        let ready_count = self.series_initial_load.len();
-        let expected_series = self.remaining.load(Ordering::Relaxed) + ready_count;
-
-        tracing::debug!(
-            "Series ready check: {}/{} series have initial loads (expected: {})",
-            ready_count,
-            series_count,
-            expected_series
-        );
-
-        // Only complete when ALL expected series have received their initial loads
-        // AND we have data for all of them
-        if series_count >= expected_series && ready_count >= expected_series && expected_series > 0
-        {
-            let any_data = self.any_data_received.load(Ordering::Relaxed);
-            if any_data {
-                tracing::info!(
-                    "All {} series have received initial data loads",
-                    expected_series
-                );
-                self.force_completion("all series have initial data").await;
-                return true;
-            }
-        }
-
-        false
-    }
-
-    async fn update_activity(&self) {
-        let mut last_activity = self.last_activity.lock().await;
-        *last_activity = std::time::Instant::now();
-    }
-
-    async fn register_series(&self, series_id: &str, symbol: &str) {
-        self.series_map.insert(ustr(series_id), ustr(symbol));
-        self.update_activity().await;
+    fn register_series(&self, series_id: Ustr, symbol: Ustr) {
+        self.series_to_symbol.insert(series_id, symbol);
         tracing::debug!("Registered series {} for symbol {}", series_id, symbol);
     }
 
-    fn mark_data_received(&self) {
-        self.any_data_received.store(true, Ordering::Relaxed);
-    }
+    fn mark_symbol_complete(&self, symbol: Ustr) {
+        if self.is_complete.load(Ordering::Relaxed) {
+            return;
+        }
 
-    // Add method to force completion after timeout
-    async fn force_completion(&self, reason: &str) {
-        let remaining = self.remaining.load(Ordering::Relaxed);
-        if remaining > 0 {
-            tracing::warn!(
-                "Force completing batch: {} (remaining: {})",
-                reason,
-                remaining
+        if self.completed_symbols.insert(symbol, true).is_none() {
+            let completed_count = self.completed_symbols.len();
+            tracing::debug!(
+                "Symbol {} completed ({}/{})",
+                symbol,
+                completed_count,
+                self.total_symbols
             );
-            // Set remaining to 0 to prevent further completions
-            self.remaining.store(0, Ordering::Relaxed);
 
-            let any_data = self.any_data_received.load(Ordering::Relaxed);
-            if any_data {
-                self.signal_completion(BatchCompletionSignal::Success).await;
-            } else {
-                self.signal_completion(BatchCompletionSignal::Timeout).await;
+            // Check for overall completion
+            if completed_count >= self.total_symbols {
+                self.try_complete(BatchCompletionSignal::Success);
             }
         }
     }
 
     async fn add_error(&self, error: Ustr) {
-        let mut errors = self.errors.lock().await;
-        errors.push(error);
+        if self.is_complete.load(Ordering::Relaxed) {
+            return;
+        }
 
-        let remaining = self.remaining.fetch_sub(1, Ordering::Relaxed) - 1;
-        self.update_activity().await;
+        let error_count = self.error_count.fetch_add(1, Ordering::Relaxed) + 1;
+        tracing::error!("Batch error ({}): {}", error_count, error);
 
-        tracing::error!("Error: {}, remaining: {}", error, remaining);
-
-        if remaining == 0 {
-            self.signal_completion(BatchCompletionSignal::Error(error))
-                .await;
+        // Signal completion on critical errors or too many errors
+        if error_count >= 5 {
+            self.try_complete(BatchCompletionSignal::Error(error));
         }
     }
 
-    async fn signal_completion(&self, signal: BatchCompletionSignal) {
-        if let Some(sender) = self.completion_tx.lock().await.take() {
-            if let Err(e) = sender.send(signal) {
-                tracing::error!("Failed to send batch completion signal: {:?}", e);
+    fn try_complete(&self, signal: BatchCompletionSignal) {
+        if self
+            .is_complete
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            // First to complete - send signal
+            if let Ok(mut sender) = self.completion_tx.try_lock() {
+                if let Some(tx) = sender.take() {
+                    let _ = tx.send(signal);
+                }
             }
         }
-    }
-
-    async fn check_timeout(&self, timeout_secs: u64) -> bool {
-        let last_activity = self.last_activity.lock().await;
-        let elapsed = last_activity.elapsed();
-
-        if elapsed > Duration::from_secs(timeout_secs) {
-            drop(last_activity); // Release lock before calling force_completion
-
-            let any_data = self.any_data_received.load(Ordering::Relaxed);
-            if any_data {
-                self.force_completion(&format!(
-                    "timeout after {}s with partial data",
-                    elapsed.as_secs()
-                ))
-                .await;
-            } else {
-                self.force_completion(&format!(
-                    "timeout after {}s with no data",
-                    elapsed.as_secs()
-                ))
-                .await;
-            }
-            return true;
-        }
-        false
     }
 
     fn is_done(&self) -> bool {
-        self.remaining.load(Ordering::Relaxed) == 0
+        self.is_complete.load(Ordering::Relaxed)
     }
 
-    async fn summary(&self) -> (Vec<Ustr>, Vec<Ustr>, Vec<Ustr>) {
-        let errors = self.errors.lock().await.clone();
-        let completed = self.completed.lock().await.clone();
-        let empty = self.empty.lock().await.clone();
-        (errors, completed, empty)
+    fn get_completion_stats(&self) -> (usize, usize, usize) {
+        let completed = self.completed_symbols.len();
+        let errors = self.error_count.load(Ordering::Relaxed);
+        (completed, self.total_symbols, errors)
     }
 }
 
 #[derive(Debug, Clone)]
 struct BatchDataCollector {
-    pub data: Arc<DashMap<Ustr, Vec<DataPoint>>>,
-    pub symbol_info: Arc<DashMap<Ustr, SymbolInfo>>,
-    pub series_info: Arc<DashMap<Ustr, SeriesInfo>>,
-    pub data_received: Arc<DashMap<Ustr, bool>>, // Track which series received data
+    data: Arc<DashMap<Ustr, Vec<DataPoint>>>,
+    symbol_info: Arc<DashMap<Ustr, SymbolInfo>>,
+    series_info: Arc<DashMap<Ustr, SeriesInfo>>,
 }
 
 impl BatchDataCollector {
-    fn new() -> Self {
+    fn new(expected_symbols: usize) -> Self {
         Self {
-            data: Arc::new(DashMap::new()),
-            symbol_info: Arc::new(DashMap::new()),
-            series_info: Arc::new(DashMap::new()),
-            data_received: Arc::new(DashMap::new()),
-        }
-    }
-}
-
-/// Extract series ID from completion message (cs_* pattern)
-fn extract_series_id(msg: &[Value]) -> Option<Ustr> {
-    if msg.is_empty() {
-        tracing::warn!("Empty completion message");
-        return None;
-    }
-
-    // Look for series ID in message
-    for value in msg {
-        if let Some(s) = value.as_str() {
-            if s.starts_with("cs_") {
-                return Some(ustr(s));
-            }
+            data: Arc::new(DashMap::with_capacity(expected_symbols)),
+            symbol_info: Arc::new(DashMap::with_capacity(expected_symbols)),
+            series_info: Arc::new(DashMap::with_capacity(expected_symbols)),
         }
     }
 
-    tracing::warn!("No series ID found in: {:?}", msg);
-    None
+    fn add_data_points(&self, symbol: Ustr, points: Vec<DataPoint>) -> usize {
+        let mut entry = self
+            .data
+            .entry(symbol)
+            .or_insert_with(|| Vec::with_capacity(1000));
+        entry.extend(points);
+        entry.len()
+    }
+
+    fn add_symbol_info(&self, symbol_info: SymbolInfo) {
+        self.symbol_info.insert(symbol_info.id, symbol_info);
+    }
+
+    fn add_series_info(&self, symbol: Ustr, series_info: SeriesInfo) {
+        self.series_info.insert(symbol, series_info);
+    }
 }
 
-/// Set up and initialize WebSocket connection
+// Reuse helper functions from single implementation
+fn extract_series_id(message: &[Value]) -> Option<Ustr> {
+    message
+        .iter()
+        .find_map(|v| v.as_str())
+        .filter(|s| s.starts_with("cs_"))
+        .map(ustr)
+}
+
+/// Set up and initialize WebSocket connection (reused from single)
 async fn setup_websocket(
     auth_token: &str,
     server: Option<DataServer>,
@@ -342,7 +187,7 @@ async fn setup_websocket(
     Ok(websocket)
 }
 
-/// Send initial commands to set up the trading session
+/// Send initial session setup commands
 async fn setup_initial_session(cmd_tx: &CommandTx) -> Result<()> {
     // Create quote session
     cmd_tx
@@ -357,7 +202,7 @@ async fn setup_initial_session(cmd_tx: &CommandTx) -> Result<()> {
     Ok(())
 }
 
-/// Send market setup commands in smaller batches with longer delays
+/// Send market setup commands in batches
 async fn setup_markets_in_batches(
     cmd_tx: &CommandTx,
     symbols: &[impl MarketSymbol],
@@ -366,7 +211,7 @@ async fn setup_markets_in_batches(
     num_bars: Option<u64>,
     batch_size: usize,
 ) -> Result<()> {
-    let mut commands = Vec::new();
+    let mut commands = Vec::with_capacity(symbols.len());
 
     // Prepare all market commands
     for symbol in symbols {
@@ -382,10 +227,9 @@ async fn setup_markets_in_batches(
         commands.push(Command::set_market(options));
     }
 
-    // Use smaller batch size to reduce connection pressure
-    let effective_batch_size = batch_size.min(5); // Reduced further
+    // Send commands in batches with delays
+    let effective_batch_size = batch_size.min(10);
 
-    // Send commands in smaller batches with longer delays
     for (idx, chunk) in commands.chunks(effective_batch_size).enumerate() {
         tracing::debug!("Processing batch {} with {} symbols", idx + 1, chunk.len());
 
@@ -394,16 +238,16 @@ async fn setup_markets_in_batches(
                 .send(cmd.clone())
                 .map_err(|_| Error::Internal(ustr("Failed to send set_market command")))?;
 
-            // Small delay between individual commands
+            // Small delay between commands
             if cmd_idx < chunk.len() - 1 {
-                sleep(Duration::from_millis(500)).await;
+                sleep(Duration::from_millis(200)).await;
             }
         }
 
-        // Longer wait between batches to reduce server load
+        // Wait between batches
         if idx < commands.len().div_ceil(effective_batch_size) - 1 {
-            sleep(Duration::from_secs(5)).await; // Increased delay
-            tracing::debug!("Batch {} done, waiting 5s", idx + 1);
+            sleep(Duration::from_secs(2)).await;
+            tracing::debug!("Batch {} done, waiting 2s", idx + 1);
         }
     }
 
@@ -411,98 +255,109 @@ async fn setup_markets_in_batches(
     Ok(())
 }
 
-/// Process incoming TradingViewResponse messages for batch processing
+/// Process batch data events - simplified using single implementation patterns
 async fn process_batch_data_events(
     mut data_rx: DataRx,
     collector: BatchDataCollector,
     tracker: BatchTracker,
 ) {
-    // Start timeout checker task with more conservative timeout
-    let timeout_tracker = tracker.clone();
-    let timeout_task = spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(5));
-        loop {
-            interval.tick().await;
-            if timeout_tracker.check_timeout(60).await {
-                // Increased to 60s
-                break;
-            }
-            if timeout_tracker.is_done() {
-                break;
-            }
-        }
-    });
-
-    // Start a task to check for completion based on data patterns - less aggressive
-    let pattern_tracker = tracker.clone();
-    let pattern_task = spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(10)); // Increased interval
-        loop {
-            interval.tick().await;
-            if pattern_tracker.check_all_series_ready().await {
-                break;
-            }
-            if pattern_tracker.is_done() {
-                break;
-            }
-        }
-    });
-
     let mut message_count = 0;
-    let mut no_data_count = 0;
 
     while let Some(response) = data_rx.recv().await {
-        message_count += 1;
-
-        // Log less frequently to reduce noise
-        if message_count % 10 == 1 {
-            tracing::debug!("Received batch data response #{}", message_count);
+        if tracker.is_done() {
+            tracing::debug!("Tracker done, stopping message processing");
+            break;
         }
+
+        message_count += 1;
 
         match response {
             TradingViewResponse::ChartData(series_info, data_points) => {
-                handle_batch_chart_data(&collector, &tracker, series_info, data_points).await;
-                no_data_count = 0; // Reset no-data counter
+                handle_chart_data(&collector, &tracker, series_info, data_points).await;
             }
             TradingViewResponse::SymbolInfo(symbol_info) => {
-                handle_batch_symbol_info(&collector, symbol_info).await;
-                tracker.update_activity().await;
+                collector.add_symbol_info(symbol_info);
             }
             TradingViewResponse::SeriesCompleted(message) => {
-                handle_batch_series_completed(&collector, &tracker, message).await;
+                handle_series_completed(&tracker, &message).await;
             }
             TradingViewResponse::Error(error, message) => {
-                handle_batch_error(&tracker, error, message).await;
-                // Don't break on errors, continue processing
+                handle_error(&tracker, error, message).await;
             }
             _ => {
-                tracing::debug!("Received unhandled response type: {:?}", response);
-                tracker.update_activity().await;
-                no_data_count += 1;
-
-                // If we get too many non-data messages in a row, check if we should timeout
-                if no_data_count > 50 {
-                    tracing::warn!("Received {} consecutive non-data messages", no_data_count);
-                    if tracker.check_all_series_ready().await {
-                        break;
-                    }
-                }
+                // Handle other response types
+                tracing::debug!("Received unhandled response type");
             }
         }
 
-        // Check if we're done
-        if tracker.is_done() {
-            tracing::debug!("All series completed, stopping data receiver");
-            break;
+        // Periodic logging
+        if message_count % 50 == 0 {
+            let (completed, total, errors) = tracker.get_completion_stats();
+            tracing::debug!(
+                "Processed {} messages, {}/{} symbols completed, {} errors",
+                message_count,
+                completed,
+                total,
+                errors
+            );
         }
     }
 
-    timeout_task.abort();
-    pattern_task.abort();
     tracing::debug!(
-        "Batch data receiver task completed after {} messages",
+        "Batch data processing completed after {} messages",
         message_count
     );
+}
+
+async fn handle_chart_data(
+    collector: &BatchDataCollector,
+    tracker: &BatchTracker,
+    series_info: SeriesInfo,
+    data_points: Vec<DataPoint>,
+) {
+    if data_points.is_empty() {
+        return;
+    }
+
+    let symbol = ustr(&format!(
+        "{}:{}",
+        series_info.options.exchange, series_info.options.symbol
+    ));
+    let series_id = ustr(&series_info.chart_session);
+
+    // Register series mapping
+    tracker.register_series(series_id, symbol);
+
+    // Store series info and data
+    collector.add_series_info(symbol, series_info);
+    let total_count = collector.add_data_points(symbol, data_points.clone());
+
+    tracing::debug!(
+        "Received {} points for {} (total: {})",
+        data_points.len(),
+        symbol,
+        total_count
+    );
+}
+
+async fn handle_series_completed(tracker: &BatchTracker, message: &[Value]) {
+    if let Some(series_id) = extract_series_id(message) {
+        if let Some(entry) = tracker.series_to_symbol.get(&series_id) {
+            let symbol = *entry.value();
+            tracing::debug!("Series {} completed for symbol {}", series_id, symbol);
+            tracker.mark_symbol_complete(symbol);
+        }
+    }
+}
+
+async fn handle_error(tracker: &BatchTracker, error: Error, message: Vec<Value>) {
+    tracing::error!("WebSocket error: {:?} - {:?}", error, message);
+
+    // Use same critical error logic as single implementation
+    if is_critical_error(&error) {
+        let error_msg = ustr(&format!("Critical error: {error:?}"));
+        tracker.add_error(error_msg).await;
+    }
 }
 
 fn is_critical_error(error: &Error) -> bool {
@@ -510,122 +365,11 @@ fn is_critical_error(error: &Error) -> bool {
         error,
         Error::TradingView {
             source: TradingViewError::CriticalError
-        } | Error::Internal(_) if error.to_string().contains("authentication")
-    )
+        } | Error::WebSocket(_)
+    ) || matches!(error, Error::Internal(_)) && error.to_string().contains("authentication")
 }
 
-async fn handle_batch_chart_data(
-    collector: &BatchDataCollector,
-    tracker: &BatchTracker,
-    series_info: SeriesInfo,
-    data_points: Vec<DataPoint>,
-) {
-    let symbol = ustr(&format!(
-        "{}:{}",
-        series_info.options.exchange, series_info.options.symbol
-    ));
-    let series_id = ustr(series_info.chart_session.as_ref());
-
-    // Only log for substantial data batches
-    if data_points.len() > 5 {
-        tracing::debug!(
-            "Received {} points for series {} (symbol {})",
-            data_points.len(),
-            series_id,
-            symbol
-        );
-    }
-
-    // Mark that we've received data
-    tracker.mark_data_received();
-
-    // Register series to symbol mapping
-    tracker
-        .register_series(series_id.as_ref(), symbol.as_ref())
-        .await;
-
-    // Store series info
-    collector.series_info.insert(symbol, series_info);
-
-    // Store data points
-    let total_points = {
-        let mut entry = collector.data.entry(symbol).or_default();
-        entry.extend(data_points.iter().cloned());
-        entry.len()
-    };
-
-    // Track data received
-    collector
-        .data_received
-        .insert(series_id, !data_points.is_empty());
-
-    // Check if this series has received its initial load
-    if tracker
-        .check_initial_load_complete(series_id.as_ref(), total_points)
-        .await
-    {
-        tracker
-            .mark_series_ready(series_id.as_ref(), total_points > 0)
-            .await;
-    }
-
-    // Only check all series ready for substantial data batches
-    if data_points.len() > 5 {
-        tracker.check_all_series_ready().await;
-    }
-
-    if data_points.is_empty() {
-        tracing::warn!("Empty data for series {} (symbol {})", series_id, symbol);
-    }
-}
-
-async fn handle_batch_symbol_info(collector: &BatchDataCollector, symbol_info: SymbolInfo) {
-    let symbol = symbol_info.id;
-    tracing::debug!("Received symbol info for {}: {:?}", symbol, symbol_info);
-    collector.symbol_info.insert(symbol, symbol_info);
-}
-
-async fn handle_batch_series_completed(
-    collector: &BatchDataCollector,
-    tracker: &BatchTracker,
-    message: Vec<Value>,
-) {
-    tracing::debug!("Series completed: {:?}", message);
-
-    // Extract series ID but don't rely on completion messages for batch completion
-    if let Some(series_id) = extract_series_id(&message) {
-        tracing::debug!("Explicit completion for series {}", series_id);
-
-        // Check if series has data
-        let has_data = collector
-            .data_received
-            .get(&series_id)
-            .map(|v| *v)
-            .unwrap_or(false);
-
-        // Mark as ready if not already done
-        tracker
-            .mark_series_ready(series_id.as_ref(), has_data)
-            .await;
-    }
-
-    tracker.update_activity().await;
-}
-
-async fn handle_batch_error(tracker: &BatchTracker, error: Error, message: Vec<Value>) {
-    tracing::error!("WebSocket error: {:?} - {:?}", error, message);
-
-    // Don't treat all errors as critical - just update activity
-    tracker.update_activity().await;
-
-    // Only add to error count for truly critical errors
-    if is_critical_error(&error) {
-        let error_msg = ustr(&format!("Critical WebSocket error: {error:?}"));
-        tracker.add_error(error_msg).await;
-    }
-}
-
-/// Cleanup background tasks
+/// Cleanup background tasks (reused from single)
 async fn cleanup_batch_tasks(
     shutdown_token: CancellationToken,
     runner_task: tokio::task::JoinHandle<()>,
@@ -648,7 +392,7 @@ async fn cleanup_batch_tasks(
     tracing::debug!("Batch cleanup completed");
 }
 
-/// Retrieve historical data for multiple symbols in batches
+/// Main batch retrieval function - simplified
 #[builder]
 pub async fn retrieve(
     auth_token: Option<&str>,
@@ -657,68 +401,47 @@ pub async fn retrieve(
     range: Option<Range>,
     server: Option<DataServer>,
     num_bars: Option<u64>,
-    #[builder(default = 10)] batch_size: usize, // Reduced default batch size
-    #[builder(default = Duration::from_secs(600))] timeout_duration: Duration, // Increased timeout
+    #[builder(default = 8)] batch_size: usize,
+    #[builder(default = Duration::from_secs(180))] timeout_duration: Duration,
 ) -> Result<HashMap<String, (SymbolInfo, Vec<DataPoint>)>> {
     if symbols.is_empty() {
-        return Err(Error::Internal(ustr(
-            "No symbols provided for batch retrieval",
-        )));
+        return Err(Error::Internal(ustr("No symbols provided")));
     }
 
     let auth_token = resolve_auth_token(auth_token)?;
-    let count = symbols.len();
+    let symbol_count = symbols.len();
 
-    tracing::info!(
-        "Starting batch retrieval for {} symbols with batch size {}",
-        count,
-        batch_size
-    );
+    tracing::info!("Starting batch retrieval for {} symbols", symbol_count);
 
-    // Create completion channel
-    let (completion_tx, completion_rx) = oneshot::channel::<BatchCompletionSignal>();
-    let tracker = BatchTracker::new(count, completion_tx);
-    let collector = BatchDataCollector::new();
-
-    // Create data response channel
+    // Create components
+    let (completion_tx, completion_rx) = oneshot::channel();
+    let tracker = BatchTracker::new(symbol_count, completion_tx);
+    let collector = BatchDataCollector::new(symbol_count);
     let (data_tx, data_rx) = mpsc::unbounded_channel();
-
-    // Create command channel for sending commands to the runner
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-    // Initialize WebSocket client
+    // Setup WebSocket and command runner
     let websocket = setup_websocket(&auth_token, server, data_tx).await?;
     let websocket_shared = Arc::new(websocket);
-
-    // Create and start command runner
     let command_runner = CommandRunner::new(cmd_rx, Arc::clone(&websocket_shared));
     let shutdown_token = command_runner.shutdown_token();
+
+    // Start background tasks
     let runner_task = spawn(async move {
         if let Err(e) = command_runner.run().await {
             tracing::error!("Command runner failed: {}", e);
         }
     });
 
-    // Start data receiver task
     let data_task = spawn(process_batch_data_events(
         data_rx,
         collector.clone(),
         tracker.clone(),
     ));
 
-    // Send initial commands to set up the session
-    if let Err(e) = setup_initial_session(&cmd_tx).await {
-        cleanup_batch_tasks(shutdown_token, runner_task, data_task).await;
-        return Err(e);
-    }
-
-    // Set up markets in batches
-    if let Err(e) =
-        setup_markets_in_batches(&cmd_tx, symbols, interval, range, num_bars, batch_size).await
-    {
-        cleanup_batch_tasks(shutdown_token, runner_task, data_task).await;
-        return Err(e);
-    }
+    // Setup session and send market commands
+    setup_initial_session(&cmd_tx).await?;
+    setup_markets_in_batches(&cmd_tx, symbols, interval, range, num_bars, batch_size).await?;
 
     // Wait for completion with timeout
     let result = timeout(timeout_duration, completion_rx).await;
@@ -726,65 +449,54 @@ pub async fn retrieve(
     // Cleanup
     cleanup_batch_tasks(shutdown_token, runner_task, data_task).await;
 
+    // Process results
     match result {
-        Ok(Ok(BatchCompletionSignal::Success)) => {
-            let mut final_results = HashMap::new();
-
-            // Process collected data
-            for entry in collector.data.iter() {
-                let (symbol, data_points) = entry.pair();
-                let symbol_key = symbol.to_string();
-
-                // Get symbol info
-                let symbol_info = collector
-                    .symbol_info
-                    .get(symbol)
-                    .map(|info| info.clone())
-                    .unwrap_or_else(|| {
-                        // Create default symbol info if not found
-                        SymbolInfo {
-                            id: *symbol,
-                            ..Default::default()
-                        }
-                    });
-
-                // Clean and sort data points
-                let mut points = data_points.clone();
-                points.dedup_by_key(|point| point.timestamp());
-                points.sort_by_key(|a| a.timestamp());
-
-                final_results.insert(symbol_key, (symbol_info, points));
-            }
-
-            let (errors, completed, empty) = tracker.summary().await;
-
-            tracing::info!(
-                "Batch completed - Retrieved: {}, Completed: {}, Empty: {}, Errors: {}",
-                final_results.len(),
-                completed.len(),
-                empty.len(),
-                errors.len()
-            );
-
-            if !errors.is_empty() {
-                tracing::warn!("Errors occurred: {:?}", errors);
-            }
-
-            if !empty.is_empty() {
-                tracing::warn!("Empty symbols: {:?}", empty);
-            }
-
-            Ok(final_results)
-        }
+        Ok(Ok(BatchCompletionSignal::Success)) => build_final_results(collector, tracker).await,
         Ok(Ok(BatchCompletionSignal::Error(error))) => Err(Error::Internal(error)),
-        Ok(Ok(BatchCompletionSignal::Timeout)) => {
-            Err(Error::Timeout(ustr("Batch collection timed out")))
-        }
-        Ok(Err(_)) => Err(Error::Internal(ustr(
-            "Batch completion channel closed unexpectedly",
-        ))),
-        Err(_) => Err(Error::Timeout(ustr(
-            "Batch collection timed out after specified duration",
-        ))),
+        Ok(Ok(BatchCompletionSignal::Timeout)) => Err(Error::Timeout(ustr("Batch timeout"))),
+        Ok(Err(_)) => Err(Error::Internal(ustr("Completion channel closed"))),
+        Err(_) => Err(Error::Timeout(ustr("Overall timeout exceeded"))),
     }
+}
+
+async fn build_final_results(
+    collector: BatchDataCollector,
+    tracker: BatchTracker,
+) -> Result<HashMap<String, (SymbolInfo, Vec<DataPoint>)>> {
+    let mut results = HashMap::with_capacity(collector.data.len());
+
+    for entry in collector.data.iter() {
+        let (symbol, data_points) = entry.pair();
+        let symbol_str = symbol.to_string();
+
+        // Get symbol info or create default
+        let symbol_info = collector
+            .symbol_info
+            .get(symbol)
+            .map(|info| info.clone())
+            .unwrap_or_else(|| SymbolInfo {
+                id: *symbol,
+                ..Default::default()
+            });
+
+        // Process data points efficiently (same as single implementation)
+        let mut points = data_points.clone();
+        if points.len() > 1 {
+            points.sort_unstable_by_key(|p| p.timestamp());
+            points.dedup_by_key(|p| p.timestamp());
+        }
+
+        results.insert(symbol_str, (symbol_info, points));
+    }
+
+    let (_, total, errors) = tracker.get_completion_stats();
+
+    tracing::info!(
+        "Batch completed: {}/{} symbols retrieved, {} errors",
+        results.len(),
+        total,
+        errors,
+    );
+
+    Ok(results)
 }

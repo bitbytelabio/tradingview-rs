@@ -10,7 +10,7 @@ fn init() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
         tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::INFO)
+            .with_max_level(tracing::Level::DEBUG)
             .init();
     });
 }
