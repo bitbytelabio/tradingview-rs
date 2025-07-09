@@ -1,6 +1,7 @@
 use crate::{
     DataPoint, DataServer, Error, Interval, MarketSymbol, OHLCV as _, Result, SymbolInfo,
     chart::ChartOptions,
+    error::TradingViewError,
     history::resolve_auth_token,
     live::handler::{
         command::CommandRunner,
@@ -41,6 +42,10 @@ struct BatchTracker {
     // Track completed series IDs
     completed_series: Arc<Mutex<Vec<String>>>,
     completion_tx: Arc<Mutex<Option<oneshot::Sender<BatchCompletionSignal>>>>,
+    // Track if we've received any data at all
+    any_data_received: Arc<Mutex<bool>>,
+    // Track timeout for completion
+    last_activity: Arc<Mutex<std::time::Instant>>,
 }
 
 impl BatchTracker {
@@ -53,13 +58,27 @@ impl BatchTracker {
             series_map: Arc::new(Mutex::new(HashMap::new())),
             completed_series: Arc::new(Mutex::new(Vec::new())),
             completion_tx: Arc::new(Mutex::new(Some(completion_tx))),
+            any_data_received: Arc::new(Mutex::new(false)),
+            last_activity: Arc::new(Mutex::new(std::time::Instant::now())),
         }
+    }
+
+    async fn update_activity(&self) {
+        let mut last_activity = self.last_activity.lock().await;
+        *last_activity = std::time::Instant::now();
     }
 
     async fn register_series(&self, series_id: &str, symbol: &str) {
         let mut map = self.series_map.lock().await;
         map.insert(series_id.to_string(), symbol.to_string());
+        self.update_activity().await;
         tracing::debug!("Registered series {} for symbol {}", series_id, symbol);
+    }
+
+    async fn mark_data_received(&self) {
+        let mut received = self.any_data_received.lock().await;
+        *received = true;
+        self.update_activity().await;
     }
 
     async fn mark_completed(&self, series_id: &str, has_data: bool) -> bool {
@@ -95,6 +114,8 @@ impl BatchTracker {
             );
         }
 
+        self.update_activity().await;
+
         tracing::debug!(
             "Series {} (symbol {}) completed, remaining: {}",
             series_id,
@@ -116,6 +137,8 @@ impl BatchTracker {
         errors.push(error.clone());
         *remaining = remaining.saturating_sub(1);
 
+        self.update_activity().await;
+
         tracing::error!("Error: {}, remaining: {}", error, *remaining);
 
         if *remaining == 0 {
@@ -130,6 +153,30 @@ impl BatchTracker {
                 tracing::error!("Failed to send batch completion signal: {:?}", e);
             }
         }
+    }
+
+    async fn check_timeout(&self, timeout_secs: u64) -> bool {
+        let last_activity = self.last_activity.lock().await;
+        let elapsed = last_activity.elapsed();
+
+        if elapsed > Duration::from_secs(timeout_secs) {
+            let any_data = *self.any_data_received.lock().await;
+            if any_data {
+                // We got some data, complete with what we have
+                tracing::warn!(
+                    "Batch timeout after {}s with partial data",
+                    elapsed.as_secs()
+                );
+                self.signal_completion(BatchCompletionSignal::Success).await;
+                return true;
+            } else {
+                // No data received, this is an error
+                tracing::error!("Batch timeout after {}s with no data", elapsed.as_secs());
+                self.signal_completion(BatchCompletionSignal::Timeout).await;
+                return true;
+            }
+        }
+        false
     }
 
     async fn is_done(&self) -> bool {
@@ -215,7 +262,7 @@ async fn setup_initial_session(cmd_tx: &CommandTx) -> Result<()> {
     Ok(())
 }
 
-/// Send market setup commands in batches
+/// Send market setup commands in smaller batches with longer delays
 async fn setup_markets_in_batches(
     cmd_tx: &CommandTx,
     symbols: &[impl MarketSymbol],
@@ -240,8 +287,11 @@ async fn setup_markets_in_batches(
         commands.push(Command::set_market(options));
     }
 
-    // Send commands in batches
-    for (idx, chunk) in commands.chunks(batch_size).enumerate() {
+    // Use smaller batch size to reduce connection pressure
+    let effective_batch_size = batch_size.min(10);
+
+    // Send commands in smaller batches with longer delays
+    for (idx, chunk) in commands.chunks(effective_batch_size).enumerate() {
         tracing::debug!("Processing batch {} with {} symbols", idx + 1, chunk.len());
 
         for cmd in chunk {
@@ -250,10 +300,10 @@ async fn setup_markets_in_batches(
                 .map_err(|_| Error::Internal(ustr("Failed to send set_market command")))?;
         }
 
-        // Wait between batches (except last)
-        if idx < commands.len().div_ceil(batch_size) - 1 {
-            sleep(Duration::from_secs(2)).await;
-            tracing::debug!("Batch {} done, waiting", idx + 1);
+        // Longer wait between batches to reduce server load
+        if idx < commands.len().div_ceil(effective_batch_size) - 1 {
+            sleep(Duration::from_secs(3)).await;
+            tracing::debug!("Batch {} done, waiting 3s", idx + 1);
         }
     }
 
@@ -267,6 +317,18 @@ async fn process_batch_data_events(
     collector: BatchDataCollector,
     tracker: BatchTracker,
 ) {
+    // Start timeout checker task
+    let timeout_tracker = tracker.clone();
+    let timeout_task = spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(10));
+        loop {
+            interval.tick().await;
+            if timeout_tracker.check_timeout(120).await {
+                break;
+            }
+        }
+    });
+
     while let Some(response) = data_rx.recv().await {
         tracing::debug!("Received batch data response: {:?}", response);
 
@@ -276,19 +338,44 @@ async fn process_batch_data_events(
             }
             TradingViewResponse::SymbolInfo(symbol_info) => {
                 handle_batch_symbol_info(&collector, symbol_info).await;
+                tracker.update_activity().await;
             }
             TradingViewResponse::SeriesCompleted(message) => {
                 handle_batch_series_completed(&collector, &tracker, message).await;
             }
             TradingViewResponse::Error(error, message) => {
-                handle_batch_error(&tracker, error, message).await;
+                // Check if this is a critical error that should stop processing
+                if is_critical_error(&error) {
+                    handle_batch_error(&tracker, error, message).await;
+                    break;
+                } else {
+                    tracing::warn!("Non-critical error: {:?} - {:?}", error, message);
+                    tracker.update_activity().await;
+                }
             }
             _ => {
                 tracing::debug!("Received unhandled response type: {:?}", response);
+                tracker.update_activity().await;
             }
         }
+
+        // Check if we're done
+        if tracker.is_done().await {
+            break;
+        }
     }
+
+    timeout_task.abort();
     tracing::debug!("Batch data receiver task completed");
+}
+
+fn is_critical_error(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::TradingView {
+            source: TradingViewError::CriticalError
+        } | Error::Internal(_) if error.to_string().contains("authentication")
+    )
 }
 
 async fn handle_batch_chart_data(
@@ -309,6 +396,9 @@ async fn handle_batch_chart_data(
         series_id,
         symbol
     );
+
+    // Mark that we've received data
+    tracker.mark_data_received().await;
 
     // Register series to symbol mapping
     tracker.register_series(&series_id, &symbol).await;
@@ -378,7 +468,7 @@ async fn cleanup_batch_tasks(
     shutdown_token.cancel();
 
     // Wait for tasks to complete with timeout
-    let cleanup_timeout = Duration::from_secs(2);
+    let cleanup_timeout = Duration::from_secs(5);
 
     if let Err(e) = timeout(cleanup_timeout, runner_task).await {
         tracing::debug!("Command runner cleanup timeout: {:?}", e);
@@ -400,8 +490,8 @@ pub async fn retrieve(
     range: Option<Range>,
     server: Option<DataServer>,
     num_bars: Option<u64>,
-    #[builder(default = 40)] batch_size: usize,
-    #[builder(default = Duration::from_secs(300))] timeout_duration: Duration,
+    #[builder(default = 10)] batch_size: usize, // Reduced default batch size
+    #[builder(default = Duration::from_secs(600))] timeout_duration: Duration, // Increased timeout
 ) -> Result<HashMap<String, (SymbolInfo, Vec<DataPoint>)>> {
     if symbols.is_empty() {
         return Err(Error::Internal(ustr(
