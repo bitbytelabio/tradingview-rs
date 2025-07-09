@@ -1070,7 +1070,7 @@ impl Socket for WebSocketClient {
             Message::Ping(msg) => {
                 trace!("Received ping message: {:?}", msg);
                 // // Send pong response
-                if let Err(e) = self.ping(&Message::Pong(msg.clone())).await {
+                if let Err(e) = self.ping(&Message::Pong("".into())).await {
                     warn!("Failed to send pong response: {}", e);
                 }
             }
