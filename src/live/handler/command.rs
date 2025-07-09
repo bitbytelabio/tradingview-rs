@@ -446,9 +446,14 @@ impl CommandRunner {
                 },
 
                 _ = health_check.tick() => {
-                    if let Err(e) = self.check_connection_health().await {
-                        warn!("Health check failed: {}", e);
-                        self.state.transition_to(ConnectionStatus::Disconnected);
+                    // Only perform health check if we're supposed to be connected
+                    if matches!(self.state.status, ConnectionStatus::Connected | ConnectionStatus::Reconnecting) {
+                        if let Err(e) = self.perform_health_check().await {
+                            warn!("Health check failed: {}", e);
+                            self.state.transition_to(ConnectionStatus::Disconnected);
+                        } else {
+                            self.state.mark_successful_operation();
+                        }
                     }
                 },
 
@@ -457,6 +462,8 @@ impl CommandRunner {
                         if let Err(e) = self.send_heartbeat().await {
                             warn!("Heartbeat failed: {}", e);
                             self.state.transition_to(ConnectionStatus::Disconnected);
+                        } else {
+                            self.state.mark_successful_operation();
                         }
                     }
                 },
@@ -478,6 +485,46 @@ impl CommandRunner {
         self.cleanup().await;
         self.log_final_stats();
         Ok(())
+    }
+
+    /// Comprehensive health check that actively tests the connection
+    async fn perform_health_check(&self) -> Result<()> {
+        // First check basic connection state
+        if self.ws.is_closed().await {
+            return Err(Error::Internal("WebSocket is closed".into()));
+        }
+
+        // Check if connection has been unhealthy for too long
+        if let Some(time_since_success) = self.state.time_since_last_success() {
+            if time_since_success > self.config.health_check_timeout {
+                return Err(Error::Internal(
+                    format!("No successful operations for {time_since_success:?}").into(),
+                ));
+            }
+        }
+
+        // Actively test the connection with a ping
+        // Use a shorter timeout for health check pings
+        let health_check_timeout = Duration::from_secs(5);
+        match timeout(health_check_timeout, self.ws.try_ping()).await {
+            Ok(Ok(_)) => {
+                debug!("Health check ping successful");
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                warn!("Health check ping failed: {}", e);
+                Err(Error::Internal(
+                    format!("Health check ping failed: {}", e).into(),
+                ))
+            }
+            Err(_) => {
+                warn!(
+                    "Health check ping timed out after {:?}",
+                    health_check_timeout
+                );
+                Err(Error::Internal("Health check ping timeout".into()))
+            }
+        }
     }
 
     #[instrument(skip(self))]
@@ -954,27 +1001,23 @@ impl CommandRunner {
         }
     }
 
-    async fn check_connection_health(&self) -> Result<()> {
-        // Check if connection has been unhealthy for too long
-        if let Some(time_since_success) = self.state.time_since_last_success() {
-            if time_since_success > self.config.health_check_timeout {
-                return Err(Error::Internal(
-                    format!("No successful operations for {time_since_success:?}").into(),
-                ));
+    /// Send heartbeat ping (separate from health check)
+    async fn send_heartbeat(&self) -> Result<()> {
+        let heartbeat_timeout = Duration::from_secs(10);
+        match timeout(heartbeat_timeout, self.ws.try_ping()).await {
+            Ok(Ok(_)) => {
+                debug!("Heartbeat ping successful");
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                warn!("Heartbeat ping failed: {}", e);
+                Err(Error::Internal(format!("Heartbeat failed: {}", e).into()))
+            }
+            Err(_) => {
+                warn!("Heartbeat ping timed out after {:?}", heartbeat_timeout);
+                Err(Error::Internal("Heartbeat timeout".into()))
             }
         }
-
-        if self.ws.is_closed().await {
-            return Err(Error::Internal("WebSocket is closed".into()));
-        }
-
-        Ok(())
-    }
-
-    async fn send_heartbeat(&self) -> Result<()> {
-        timeout(Duration::from_secs(5), self.ws.try_ping())
-            .await
-            .map_err(|_| Error::Internal("Heartbeat timeout".into()))?
     }
 
     fn classify_error(&self, error: &Error) -> ErrorSeverity {
