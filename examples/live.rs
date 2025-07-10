@@ -8,11 +8,7 @@ use tracing::{error, info, warn};
 use tradingview::{
     ChartOptions, Interval, OHLCV,
     live::{
-        handler::{
-            command::CommandRunner,
-            message::{Command, TradingViewResponse},
-            types::{CommandTx, DataRx},
-        },
+        handler::{command::CommandRunner, message::Command, types::CommandTx},
         models::DataServer,
         websocket::WebSocketClient,
     },

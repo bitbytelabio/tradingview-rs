@@ -120,7 +120,7 @@ pub fn format_packet<T: Serialize>(packet: T) -> Result<Message> {
 
 #[builder]
 pub fn symbol_init(
-    symbol: &str,
+    instrument: &str, // The instrument symbol, e.g., "HOSE:FPT"
     adjustment: Option<MarketAdjustment>,
     currency: Option<Currency>,
     session_type: Option<SessionType>,
@@ -133,7 +133,7 @@ pub fn symbol_init(
     if let Some(a) = adjustment {
         symbol_init.insert(Ustr::from("adjustment"), Ustr::from(&a.to_string()));
     }
-    symbol_init.insert(Ustr::from("symbol"), Ustr::from(symbol));
+    symbol_init.insert(Ustr::from("symbol"), Ustr::from(instrument));
     if let Some(c) = currency {
         symbol_init.insert(Ustr::from("currency-id"), Ustr::from(c.code()));
     }
@@ -205,12 +205,12 @@ mod tests {
 
     #[test]
     fn test_symbol_init() {
-        let test1 = symbol_init().symbol("NSE:NIFTY").call();
+        let test1 = symbol_init().instrument("NSE:NIFTY").call();
         assert!(test1.is_ok());
         assert_eq!(test1.unwrap(), r#"={"symbol":"NSE:NIFTY"}"#.to_string());
 
         let test2 = symbol_init()
-            .symbol("HOSE:FPT")
+            .instrument("HOSE:FPT")
             .adjustment(MarketAdjustment::Dividends)
             .currency(Currency::USD)
             .session_type(SessionType::Extended)

@@ -6,7 +6,6 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
-use ustr::ustr;
 
 use crate::{
     Error, Result,
@@ -230,8 +229,7 @@ impl CommandQueue {
             Command::SetAuthToken { .. }
                 | Command::Delete
                 | Command::Ping
-                | Command::CreateQuoteSession
-                | Command::CreateChartSession { .. }
+                | Command::CreateQuoteSession { .. }
         )
     }
 
@@ -543,13 +541,6 @@ impl CommandRunner {
             self.ws.set_auth_token(&auth_token).await?;
         }
 
-        // Create a quote session if not already created
-        if self.ws.quote_session.read().await.is_empty() {
-            info!("Creating initial quote session");
-            self.ws.create_quote_session_().await?;
-            self.ws.set_fields_().await?;
-        }
-
         self.state.mark_successful_operation();
         Ok(())
     }
@@ -646,249 +637,18 @@ impl CommandRunner {
 
         let result = timeout(self.config.command_timeout, async {
             match cmd {
-                Ping => self
-                    .ws
-                    .try_ping()
-                    .await
-                    .map_err(|e| Error::Internal(ustr(&e.to_string()))),
-                Delete => {
-                    self.cleanup().await;
-                    Ok(())
+                Delete => self.ws.delete().await,
+                Ping => self.ws.try_ping().await,
+                SetAuthToken { auth_token } => self.ws.set_auth_token(&auth_token).await,
+                CreateQuoteSession { quote_session } => {
+                    self.ws.create_quote_session(&quote_session).await
                 }
-                SetAuthToken { auth_token } => {
-                    self.ws.set_auth_token(&auth_token).await?;
-                    Ok(())
-                }
-                SetLocals { language, country } => {
-                    // self.ws.set_locale((&language, &country)).await?;
-                    Ok(())
-                }
-                SetDataQuality { quality } => {
-                    self.ws.set_data_quality(&quality).await?;
-                    Ok(())
-                }
-                SetTimeZone { session, timezone } => {
-                    self.ws.set_timezone(&session, timezone).await?;
-                    Ok(())
-                }
-                CreateQuoteSession => {
-                    self.ws.create_quote_session_().await?;
-                    Ok(())
-                }
-                DeleteQuoteSession => Ok(()),
-                SetQuoteFields => {
-                    self.ws.set_fields_().await?;
-                    Ok(())
-                }
-                FastSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.fast_symbols_(&symbols).await?;
-                    Ok(())
-                }
-                AddSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.add_symbols_(&symbols).await?;
-                    Ok(())
-                }
-                RemoveSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.remove_symbols_(&symbols).await?;
-                    Ok(())
-                }
-                CreateChartSession { session } => {
-                    self.ws.create_chart_session(&session).await?;
-                    Ok(())
-                }
-                DeleteChartSession { session } => {
-                    self.ws.delete_chart_session(&session).await?;
-                    Ok(())
-                }
-                RequestMoreData {
-                    session,
-                    series_id,
-                    bar_count,
-                } => {
-                    self.ws
-                        .request_more_data(&session, &series_id, bar_count)
-                        .await?;
-                    Ok(())
-                }
-                RequestMoreTickMarks {
-                    session,
-                    series_id,
-                    bar_count,
-                } => {
-                    self.ws
-                        .request_more_tickmarks(&session, &series_id, bar_count)
-                        .await?;
-                    Ok(())
-                }
-                CreateStudy {
-                    session,
-                    study_id,
-                    series_id,
-                    indicator,
-                } => {
-                    self.ws
-                        .create_study_(&session, &study_id, &series_id, indicator)
-                        .await?;
-                    Ok(())
-                }
-                ModifyStudy {
-                    session,
-                    study_id,
-                    series_id,
-                    indicator,
-                } => {
-                    // self.ws
-                    //     .modify_study(&session, &study_id, &series_id, indicator)
-                    //     .await?;
-                    Ok(())
-                }
-                RemoveStudy {
-                    session,
-                    study_id,
-                    series_id,
-                } => {
-                    let id = format!("{series_id}_{study_id}");
-                    self.ws.remove_study(&session, &id).await?;
-                    Ok(())
-                }
-                SetStudy {
-                    study_options,
-                    session,
-                    series_id,
-                } => {
-                    self.ws
-                        .set_study(study_options, &session, &series_id)
-                        .await?;
-                    Ok(())
-                }
-                CreateSeries {
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    interval,
-                    bar_count,
-                    range,
-                } => {
-                    self.ws
-                        .create_series()
-                        .session(&session)
-                        .series_id(&series_id)
-                        .series_version(&series_version)
-                        .series_symbol_id(&series_symbol_id)
-                        .interval(interval)
-                        .bar_count(bar_count)
-                        .maybe_range(range)
-                        .call()
-                        .await?;
-                    Ok(())
-                }
-                ModifySeries {
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    interval,
-                    bar_count,
-                    range,
-                } => {
-                    self.ws
-                        .modify_series()
-                        .chart_session(&session)
-                        .series_(&series_id)
-                        .series_id(&series_version)
-                        .series_symbol_id(&series_symbol_id)
-                        .interval(interval)
-                        .bar_count(bar_count)
-                        .maybe_range(range)
-                        .call()
-                        .await?;
-                    Ok(())
-                }
-                RemoveSeries { session, series_id } => {
-                    self.ws.remove_series(&session, &series_id).await?;
-                    Ok(())
-                }
-                CreateReplaySession { session } => {
-                    self.ws.create_replay_session(&session).await?;
-                    Ok(())
-                }
-                DeleteReplaySession { session } => {
-                    self.ws.delete_replay_session(&session).await?;
-                    Ok(())
-                }
-                ResolveSymbol {
-                    session,
-                    symbol,
-                    exchange,
-                    opts,
-                    replay_session,
-                } => {
-                    //   &session,
-                    // &symbol,
-                    // &exchange,
-                    // opts,
-                    // replay_session.as_deref(),
-                    // self.ws
-                    //     .resolve_symbol()
-                    //     .session(&session)
-                    //     .symbol(&symbol)
-
-                    //     .call()
-                    //     .await?;
-                    Ok(())
-                }
-                SetReplayStep {
-                    session,
-                    series_id,
-                    step,
-                } => {
-                    self.ws.replay_step(&session, &series_id, step).await?;
-                    Ok(())
-                }
-                StartReplay {
-                    session,
-                    series_id,
-                    interval,
-                } => {
-                    self.ws.replay_start(&session, &series_id, interval).await?;
-                    Ok(())
-                }
-                StopReplay { session, series_id } => {
-                    self.ws.replay_stop(&session, &series_id).await?;
-                    Ok(())
-                }
-                ResetReplay {
-                    session,
-                    series_id,
-                    timestamp,
-                } => {
-                    self.ws
-                        .replay_reset(&session, &series_id, timestamp)
-                        .await?;
-                    Ok(())
-                }
-                SetReplay {
-                    symbol,
-                    options,
+                SetLocale { language, country } => self.ws.set_locale(&language, &country).await,
+                SetDataQuality { quality } => self.ws.set_data_quality(&quality).await,
+                SetTimeZone {
                     chart_session,
-                    symbol_series_id,
-                } => {
-                    // &symbol, options, &chart_session, &symbol_series_id
-                    // self.ws.set_replay().symbol(s).call().await?;
-                    Ok(())
-                }
-                SetMarket { options } => {
-                    self.ws.set_market(options).await?;
-                    Ok(())
-                }
-                SendRawMessage { message } => {
-                    self.ws.send_raw_message(&message).await?;
-                    Ok(())
-                }
+                    timezone,
+                } => self.ws.set_timezone(&chart_session, timezone).await,
             }
         })
         .await;
@@ -899,10 +659,7 @@ impl CommandRunner {
     fn is_critical_command(&self, cmd: &Command) -> bool {
         matches!(
             cmd,
-            Command::SetAuthToken { .. }
-                | Command::Delete
-                | Command::CreateQuoteSession
-                | Command::CreateChartSession { .. }
+            Command::SetAuthToken { .. } | Command::Delete | Command::CreateQuoteSession { .. }
         )
     }
 

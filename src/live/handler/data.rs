@@ -1,6 +1,5 @@
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use ustr::Ustr;
 
@@ -8,32 +7,19 @@ use crate::{
     ChartResponseData, Error, QuoteData, QuoteValue, Result, StudyOptions, StudyResponseData,
     SymbolInfo,
     error::TradingViewError,
-    live::{
-        handler::types::{DataTx, TradingViewHandler, create_handler},
-        models::TradingViewDataEvent,
-    },
+    live::{handler::types::TradingViewHandler, models::TradingViewDataEvent},
     quote::utils::merge_quotes,
     websocket::Metadata,
 };
 
 #[derive(Clone, Default)]
-pub struct DataHandler {
+pub struct Handler {
     pub(crate) metadata: Metadata,
     pub(crate) handler: TradingViewHandler,
 }
 
-#[bon::bon]
-impl DataHandler {
-    #[builder]
-    pub fn new(res_tx: DataTx) -> Self {
-        let res_tx = Arc::new(res_tx);
-        let handler: TradingViewHandler = create_handler(res_tx);
-        Self {
-            metadata: Metadata::default(),
-            handler,
-        }
-    }
-
+impl Handler {
+    #[tracing::instrument(skip(self, message), level = "debug")]
     pub(crate) async fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]) {
         if let Err(e) = self.process_event(event, message).await {
             error!("Event processing error: {:?}", e);
@@ -128,7 +114,6 @@ impl DataHandler {
 
         debug!("receive symbol info: {:?}", symbol_info);
 
-        // Update chart state with shorter lock scope
         {
             let mut chart_state = self.metadata.chart_state.write().await;
             chart_state.symbol_info.replace(symbol_info.clone());
