@@ -35,7 +35,7 @@ use crate::{
     DataPoint, Error, Interval, MarketAdjustment, Result, SessionType, SocketServerInfo, Timezone,
     chart::{ChartOptions, SymbolInfo, options::Range},
     live::{
-        handler::data::Handler,
+        handler::event::Handler,
         models::{
             DataServer, Socket, SocketMessage, SocketMessageDe, SocketMessageSer,
             TradingViewDataEvent, WEBSOCKET_HEADERS,
@@ -513,17 +513,6 @@ impl WebSocketClient {
         let mut auth_token_ = self.auth_token.write().await;
         *auth_token_ = ustr(auth_token);
         self.send("set_auth_token", &payload!(auth_token)).await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn update_auth_token(&self, auth_token: &str) -> Result<()> {
-        let mut write_guard = self.write.lock().await;
-        write_guard
-            .send(SocketMessageSer::new("set_auth_token", payload!(auth_token)).to_message()?)
-            .await?;
-        trace!("updated auth token to: {}", auth_token);
-        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
         Ok(())
     }
 

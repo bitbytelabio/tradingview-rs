@@ -227,7 +227,7 @@ impl CommandQueue {
         matches!(
             cmd,
             Command::SetAuthToken { .. }
-                | Command::Delete
+                | Command::Close
                 | Command::Ping
                 | Command::CreateQuoteSession { .. }
         )
@@ -485,7 +485,7 @@ impl CommandRunner {
         }
 
         self.cleanup().await;
-        self.log_final_stats();
+
         Ok(())
     }
 
@@ -637,7 +637,7 @@ impl CommandRunner {
 
         let result = timeout(self.config.command_timeout, async {
             match cmd {
-                Delete => self.ws.delete().await,
+                Close => self.ws.delete().await,
                 Ping => self.ws.try_ping().await,
                 SetAuthToken { auth_token } => self.ws.set_auth_token(&auth_token).await,
                 CreateQuoteSession { quote_session } => {
@@ -649,6 +649,21 @@ impl CommandRunner {
                     chart_session,
                     timezone,
                 } => self.ws.set_timezone(&chart_session, timezone).await,
+                Send { message, payload } => todo!(),
+                SendRawMessage { message } => todo!(),
+                DeleteQuoteSession { quote_session } => todo!(),
+                FastSymbols { symbols } => todo!(),
+                SetQuoteFields { quote_session } => todo!(),
+                AddQuoteSymbols {
+                    quote_session,
+                    symbols,
+                } => todo!(),
+                RemoveQuoteSymbols {
+                    quote_session,
+                    symbols,
+                } => todo!(),
+                CreateChartSession { chart_session } => todo!(),
+                DeleteChartSession { chart_session } => todo!(),
             }
         })
         .await;
@@ -659,7 +674,7 @@ impl CommandRunner {
     fn is_critical_command(&self, cmd: &Command) -> bool {
         matches!(
             cmd,
-            Command::SetAuthToken { .. } | Command::Delete | Command::CreateQuoteSession { .. }
+            Command::SetAuthToken { .. } | Command::Close | Command::CreateQuoteSession { .. }
         )
     }
 
@@ -835,10 +850,6 @@ impl CommandRunner {
             dropped,
             self.stats.average_command_latency
         );
-    }
-
-    fn log_final_stats(&self) {
-        info!("CommandRunner final stats: {:?}", self.stats);
     }
 
     #[instrument(skip(self))]
