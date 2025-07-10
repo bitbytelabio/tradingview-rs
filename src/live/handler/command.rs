@@ -546,8 +546,8 @@ impl CommandRunner {
         // Create a quote session if not already created
         if self.ws.quote_session.read().await.is_empty() {
             info!("Creating initial quote session");
-            self.ws.create_quote_session().await?;
-            self.ws.set_fields().await?;
+            self.ws.create_quote_session_().await?;
+            self.ws.set_fields_().await?;
         }
 
         self.state.mark_successful_operation();
@@ -660,7 +660,7 @@ impl CommandRunner {
                     Ok(())
                 }
                 SetLocals { language, country } => {
-                    self.ws.set_locale((&language, &country)).await?;
+                    // self.ws.set_locale((&language, &country)).await?;
                     Ok(())
                 }
                 SetDataQuality { quality } => {
@@ -672,30 +672,27 @@ impl CommandRunner {
                     Ok(())
                 }
                 CreateQuoteSession => {
-                    self.ws.create_quote_session().await?;
+                    self.ws.create_quote_session_().await?;
                     Ok(())
                 }
-                DeleteQuoteSession => {
-                    self.ws.delete_quote_session().await?;
-                    Ok(())
-                }
+                DeleteQuoteSession => Ok(()),
                 SetQuoteFields => {
-                    self.ws.set_fields().await?;
+                    self.ws.set_fields_().await?;
                     Ok(())
                 }
                 FastSymbols { symbols } => {
                     let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.fast_symbols(&symbols).await?;
+                    self.ws.fast_symbols_(&symbols).await?;
                     Ok(())
                 }
                 AddSymbols { symbols } => {
                     let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.add_symbols(&symbols).await?;
+                    self.ws.add_symbols_(&symbols).await?;
                     Ok(())
                 }
                 RemoveSymbols { symbols } => {
                     let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.remove_symbols(&symbols).await?;
+                    self.ws.remove_symbols_(&symbols).await?;
                     Ok(())
                 }
                 CreateChartSession { session } => {
@@ -733,7 +730,7 @@ impl CommandRunner {
                     indicator,
                 } => {
                     self.ws
-                        .create_study(&session, &study_id, &series_id, indicator)
+                        .create_study_(&session, &study_id, &series_id, indicator)
                         .await?;
                     Ok(())
                 }
@@ -800,9 +797,9 @@ impl CommandRunner {
                 } => {
                     self.ws
                         .modify_series()
-                        .session(&session)
-                        .series_id(&series_id)
-                        .series_version(&series_version)
+                        .chart_session(&session)
+                        .series_(&series_id)
+                        .series_id(&series_version)
                         .series_symbol_id(&series_symbol_id)
                         .interval(interval)
                         .bar_count(bar_count)

@@ -201,6 +201,11 @@ impl std::fmt::Display for ScriptType {
                 write!(f, "VbPSessionsDetailed@tv-volumebyprice-53!")
             }
             ScriptType::VisibleVolumeByPrice => write!(f, "VbPVisible@tv-volumebyprice-53"),
+            //Sessions@tv-basicstudies-187!
+            //Dividends@tv-basicstudies-251
+            //Splits@tv-basicstudies-251
+            //Earnings@tv-basicstudies-251
+            //Volume@tv-basicstudies-251 , Opts {"length":20,"col_prev_close":false}
         }
     }
 }

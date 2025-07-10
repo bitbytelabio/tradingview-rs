@@ -1,3 +1,4 @@
+use bon::builder;
 use dashmap::DashMap;
 use futures_util::{
     SinkExt, StreamExt,
@@ -6,8 +7,9 @@ use futures_util::{
 };
 use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::{
+    collections::HashMap,
     fmt::Debug,
     sync::{
         Arc,
@@ -43,8 +45,9 @@ use crate::{
         },
     },
     payload,
-    pine_indicator::PineIndicator,
+    pine_indicator::{PineIndicator, ScriptType},
     quote::{ALL_QUOTE_FIELDS, models::QuoteValue},
+    study::StudyConfiguration,
     utils::{gen_id, gen_session_id, parse_packet, symbol_init},
 };
 
@@ -425,7 +428,78 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn create_quote_session(&self) -> Result<()> {
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn send_raw_message(&self, message: &str) -> Result<()> {
+        if self.is_closed.load(Ordering::Relaxed) {
+            return Err(Error::Internal("WebSocket is closed".into()));
+        }
+        let mut write_guard = self.write.lock().await;
+        write_guard.send(Message::Text(message.into())).await?;
+        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
+        if self.is_closed.load(Ordering::Relaxed) {
+            return Err(Error::Internal("WebSocket is closed".into()));
+        }
+        let mut write_guard = self.write.lock().await;
+        write_guard
+            .send(SocketMessageSer::new(m, p).to_message()?)
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn ping(&self, ping: &Message) -> Result<()> {
+        let mut write_guard = self.write.lock().await;
+        write_guard.send(ping.clone()).await?;
+        if ping.is_close() {
+            self.is_closed.store(true, Ordering::Relaxed);
+            tracing::warn!("ping message is close, closing session");
+        }
+        Ok(())
+    }
+
+    pub async fn close(&self) -> Result<()> {
+        self.is_closed.store(true, Ordering::Relaxed);
+        self.write.lock().await.close().await?;
+        Ok(())
+    }
+
+    #[deprecated(
+        note = "Use `create_quote_session_` instead to ensure the quote session is created before adding symbols."
+    )]
+    pub async fn fast_symbols_(&self, symbols: &[&str]) -> Result<()> {
+        let quote_session = self.quote_session.read().await.to_string();
+
+        let mut payloads = payload![quote_session];
+        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
+
+        self.send("quote_fast_symbols", &payloads).await?;
+
+        Ok(())
+    }
+
+    #[deprecated(
+        note = "Use `create_quote_session_` instead to ensure the quote session is created before adding symbols."
+    )]
+    pub async fn remove_symbols_(&self, symbols: &[&str]) -> Result<()> {
+        let quote_session = self.quote_session.read().await.to_string();
+
+        let mut payloads = payload![quote_session];
+        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
+
+        self.send("quote_remove_symbols", &payloads).await?;
+
+        Ok(())
+    }
+
+    #[deprecated(
+        note = "Use `create_quote_session_` instead to ensure the quote session is created before adding symbols."
+    )]
+    pub async fn create_quote_session_(&self) -> Result<()> {
         // Generate a new session ID for the quote session
         let session_id = gen_session_id("qs");
         self.send("quote_create_session", &payload!(session_id.clone()))
@@ -435,14 +509,18 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn delete_quote_session(&self) -> Result<()> {
+    #[deprecated(
+        note = "Use `delete_quote_session_` instead to ensure the quote session is deleted properly."
+    )]
+    async fn delete_quote_session_(&self) -> Result<()> {
         let quote_session = self.quote_session.read().await;
         self.send("quote_delete_session", &payload!(quote_session.to_string()))
             .await?;
         Ok(())
     }
 
-    pub async fn set_fields(&self) -> Result<()> {
+    #[deprecated(note = "Use `set_fields_` instead to ensure the quote fields are set properly.")]
+    pub async fn set_fields_(&self) -> Result<()> {
         let quote_session = self.quote_session.read().await.to_string();
 
         let mut quote_fields = payload![quote_session];
@@ -453,10 +531,10 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn add_symbols(&self, symbols: &[&str]) -> Result<()> {
-        // Ensure quote session exists first
-        self.ensure_quote_session().await?;
-
+    #[deprecated(
+        note = "Use `add_symbols_` instead to ensure the quote session is created before adding symbols."
+    )]
+    pub async fn add_symbols_(&self, symbols: &[&str]) -> Result<()> {
         let quote_session = self.quote_session.read().await.to_string();
 
         let mut payloads = payload![quote_session];
@@ -468,6 +546,54 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn fast_symbols(&self, quote_session: &str, symbols: &[&str]) -> Result<()> {
+        let mut payloads = payload![quote_session];
+        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
+        self.send("quote_fast_symbols", &payloads).await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn create_quote_session(&self, quote_session: &str) -> Result<()> {
+        self.send("quote_create_session", &payload!(quote_session))
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn delete_quote_session(&self, quote_session: &str) -> Result<()> {
+        self.send("quote_delete_session", &payload!(quote_session))
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn set_fields(&self, quote_session: &str) -> Result<()> {
+        let mut quote_fields = payload![quote_session];
+        quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
+        self.send("quote_set_fields", &quote_fields).await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn add_symbols(&self, quote_session: &str, symbols: &[&str]) -> Result<()> {
+        let mut payloads = payload![quote_session];
+        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
+        self.send("quote_add_symbols", &payloads).await?;
+        info!("Added {} symbols to quote session", symbols.len());
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn remove_symbols(&self, quote_session: &str, symbols: &[&str]) -> Result<()> {
+        let mut payloads = payload![quote_session];
+        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
+        self.send("quote_remove_symbols", &payloads).await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn set_auth_token(&self, auth_token: &str) -> Result<()> {
         let mut auth_token_ = self.auth_token.write().await;
         *auth_token_ = Ustr::from(auth_token);
@@ -475,51 +601,7 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn send_raw_message(&self, message: &str) -> Result<()> {
-        if self.is_closed.load(Ordering::Relaxed) {
-            return Err(Error::Internal("WebSocket is closed".into()));
-        }
-        debug!("Sending raw message: {}", message);
-        let mut write_guard = self.write.lock().await;
-        write_guard.send(Message::Text(message.into())).await?;
-        trace!("sent raw message: {}", message);
-        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
-        Ok(())
-    }
-
-    pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
-        if self.is_closed.load(Ordering::Relaxed) {
-            return Err(Error::Internal("WebSocket is closed".into()));
-        }
-        debug!("Sending message: {} with payload: {:?}", m, p);
-        let mut write_guard = self.write.lock().await;
-        write_guard
-            .send(SocketMessageSer::new(m, p).to_message()?)
-            .await?;
-        trace!("sent message: {} with payload: {:?}", m, p);
-        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
-        Ok(())
-    }
-
-    pub async fn ping(&self, ping: &Message) -> Result<()> {
-        let mut write_guard = self.write.lock().await;
-        write_guard.send(ping.clone()).await?;
-        trace!("sent ping message {}", ping);
-        if ping.is_close() {
-            self.is_closed.store(true, Ordering::Relaxed);
-            warn!("ping message is close, closing session");
-        }
-        drop(write_guard); // Explicitly drop the lock to avoid deadlocks
-        trace!("ping message sent successfully");
-        Ok(())
-    }
-
-    pub async fn close(&self) -> Result<()> {
-        self.is_closed.store(true, Ordering::Relaxed);
-        self.write.lock().await.close().await?;
-        Ok(())
-    }
-
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn update_auth_token(&self, auth_token: &str) -> Result<()> {
         let mut write_guard = self.write.lock().await;
         write_guard
@@ -530,36 +612,15 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn fast_symbols(&self, symbols: &[&str]) -> Result<()> {
-        self.ensure_quote_session().await?;
-
-        let quote_session = self.quote_session.read().await.to_string();
-
-        let mut payloads = payload![quote_session];
-        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
-
-        self.send("quote_fast_symbols", &payloads).await?;
-
+    /// Example: locale = ("en", "US")
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn set_locale(&self, language_code: &str, country: &str) -> Result<()> {
+        self.send("set_locale", &payload!(language_code, country))
+            .await?;
         Ok(())
     }
 
-    pub async fn remove_symbols(&self, symbols: &[&str]) -> Result<()> {
-        let quote_session = self.quote_session.read().await.to_string();
-
-        let mut payloads = payload![quote_session];
-        payloads.extend(symbols.iter().map(|s| Value::from(*s)));
-
-        self.send("quote_remove_symbols", &payloads).await?;
-
-        Ok(())
-    }
-
-    /// Example: local = ("en", "US")
-    pub async fn set_locale(&self, local: (&str, &str)) -> Result<()> {
-        self.send("set_locale", &payload!(local.0, local.1)).await?;
-        Ok(())
-    }
-
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn set_data_quality(&self, data_quality: &str) -> Result<()> {
         self.send("set_data_quality", &payload!(data_quality))
             .await?;
@@ -567,6 +628,7 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn set_timezone(&self, session: &str, timezone: Timezone) -> Result<()> {
         self.send("switch_timezone", &payload!(session, timezone.to_string()))
             .await?;
@@ -574,18 +636,21 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn create_chart_session(&self, session: &str) -> Result<()> {
         self.send("chart_create_session", &payload!(session))
             .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn create_replay_session(&self, session: &str) -> Result<()> {
         self.send("replay_create_session", &payload!(session))
             .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn add_replay_series(
         &self,
@@ -616,120 +681,171 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn delete_chart_session(&self, session: &str) -> Result<()> {
         self.send("chart_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn delete_replay_session(&self, session: &str) -> Result<()> {
         self.send("replay_delete_session", &payload!(session))
             .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn replay_step(&self, session: &str, series_id: &str, step: u64) -> Result<()> {
         self.send("replay_step", &payload!(session, series_id, step))
             .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     pub async fn replay_start(
         &self,
-        session: &str,
+        chart_session: &str,
         series_id: &str,
         interval: Interval,
     ) -> Result<()> {
         self.send(
             "replay_start",
-            &payload!(session, series_id, interval.to_string()),
+            &payload!(chart_session, series_id, interval.to_string()),
         )
         .await?;
         Ok(())
     }
 
-    pub async fn replay_stop(&self, session: &str, series_id: &str) -> Result<()> {
-        self.send("replay_stop", &payload!(session, series_id))
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn replay_stop(&self, chart_session: &str, series_id: &str) -> Result<()> {
+        self.send("replay_stop", &payload!(chart_session, series_id))
             .await?;
         Ok(())
     }
 
-    pub async fn replay_reset(&self, session: &str, series_id: &str, timestamp: i64) -> Result<()> {
-        self.send("replay_reset", &payload!(session, series_id, timestamp))
-            .await?;
-        Ok(())
-    }
-
-    pub async fn request_more_data(&self, session: &str, series_id: &str, num: u64) -> Result<()> {
-        self.send("request_more_data", &payload!(session, series_id, num))
-            .await?;
-        Ok(())
-    }
-
-    pub async fn request_more_tickmarks(
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn replay_reset(
         &self,
-        session: &str,
+        chart_session: &str,
+        series_id: &str,
+        timestamp: i64,
+    ) -> Result<()> {
+        self.send(
+            "replay_reset",
+            &payload!(chart_session, series_id, timestamp),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn request_more_data(
+        &self,
+        chart_session: &str,
         series_id: &str,
         num: u64,
     ) -> Result<()> {
-        self.send("request_more_tickmarks", &payload!(session, series_id, num))
-            .await?;
+        self.send(
+            "request_more_data",
+            &payload!(chart_session, series_id, num),
+        )
+        .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn request_more_tickmarks(
+        &self,
+        chart_session: &str,
+        series_id: &str,
+        num: u64,
+    ) -> Result<()> {
+        self.send(
+            "request_more_tickmarks",
+            &payload!(chart_session, series_id, num),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    #[builder]
     pub async fn create_study(
         &self,
-        session: &str,
-        study_id: &str,
-        series_id: &str,
-        indicator: PineIndicator,
+        chart_session: &str,
+        study_ids: &[&str; 2],
+        chart_series_id: &str,
+        study: StudyConfiguration,
     ) -> Result<()> {
-        let inputs = indicator.to_study_inputs()?;
-        let payloads: Vec<Value> = vec![
-            Value::from(session),
-            Value::from(study_id),
-            Value::from("st1"),
-            Value::from(series_id),
-            Value::from(indicator.script_type.to_string()),
-            inputs,
+        let mut payloads: Vec<Value> = vec![
+            Value::from(chart_session),
+            Value::from(study_ids[0]),
+            Value::from(study_ids[1]),
+            Value::from(chart_series_id),
         ];
+
+        match study {
+            StudyConfiguration::Pine(pine_indicator) => {
+                payloads.push(Value::from(pine_indicator.script_type.to_string()));
+                payloads.push(pine_indicator.to_study_inputs()?);
+            }
+            StudyConfiguration::Builtin(study_name, study_config) => {
+                payloads.push(Value::from(study_name));
+                payloads.push(json!(study_config));
+            }
+        }
+
         self.send("create_study", &payloads).await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn modify_study(
         &self,
         chart_session: &str,
-        study_id: &str,
-        series_id: &str,
-        indicator: PineIndicator,
+        study_ids: &[&str; 2],
+        chart_series_id: &str,
+        study: StudyConfiguration,
     ) -> Result<()> {
-        let inputs = indicator.to_study_inputs()?;
-        let payloads: Vec<Value> = vec![
+        let mut payloads: Vec<Value> = vec![
             Value::from(chart_session),
-            Value::from(study_id),
-            Value::from("st1"),
-            Value::from(series_id),
-            Value::from(indicator.script_type.to_string()),
-            inputs,
+            Value::from(study_ids[0]),
+            Value::from(study_ids[1]),
+            Value::from(chart_series_id),
         ];
+
+        match study {
+            StudyConfiguration::Pine(pine_indicator) => {
+                payloads.push(Value::from(pine_indicator.script_type.to_string()));
+                payloads.push(pine_indicator.to_study_inputs()?);
+            }
+            StudyConfiguration::Builtin(study_name, study_config) => {
+                payloads.push(Value::from(study_name));
+                payloads.push(json!(study_config));
+            }
+        }
+
         self.send("modify_study", &payloads).await?;
         Ok(())
     }
-    pub async fn remove_study(&self, session: &str, study_id: &str) -> Result<()> {
-        self.send("remove_study", &payload!(session, study_id))
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn remove_study(&self, chart_session: &str, study_id: &str) -> Result<()> {
+        self.send("remove_study", &payload!(chart_session, study_id))
             .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn create_series(
         &self,
-        session: &str,
-        series_id: &str,
-        series_version: &str,
-        series_symbol_id: &str,
+        chart_session: &str,
+        series_identifier: &str, // (sds_2)
+        series_id: &str,         // (s1)
+        symbol_series_id: &str,  // (sds_sym_2)
         interval: Interval,
         bar_count: u64,
         range: Option<Range>,
@@ -741,10 +857,10 @@ impl WebSocketClient {
         self.send(
             "create_series",
             &payload!(
-                session,
+                chart_session,
+                series_identifier,
                 series_id,
-                series_version,
-                series_symbol_id,
+                symbol_series_id,
                 interval.to_string(),
                 bar_count,
                 range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
@@ -755,13 +871,14 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn modify_series(
         &self,
-        session: &str,
-        series_id: &str,
-        series_version: &str,
-        series_symbol_id: &str,
+        chart_session: &str,
+        series_identifier: &str, // (sds_2)
+        series_id: &str,         // (s1)
+        symbol_series_id: &str,  // (sds_sym_2)
         interval: Interval,
         bar_count: u64,
         range: Option<Range>,
@@ -773,10 +890,10 @@ impl WebSocketClient {
         self.send(
             "modify_series",
             &payload!(
-                session,
+                chart_session,
+                series_identifier,
                 series_id,
-                series_version,
-                series_symbol_id,
+                symbol_series_id,
                 interval.to_string(),
                 bar_count,
                 range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
@@ -787,12 +904,14 @@ impl WebSocketClient {
         Ok(())
     }
 
-    pub async fn remove_series(&self, session: &str, series_id: &str) -> Result<()> {
-        self.send("remove_series", &payload!(session, series_id))
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn remove_series(&self, chart_session: &str, series_identifier: &str) -> Result<()> {
+        self.send("remove_series", &payload!(chart_session, series_identifier))
             .await?;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn resolve_symbol(
         &self,
@@ -823,39 +942,6 @@ impl WebSocketClient {
     }
 
     pub async fn delete(&self) -> Result<()> {
-        // Collect all sessions first to avoid holding iterator while making async calls
-        let chart_sessions: Vec<Ustr> = self
-            .data_handler
-            .metadata
-            .series
-            .iter()
-            .map(|entry| entry.value().chart_session)
-            .collect();
-
-        // Delete quote session first
-        if let Err(e) = self.delete_quote_session().await {
-            warn!("Failed to delete quote session: {:?}", e);
-        }
-
-        // Delete all chart sessions in parallel for better performance
-        let delete_futures: Vec<_> = chart_sessions
-            .iter()
-            .map(|session| self.delete_chart_session(session))
-            .collect();
-
-        // Execute all deletions concurrently
-        let results = join_all(delete_futures).await;
-
-        // Log any errors but don't fail the entire operation
-        for (i, result) in results.into_iter().enumerate() {
-            if let Err(e) = result {
-                warn!(
-                    "Failed to delete chart session {}: {:?}",
-                    chart_sessions[i], e
-                );
-            }
-        }
-
         // Clear all metadata
         self.data_handler.metadata.series.clear();
         self.data_handler.metadata.studies.clear();
@@ -875,6 +961,7 @@ impl WebSocketClient {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn set_replay(
         &self,
@@ -933,16 +1020,16 @@ impl WebSocketClient {
             .studies
             .insert(indicator.metadata.data.id, study_id);
 
-        self.create_study(chart_session, &study_id, series_id, indicator)
-            .await?;
+        // self.create_study(chart_session, &study_id, series_id, indicator)
+        //     .await?;
         Ok(())
     }
 
     pub async fn set_market(&self, options: ChartOptions) -> Result<()> {
         let series_count = self.series_count.fetch_add(1, Ordering::SeqCst) + 1;
         let symbol_series_id = format!("sds_sym_{series_count}");
-        let series_id = Ustr::from(&format!("sds_{series_count}"));
-        let series_version = format!("s{series_count}");
+        let series_identifier = Ustr::from(&format!("sds_{series_count}"));
+        let series_id = format!("s{series_count}");
         let chart_session = Ustr::from(&gen_session_id("cs"));
         let symbol = format!("{}:{}", options.exchange, options.symbol);
         self.create_chart_session(&chart_session).await?;
@@ -968,10 +1055,10 @@ impl WebSocketClient {
         }
 
         self.create_series()
-            .session(&chart_session)
+            .chart_session(&chart_session)
+            .series_identifier(&series_identifier)
             .series_id(&series_id)
-            .series_version(&series_version)
-            .series_symbol_id(&symbol_series_id)
+            .symbol_series_id(&symbol_series_id)
             .interval(options.interval)
             .bar_count(options.bar_count)
             .maybe_range(options.range)
@@ -979,7 +1066,8 @@ impl WebSocketClient {
             .await?;
 
         if let Some(study) = options.study_config {
-            self.set_study(study, &chart_session, &series_id).await?;
+            self.set_study(study, &chart_session, &series_identifier)
+                .await?;
         }
 
         let series_info = SeriesInfo {
@@ -990,7 +1078,7 @@ impl WebSocketClient {
         self.data_handler
             .metadata
             .series
-            .insert(series_id, series_info);
+            .insert(series_identifier, series_info);
 
         Ok(())
     }
@@ -1018,18 +1106,6 @@ impl WebSocketClient {
         self.ping(&Message::Ping(Vec::new().into()))
             .await
             .map_err(|e| Error::WebSocket(ustr(&format!("{e}"))))?;
-        Ok(())
-    }
-
-    pub async fn ensure_quote_session(&self) -> Result<()> {
-        let quote_session = self.quote_session.read().await;
-        if quote_session.is_empty() {
-            drop(quote_session); // Release read lock
-
-            info!("Creating quote session");
-            self.create_quote_session().await?;
-            self.set_fields().await?;
-        }
         Ok(())
     }
 }
