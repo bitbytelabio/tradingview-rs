@@ -30,8 +30,8 @@ impl Handler {
     async fn process_event(&self, event: TradingViewDataEvent, message: &[Value]) -> Result<()> {
         match event {
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
-                tracing::trace!("received raw chart data: {:?}", message);
-                self.handle_chart_data(message).await
+                self.handle_chart_data(message).await?;
+                Ok(())
             }
             TradingViewDataEvent::OnQuoteData => {
                 self.handle_quote_data(message).await;
@@ -39,65 +39,51 @@ impl Handler {
             }
             TradingViewDataEvent::OnSymbolResolved => self.handle_symbol_resolved(message).await,
             TradingViewDataEvent::OnSeriesCompleted => {
-                debug!("series completed: {:?}", message);
                 (self.handler.on_series_completed)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnSeriesLoading => {
-                debug!("series loading: {:?}", message);
                 (self.handler.on_series_loading)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnQuoteCompleted => {
-                debug!("quote completed: {:?}", message);
                 (self.handler.on_quote_completed)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnReplayOk => {
-                debug!("replay ok: {:?}", message);
                 (self.handler.on_replay_ok)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnReplayPoint => {
-                debug!("replay point: {:?}", message);
                 (self.handler.on_replay_point)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnReplayInstanceId => {
-                debug!("replay instance id: {:?}", message);
                 (self.handler.on_replay_instance_id)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnReplayResolutions => {
-                debug!("replay resolutions: {:?}", message);
                 (self.handler.on_replay_resolutions)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnReplayDataEnd => {
-                debug!("replay data end: {:?}", message);
                 (self.handler.on_replay_data_end)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnStudyLoading => {
-                debug!("study loading: {:?}", message);
                 (self.handler.on_study_loading)(message.to_vec());
                 Ok(())
             }
             TradingViewDataEvent::OnStudyCompleted => {
-                debug!("study completed: {:?}", message);
                 (self.handler.on_study_completed)(message.to_vec());
                 Ok(())
             }
-            TradingViewDataEvent::OnError(tradingview_error) => {
-                error!("trading view error: {:?}", tradingview_error);
-                let error = Error::TradingView {
-                    source: tradingview_error,
-                };
+            TradingViewDataEvent::OnError(error) => {
+                let error = Error::TradingView { source: error };
                 self.notify_error(error, message);
                 Ok(())
             }
             TradingViewDataEvent::UnknownEvent(event) => {
-                warn!("unknown event: {:?}", event);
                 (self.handler.on_unknown_event)((event, message.to_vec()));
                 Ok(())
             }
@@ -109,9 +95,7 @@ impl Handler {
             return Ok(());
         }
 
-        let symbol_info = SymbolInfo::deserialize(&message[2])
-            .map_err(|e| Error::JsonParse(Ustr::from(&e.to_string())))?;
-
+        let symbol_info = SymbolInfo::deserialize(&message[2])?;
         debug!("receive symbol info: {:?}", symbol_info);
 
         {
