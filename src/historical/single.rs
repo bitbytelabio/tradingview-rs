@@ -2,7 +2,7 @@ use crate::{
     DataPoint, DataServer, Error, Interval, MarketSymbol, OHLCV as _, Result, SymbolInfo, Ticker,
     chart::ChartOptions,
     error::TradingViewError,
-    history::resolve_auth_token,
+    historical::resolve_auth_token,
     live::handler::{
         command::CommandRunner,
         message::{Command, TradingViewResponse},

@@ -1,6 +1,6 @@
 use colored::*;
 use std::sync::Once;
-use tradingview::{DataServer, Interval, history};
+use tradingview::{DataServer, Interval, historical};
 
 fn init() {
     static INIT: Once = Once::new();
@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
         format!("{interval:?}").magenta(),
     );
 
-    let (_info, data) = history::single::retrieve()
+    let (_info, data) = historical::single::retrieve()
         .auth_token(&auth_token)
         .symbol(symbol)
         .exchange(exchange)

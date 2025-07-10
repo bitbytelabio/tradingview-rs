@@ -13,8 +13,6 @@ static UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, li
 
 pub use crate::client::misc::*;
 
-pub use chart::history;
-
 pub mod websocket {
     pub use crate::live::websocket::*;
 }
@@ -29,4 +27,5 @@ pub use error::Error;
 // Re-exporting some commonly used types
 pub use iso_currency::{Country, Currency, CurrencySymbol};
 
+pub mod historical;
 pub mod live;
