@@ -40,7 +40,7 @@ macro_rules! event_setter {
 }
 
 #[derive(Clone, Builder)]
-pub struct TradingViewHandler {
+pub struct TradingViewEventHandler {
     #[builder(default= default_callback::<SymbolInfo>("ON_SYMBOL_INFO"))]
     pub on_symbol_info: Arc<CallbackFn<SymbolInfo>>,
 
@@ -90,13 +90,13 @@ pub struct TradingViewHandler {
     pub on_unknown_event: Arc<CallbackFn<(Ustr, Vec<Value>)>>,
 }
 
-impl Default for TradingViewHandler {
+impl Default for TradingViewEventHandler {
     fn default() -> Self {
-        TradingViewHandler::builder().build()
+        TradingViewEventHandler::builder().build()
     }
 }
 
-impl TradingViewHandler {
+impl TradingViewEventHandler {
     event_setter!(on_chart_data, (SeriesInfo, Vec<DataPoint>));
     event_setter!(on_quote_data, QuoteValue);
     event_setter!(on_study_data, (StudyOptions, StudyResponseData));

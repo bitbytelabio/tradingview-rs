@@ -7,7 +7,7 @@ use crate::{
     ChartResponseData, Error, QuoteData, QuoteValue, Result, StudyOptions, StudyResponseData,
     SymbolInfo,
     error::TradingViewError,
-    live::{handler::types::TradingViewHandler, models::TradingViewDataEvent},
+    live::{handler::types::TradingViewEventHandler, models::TradingViewDataEvent},
     quote::utils::merge_quotes,
     websocket::Metadata,
 };
@@ -15,7 +15,7 @@ use crate::{
 #[derive(Clone, Default)]
 pub struct Handler {
     pub(crate) metadata: Metadata,
-    pub(crate) handler: TradingViewHandler,
+    pub(crate) handler: TradingViewEventHandler,
 }
 
 impl Handler {
@@ -246,7 +246,7 @@ impl Handler {
         (self.handler.on_error)((error, message.to_vec()));
     }
 
-    pub fn set_handler(mut self, handler: TradingViewHandler) -> Self {
+    pub fn set_handler(mut self, handler: TradingViewEventHandler) -> Self {
         self.handler = handler;
         self
     }
