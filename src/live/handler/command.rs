@@ -1,3 +1,5 @@
+use iso_currency::Currency;
+use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, sync::Arc};
 use tokio::{
     select,
@@ -6,13 +8,251 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
+use ustr::{Ustr, ustr};
 
 use crate::{
-    Error, Result,
-    error::TradingViewError,
-    live::handler::{message::Command, types::CommandRx},
+    Error, Interval, MarketAdjustment, Result, SessionType, Timezone, error::TradingViewError,
+    live::handler::types::CommandRx, options::Range, study::StudyConfiguration,
     websocket::WebSocketClient,
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Command {
+    Close,
+    Ping,
+    SendRawMessage {
+        message: Ustr,
+    },
+    SetAuthToken {
+        auth_token: Ustr,
+    },
+    SetLocale {
+        language: Ustr,
+        country: Ustr,
+    },
+    SetDataQuality {
+        quality: Ustr,
+    },
+    SetTimeZone {
+        chart_session: Ustr,
+        timezone: Timezone,
+    },
+
+    // Quote Session Commands
+    CreateQuoteSession {
+        quote_session: Ustr,
+    },
+    DeleteQuoteSession {
+        quote_session: Ustr,
+    },
+    FastSymbols {
+        quote_session: Ustr,
+        symbols: Vec<Ustr>,
+    },
+    SetQuoteFields {
+        quote_session: Ustr,
+    },
+    AddQuoteSymbols {
+        quote_session: Ustr,
+        symbols: Vec<Ustr>,
+    },
+    RemoveQuoteSymbols {
+        quote_session: Ustr,
+        symbols: Vec<Ustr>,
+    },
+
+    /// Chart Session Commands
+    CreateChartSession {
+        chart_session: Ustr,
+    },
+    DeleteChartSession {
+        chart_session: Ustr,
+    },
+    RequestMoreData {
+        chart_session: Ustr,
+        series_id: Ustr,
+        num: i64,
+    },
+    RequestMoreTickmarks {
+        chart_session: Ustr,
+        series_id: Ustr,
+        num: i64,
+    },
+    CreateChartSeries(ChartSeriesConfCommand),
+    ModifyChartSeries(ChartSeriesConfCommand),
+    RemoveSeries {
+        chart_session: Ustr,
+        series_identifier: Ustr,
+    },
+    ResolveSymbol(ResolveSymbolCommand),
+
+    // Replay Session Commands
+    CreateReplaySession {
+        replay_session: Ustr,
+    },
+    DeleteReplaySession {
+        replay_session: Ustr,
+    },
+    AddReplaySeries(AddReplaySeriesCommand),
+    ReplayStep {
+        chart_session: Ustr,
+        series_id: Ustr,
+        step: i64, // Step in milliseconds
+    },
+    ReplayStart {
+        chart_session: Ustr,
+        series_id: Ustr,
+        interval: Interval,
+    },
+    ReplayStop {
+        chart_session: Ustr,
+        series_id: Ustr,
+    },
+    ReplayReset {
+        chart_session: Ustr,
+        series_id: Ustr,
+        timestamp: i64, // Reset to this timestamp in milliseconds
+    },
+
+    // Study Commands
+    CreateStudy(StudyConfCommand),
+    ModifyStudy(StudyConfCommand),
+    RemoveStudy {
+        chart_session: Ustr,
+        study_id: Ustr,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+pub struct AddReplaySeriesCommand {
+    chart_session: Ustr,
+    series_id: Ustr,
+    instrument: Ustr, // e.g., "HOSE:FPT"
+    adjustment: Option<MarketAdjustment>,
+    session_type: Option<SessionType>,
+    currency: Option<Currency>,
+    interval: Interval,
+}
+
+#[bon::bon]
+impl AddReplaySeriesCommand {
+    #[builder]
+    pub fn new(
+        chart_session: &str,
+        series_id: &str,
+        instrument: &str,
+        interval: Interval,
+        adjustment: Option<MarketAdjustment>,
+        session_type: Option<SessionType>,
+        currency: Option<Currency>,
+    ) -> Self {
+        Self {
+            chart_session: ustr(chart_session),
+            series_id: ustr(series_id),
+            instrument: ustr(instrument),
+            adjustment,
+            session_type,
+            currency,
+            interval,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudyConfCommand {
+    pub chart_session: Ustr,
+    pub study_ids: [Ustr; 2],
+    pub chart_series_id: Ustr,
+    pub study: StudyConfiguration,
+}
+
+#[bon::bon]
+impl StudyConfCommand {
+    #[builder]
+    pub fn new(
+        chart_session: &str,
+        study_ids: [Ustr; 2],
+        chart_series_id: &str,
+        study: StudyConfiguration,
+    ) -> Self {
+        Self {
+            chart_session: ustr(chart_session),
+            study_ids,
+            chart_series_id: ustr(chart_series_id),
+            study,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+pub struct ChartSeriesConfCommand {
+    pub chart_session: Ustr,
+    pub series_identifier: Ustr, // (sds_2)
+    pub series_id: Ustr,         // (s1)
+    pub symbol_series_id: Ustr,  // (sds_sym_2)
+    pub interval: Interval,
+    pub bar_count: u64,
+    pub range: Option<Range>,
+}
+
+#[bon::bon]
+impl ChartSeriesConfCommand {
+    #[builder]
+    pub fn new(
+        chart_session: &str,
+        series_identifier: &str,
+        series_id: &str,
+        symbol_series_id: &str,
+        interval: Interval,
+        bar_count: u64,
+        range: Option<Range>,
+    ) -> Self {
+        Self {
+            chart_session: ustr(chart_session),
+            series_identifier: ustr(series_identifier),
+            series_id: ustr(series_id),
+            symbol_series_id: ustr(symbol_series_id),
+            interval,
+            bar_count,
+            range,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+pub struct ResolveSymbolCommand {
+    pub session: Ustr,
+    pub symbol_series_id: Ustr,
+    pub instrument: Ustr, // e.g., "HOSE:FPT"
+    pub adjustment: Option<MarketAdjustment>,
+    pub currency: Option<Currency>,
+    pub session_type: Option<SessionType>,
+    pub replay_session: Option<Ustr>,
+}
+
+#[bon::bon]
+impl ResolveSymbolCommand {
+    #[builder]
+    pub fn new(
+        session: &str,
+        symbol_series_id: &str,
+        instrument: &str,
+        adjustment: Option<MarketAdjustment>,
+        currency: Option<Currency>,
+        session_type: Option<SessionType>,
+        replay_session: Option<&str>,
+    ) -> Self {
+        Self {
+            session: ustr(session),
+            symbol_series_id: ustr(symbol_series_id),
+            instrument: ustr(instrument),
+            adjustment,
+            currency,
+            session_type,
+            replay_session: replay_session.map(ustr),
+        }
+    }
+}
 
 /// Connection state tracking with timestamps for better monitoring
 #[derive(Debug, Clone, PartialEq, Copy, Eq)]
@@ -649,21 +889,7 @@ impl CommandRunner {
                     chart_session,
                     timezone,
                 } => self.ws.set_timezone(&chart_session, timezone).await,
-                Send { message, payload } => todo!(),
-                SendRawMessage { message } => todo!(),
-                DeleteQuoteSession { quote_session } => todo!(),
-                FastSymbols { symbols } => todo!(),
-                SetQuoteFields { quote_session } => todo!(),
-                AddQuoteSymbols {
-                    quote_session,
-                    symbols,
-                } => todo!(),
-                RemoveQuoteSymbols {
-                    quote_session,
-                    symbols,
-                } => todo!(),
-                CreateChartSession { chart_session } => todo!(),
-                DeleteChartSession { chart_session } => todo!(),
+                _ => todo!("Handle other commands"),
             }
         })
         .await;

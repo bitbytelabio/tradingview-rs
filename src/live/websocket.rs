@@ -544,200 +544,6 @@ impl WebSocketClient {
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn create_replay_session(&self, session: &str) -> Result<()> {
-        self.send("replay_create_session", &payload!(session))
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    #[builder]
-    pub async fn add_replay_series(
-        &self,
-        chart_session: &str,
-        series_id: &str,
-        instrument: &str, // e.g., "HOSE:FPT"
-        adjustment: Option<MarketAdjustment>,
-        session_type: Option<SessionType>,
-        currency: Option<Currency>,
-        interval: Interval,
-    ) -> Result<()> {
-        self.send(
-            "replay_add_series",
-            &payload!(
-                chart_session,
-                series_id,
-                symbol_init()
-                    .instrument(instrument)
-                    .maybe_adjustment(adjustment)
-                    .maybe_currency(currency)
-                    .maybe_session_type(session_type)
-                    .call()?,
-                interval.to_string()
-            ),
-        )
-        .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn delete_chart_session(&self, session: &str) -> Result<()> {
-        self.send("chart_delete_session", &payload!(session))
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn delete_replay_session(&self, session: &str) -> Result<()> {
-        self.send("replay_delete_session", &payload!(session))
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn replay_step(&self, session: &str, series_id: &str, step: u64) -> Result<()> {
-        self.send("replay_step", &payload!(session, series_id, step))
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn replay_start(
-        &self,
-        chart_session: &str,
-        series_id: &str,
-        interval: Interval,
-    ) -> Result<()> {
-        self.send(
-            "replay_start",
-            &payload!(chart_session, series_id, interval.to_string()),
-        )
-        .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn replay_stop(&self, chart_session: &str, series_id: &str) -> Result<()> {
-        self.send("replay_stop", &payload!(chart_session, series_id))
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn replay_reset(
-        &self,
-        chart_session: &str,
-        series_id: &str,
-        timestamp: i64,
-    ) -> Result<()> {
-        self.send(
-            "replay_reset",
-            &payload!(chart_session, series_id, timestamp),
-        )
-        .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn request_more_data(
-        &self,
-        chart_session: &str,
-        series_id: &str,
-        num: u64,
-    ) -> Result<()> {
-        self.send(
-            "request_more_data",
-            &payload!(chart_session, series_id, num),
-        )
-        .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn request_more_tickmarks(
-        &self,
-        chart_session: &str,
-        series_id: &str,
-        num: u64,
-    ) -> Result<()> {
-        self.send(
-            "request_more_tickmarks",
-            &payload!(chart_session, series_id, num),
-        )
-        .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    #[builder]
-    pub async fn create_study(
-        &self,
-        chart_session: &str,
-        study_ids: &[&str; 2],
-        chart_series_id: &str,
-        study: StudyConfiguration,
-    ) -> Result<()> {
-        let mut payloads: Vec<Value> = vec![
-            Value::from(chart_session),
-            Value::from(study_ids[0]),
-            Value::from(study_ids[1]),
-            Value::from(chart_series_id),
-        ];
-
-        match study {
-            StudyConfiguration::Pine(pine_indicator) => {
-                payloads.push(Value::from(pine_indicator.script_type.to_string()));
-                payloads.push(pine_indicator.to_study_inputs()?);
-            }
-            StudyConfiguration::Builtin(study_name, study_config) => {
-                payloads.push(Value::from(study_name));
-                payloads.push(json!(study_config));
-            }
-        }
-
-        self.send("create_study", &payloads).await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    #[builder]
-    pub async fn modify_study(
-        &self,
-        chart_session: &str,
-        study_ids: &[&str; 2],
-        chart_series_id: &str,
-        study: StudyConfiguration,
-    ) -> Result<()> {
-        let mut payloads: Vec<Value> = vec![
-            Value::from(chart_session),
-            Value::from(study_ids[0]),
-            Value::from(study_ids[1]),
-            Value::from(chart_series_id),
-        ];
-
-        match study {
-            StudyConfiguration::Pine(pine_indicator) => {
-                payloads.push(Value::from(pine_indicator.script_type.to_string()));
-                payloads.push(pine_indicator.to_study_inputs()?);
-            }
-            StudyConfiguration::Builtin(study_name, study_config) => {
-                payloads.push(Value::from(study_name));
-                payloads.push(json!(study_config));
-            }
-        }
-
-        self.send("modify_study", &payloads).await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn remove_study(&self, chart_session: &str, study_id: &str) -> Result<()> {
-        self.send("remove_study", &payload!(chart_session, study_id))
-            .await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn create_series(
         &self,
@@ -816,7 +622,7 @@ impl WebSocketClient {
         &self,
         session: &str,
         symbol_series_id: &str,
-        symbol: &str,
+        instrument: &str,
         adjustment: Option<MarketAdjustment>,
         currency: Option<Currency>,
         session_type: Option<SessionType>,
@@ -828,7 +634,7 @@ impl WebSocketClient {
                 session,
                 symbol_series_id,
                 symbol_init()
-                    .instrument(symbol)
+                    .instrument(instrument)
                     .maybe_adjustment(adjustment)
                     .maybe_currency(currency)
                     .maybe_session_type(session_type)
@@ -837,6 +643,200 @@ impl WebSocketClient {
             ),
         )
         .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn delete_chart_session(&self, session: &str) -> Result<()> {
+        self.send("chart_delete_session", &payload!(session))
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn request_more_data(
+        &self,
+        chart_session: &str,
+        series_id: &str,
+        num: u64,
+    ) -> Result<()> {
+        self.send(
+            "request_more_data",
+            &payload!(chart_session, series_id, num),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn request_more_tickmarks(
+        &self,
+        chart_session: &str,
+        series_id: &str,
+        num: u64,
+    ) -> Result<()> {
+        self.send(
+            "request_more_tickmarks",
+            &payload!(chart_session, series_id, num),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn create_replay_session(&self, session: &str) -> Result<()> {
+        self.send("replay_create_session", &payload!(session))
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    #[builder]
+    pub async fn add_replay_series(
+        &self,
+        chart_session: &str,
+        series_id: &str,
+        instrument: &str, // e.g., "HOSE:FPT"
+        adjustment: Option<MarketAdjustment>,
+        session_type: Option<SessionType>,
+        currency: Option<Currency>,
+        interval: Interval,
+    ) -> Result<()> {
+        self.send(
+            "replay_add_series",
+            &payload!(
+                chart_session,
+                series_id,
+                symbol_init()
+                    .instrument(instrument)
+                    .maybe_adjustment(adjustment)
+                    .maybe_currency(currency)
+                    .maybe_session_type(session_type)
+                    .call()?,
+                interval.to_string()
+            ),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn delete_replay_session(&self, session: &str) -> Result<()> {
+        self.send("replay_delete_session", &payload!(session))
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn replay_step(&self, session: &str, series_id: &str, step: u64) -> Result<()> {
+        self.send("replay_step", &payload!(session, series_id, step))
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn replay_start(
+        &self,
+        chart_session: &str,
+        series_id: &str,
+        interval: Interval,
+    ) -> Result<()> {
+        self.send(
+            "replay_start",
+            &payload!(chart_session, series_id, interval.to_string()),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn replay_stop(&self, chart_session: &str, series_id: &str) -> Result<()> {
+        self.send("replay_stop", &payload!(chart_session, series_id))
+            .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn replay_reset(
+        &self,
+        chart_session: &str,
+        series_id: &str,
+        timestamp: i64,
+    ) -> Result<()> {
+        self.send(
+            "replay_reset",
+            &payload!(chart_session, series_id, timestamp),
+        )
+        .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    #[builder]
+    pub async fn create_study(
+        &self,
+        chart_session: &str,
+        study_ids: &[&str; 2],
+        chart_series_id: &str,
+        study: StudyConfiguration,
+    ) -> Result<()> {
+        let mut payloads: Vec<Value> = vec![
+            Value::from(chart_session),
+            Value::from(study_ids[0]),
+            Value::from(study_ids[1]),
+            Value::from(chart_series_id),
+        ];
+
+        match study {
+            StudyConfiguration::Pine(pine_indicator) => {
+                payloads.push(Value::from(pine_indicator.script_type.to_string()));
+                payloads.push(pine_indicator.to_study_inputs()?);
+            }
+            StudyConfiguration::Builtin(study_name, study_config) => {
+                payloads.push(Value::from(study_name));
+                payloads.push(json!(study_config));
+            }
+        }
+
+        self.send("create_study", &payloads).await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    #[builder]
+    pub async fn modify_study(
+        &self,
+        chart_session: &str,
+        study_ids: &[&str; 2],
+        chart_series_id: &str,
+        study: StudyConfiguration,
+    ) -> Result<()> {
+        let mut payloads: Vec<Value> = vec![
+            Value::from(chart_session),
+            Value::from(study_ids[0]),
+            Value::from(study_ids[1]),
+            Value::from(chart_series_id),
+        ];
+
+        match study {
+            StudyConfiguration::Pine(pine_indicator) => {
+                payloads.push(Value::from(pine_indicator.script_type.to_string()));
+                payloads.push(pine_indicator.to_study_inputs()?);
+            }
+            StudyConfiguration::Builtin(study_name, study_config) => {
+                payloads.push(Value::from(study_name));
+                payloads.push(json!(study_config));
+            }
+        }
+
+        self.send("modify_study", &payloads).await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), level = "debug")]
+    pub async fn remove_study(&self, chart_session: &str, study_id: &str) -> Result<()> {
+        self.send("remove_study", &payload!(chart_session, study_id))
+            .await?;
         Ok(())
     }
 

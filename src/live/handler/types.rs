@@ -5,7 +5,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
     Error, QuoteValue, SeriesData, TradingViewDataEvent, error::TradingViewError,
-    live::handler::message::Command,
+    live::handler::command::Command,
 };
 
 pub type CommandTx = UnboundedSender<Command>;
