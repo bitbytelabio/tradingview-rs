@@ -1,4 +1,3 @@
-use dashmap::DashMap;
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
@@ -10,7 +9,7 @@ use std::{
     fmt::Debug,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -42,7 +41,7 @@ use crate::{
         },
     },
     payload,
-    quote::{ALL_QUOTE_FIELDS, models::QuoteValue},
+    quote::ALL_QUOTE_FIELDS,
     study::StudyConfiguration,
     utils::{parse_packet, symbol_init},
 };
@@ -102,13 +101,6 @@ impl ErrorStats {
     }
 }
 
-#[derive(Default, Clone)]
-pub(crate) struct Metadata {
-    pub(crate) series: Arc<DashMap<Ustr, SeriesInfo>>,
-    pub(crate) studies: Arc<DashMap<Ustr, Ustr>>,
-    pub(crate) quotes: Arc<DashMap<Ustr, QuoteValue>>,
-}
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Copy)]
 pub struct SeriesInfo {
     pub chart_session: Ustr,
@@ -123,9 +115,6 @@ pub struct WebSocketClient {
     // WebSocket connection
     cancellation: CancellationToken,
     is_closed: Arc<AtomicBool>,
-
-    series_count: Arc<AtomicU16>,
-    studies_count: Arc<AtomicU16>,
 
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
@@ -159,8 +148,6 @@ impl WebSocketClient {
         let (write, read) = Self::connect(server).await?;
 
         let is_closed = Arc::new(AtomicBool::new(false));
-        let series_count = Arc::new(AtomicU16::new(0));
-        let studies_count = Arc::new(AtomicU16::new(0));
         let auth_token = Arc::new(RwLock::new(auth_token));
         let write = Arc::new(Mutex::new(write));
         let read = Arc::new(Mutex::new(read));
@@ -172,8 +159,6 @@ impl WebSocketClient {
             write,
             auth_token,
             is_closed,
-            series_count,
-            studies_count,
             cancellation: CancellationToken::new(),
             error_stats: ErrorStats::default(),
             error_config: ErrorRecoveryConfig::default(),
@@ -841,15 +826,6 @@ impl WebSocketClient {
     }
 
     pub async fn delete(&self) -> Result<()> {
-        // Clear all metadata
-        self.handler.metadata.series.clear();
-        self.handler.metadata.studies.clear();
-        self.handler.metadata.quotes.clear();
-
-        // Reset counters
-        self.series_count.store(0, Ordering::SeqCst);
-        self.studies_count.store(0, Ordering::SeqCst);
-
         // Close the socket last
         if let Err(e) = self.close().await {
             error!("Failed to close socket: {:?}", e);
@@ -859,128 +835,6 @@ impl WebSocketClient {
         debug!("WebSocket client deleted successfully");
         Ok(())
     }
-
-    // #[tracing::instrument(skip(self), level = "debug")]
-    // #[builder]
-    // pub async fn set_replay(
-    //     &self,
-    //     symbol: &str,
-    //     options: ChartOptions,
-    //     chart_session: &str,
-    //     symbol_series_id: &str,
-    // ) -> Result<()> {
-    //     let replay_series_id = gen_id();
-    //     let replay_session = gen_session_id("rs");
-
-    //     self.create_replay_session(&replay_session).await?;
-    //     self.add_replay_series()
-    //         .chart_session(&replay_session)
-    //         .series_id(&replay_series_id)
-    //         .instrument(symbol)
-    //         .interval(options.interval)
-    //         .maybe_adjustment(options.adjustment)
-    //         .maybe_currency(options.currency)
-    //         .maybe_session_type(options.session_type)
-    //         .call()
-    //         .await?;
-
-    //     self.replay_reset(&replay_session, &replay_series_id, options.replay_from)
-    //         .await?;
-
-    //     self.resolve_symbol()
-    //         .symbol(options.symbol.as_str())
-    //         .session(chart_session)
-    //         .symbol_series_id(symbol_series_id)
-    //         .maybe_adjustment(options.adjustment)
-    //         .maybe_currency(options.currency)
-    //         .replay_session(&replay_session)
-    //         .call()
-    //         .await?;
-
-    //     Ok(())
-    // }
-
-    // pub async fn set_study(
-    //     &self,
-    //     study: StudyOptions,
-    //     chart_session: &str,
-    //     series_id: &str,
-    // ) -> Result<()> {
-    //     let study_count = self.studies_count.fetch_add(1, Ordering::SeqCst) + 1;
-
-    //     let study_id = Ustr::from(&format!("st{study_count}"));
-
-    //     let indicator = PineIndicator::build()
-    //         .fetch(&study.script_id, &study.script_version, study.script_type)
-    //         .await?;
-
-    //     self.data_handler
-    //         .metadata
-    //         .studies
-    //         .insert(indicator.metadata.data.id, study_id);
-
-    //     // self.create_study(chart_session, &study_id, series_id, indicator)
-    //     //     .await?;
-    //     Ok(())
-    // }
-
-    // pub async fn set_market(&self, options: ChartOptions) -> Result<()> {
-    //     let series_count = self.series_count.fetch_add(1, Ordering::SeqCst) + 1;
-    //     let symbol_series_id = format!("sds_sym_{series_count}");
-    //     let series_identifier = Ustr::from(&format!("sds_{series_count}"));
-    //     let series_id = format!("s{series_count}");
-    //     let chart_session = Ustr::from(&gen_session_id("cs"));
-    //     let symbol = format!("{}:{}", options.exchange, options.symbol);
-    //     self.create_chart_session(&chart_session).await?;
-
-    //     if options.replay_mode {
-    //         self.set_replay()
-    //             .symbol(&symbol)
-    //             .options(options)
-    //             .chart_session(&chart_session)
-    //             .symbol_series_id(&symbol_series_id)
-    //             .call()
-    //             .await?;
-    //     } else {
-    //         self.resolve_symbol()
-    //             .session(&chart_session)
-    //             .symbol_series_id(&symbol_series_id)
-    //             .symbol(&symbol)
-    //             .maybe_adjustment(options.adjustment)
-    //             .maybe_currency(options.currency)
-    //             .maybe_session_type(options.session_type)
-    //             .call()
-    //             .await?;
-    //     }
-
-    //     self.create_series()
-    //         .chart_session(&chart_session)
-    //         .series_identifier(&series_identifier)
-    //         .series_id(&series_id)
-    //         .symbol_series_id(&symbol_series_id)
-    //         .interval(options.interval)
-    //         .bar_count(options.bar_count)
-    //         .maybe_range(options.range)
-    //         .call()
-    //         .await?;
-
-    //     if let Some(study) = options.study_config {
-    //         self.set_study(study, &chart_session, &series_identifier)
-    //             .await?;
-    //     }
-
-    //     let series_info = SeriesInfo {
-    //         chart_session,
-    //         options,
-    //     };
-
-    //     self.data_handler
-    //         .metadata
-    //         .series
-    //         .insert(series_identifier, series_info);
-
-    //     Ok(())
-    // }
 
     pub async fn subscribe(&self) -> Result<()> {
         let read = self.read.lock().await;

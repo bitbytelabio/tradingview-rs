@@ -1,14 +1,20 @@
+use dashmap::DashMap;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use ustr::ustr;
+use std::sync::Arc;
+use ustr::{Ustr, ustr};
 
 use crate::{
     Error, QuoteData, QuoteValue, Result, SeriesData,
     error::TradingViewError,
     live::{handler::types::EventHandler, models::TradingViewDataEvent},
     quote::utils::merge_quotes,
-    websocket::Metadata,
 };
+
+#[derive(Default, Clone)]
+pub(crate) struct Metadata {
+    pub(crate) quotes: Arc<DashMap<Ustr, QuoteValue>>,
+}
 
 #[derive(Clone)]
 pub struct Handler {
