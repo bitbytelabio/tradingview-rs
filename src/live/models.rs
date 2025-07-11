@@ -13,7 +13,11 @@ use tokio_tungstenite::{
 };
 use ustr::Ustr;
 
-use crate::{Result, UA, error::Error, error::TradingViewError, utils::format_packet};
+use crate::{
+    Result, UA,
+    error::{Error, TradingViewError},
+    utils::format_packet,
+};
 
 lazy_static::lazy_static! {
     pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
@@ -76,6 +80,12 @@ impl From<String> for TradingViewDataEvent {
 
             s => TradingViewDataEvent::UnknownEvent(s.into()),
         }
+    }
+}
+
+impl From<Ustr> for TradingViewDataEvent {
+    fn from(s: Ustr) -> Self {
+        TradingViewDataEvent::from(s.to_string())
     }
 }
 

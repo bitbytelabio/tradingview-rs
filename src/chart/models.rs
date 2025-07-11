@@ -30,6 +30,14 @@ impl std::fmt::Display for ChartType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SeriesData {
+    String(Ustr),
+    DataPoints(Vec<DataPoint>),
+    SymbolInfo(SymbolInfo),
+    JsonValue(Value),
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Builder)]
 pub struct ChartHistoricalData {
     pub symbol_info: SymbolInfo,

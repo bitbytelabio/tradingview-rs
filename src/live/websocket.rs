@@ -32,8 +32,8 @@ use url::Url;
 use ustr::{Ustr, ustr};
 
 use crate::{
-    DataPoint, Error, Interval, MarketAdjustment, Result, SessionType, SocketServerInfo, Timezone,
-    chart::{ChartOptions, SymbolInfo, options::Range},
+    Error, Interval, MarketAdjustment, Result, SessionType, SocketServerInfo, Timezone,
+    chart::{ChartOptions, options::Range},
     live::{
         handler::event::Handler,
         models::{
@@ -107,16 +107,9 @@ pub(crate) struct Metadata {
     pub(crate) series: Arc<DashMap<Ustr, SeriesInfo>>,
     pub(crate) studies: Arc<DashMap<Ustr, Ustr>>,
     pub(crate) quotes: Arc<DashMap<Ustr, QuoteValue>>,
-    pub(crate) chart_state: Arc<RwLock<ChartState>>,
 }
 
-#[derive(Default, Clone)]
-pub(crate) struct ChartState {
-    pub(crate) chart: Option<(SeriesInfo, Vec<DataPoint>)>,
-    pub(crate) symbol_info: Option<SymbolInfo>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Copy)]
 pub struct SeriesInfo {
     pub chart_session: Ustr,
     pub options: ChartOptions,
@@ -359,7 +352,7 @@ impl WebSocketClient {
     /// Send error information through the data handler
     async fn notify_error_handlers(&self, error: &Error, context: &str, severity: ErrorSeverity) {
         // Create context information
-        let error_context = vec![serde_json::json!({
+        let error_context = vec![json!({
             "error_type": format!("{:?}", error),
             "context": context,
             "severity": format!("{:?}", severity),
@@ -369,7 +362,7 @@ impl WebSocketClient {
         })];
 
         // Notify through the error callback
-        (self.handler.handler.on_error)((*error, error_context));
+        (self.handler.event_handler.on_internal_error)((*error, error_context));
     }
 
     /// Log error with appropriate level based on severity
@@ -1021,11 +1014,11 @@ impl Socket for WebSocketClient {
         &self,
         mut read: MutexGuard<'_, SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     ) -> Result<()> {
-        info!("WebSocket event loop started");
+        trace!("WebSocket event loop started");
 
         loop {
             if self.is_closed.load(Ordering::Relaxed) {
-                info!("WebSocket is closed, ending event loop");
+                trace!("WebSocket is closed, ending event loop");
                 break;
             }
 
@@ -1073,7 +1066,7 @@ impl Socket for WebSocketClient {
             }
         }
 
-        info!("WebSocket event loop ended");
+        trace!("WebSocket event loop ended");
         Ok(())
     }
 
@@ -1150,7 +1143,7 @@ impl Socket for WebSocketClient {
 
     #[tracing::instrument(skip(self), level = "trace")]
     async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()> {
-        let event = TradingViewDataEvent::from(message.m.to_owned());
+        let event = TradingViewDataEvent::from(message.m);
         self.handler.handle_events(event, &message.p).await;
         Ok(())
     }
