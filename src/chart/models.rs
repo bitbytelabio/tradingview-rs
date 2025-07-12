@@ -31,10 +31,11 @@ impl std::fmt::Display for ChartType {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SeriesData {
+pub enum SeriesDataResponse {
     String(Ustr),
-    DataPoints(Vec<DataPoint>),
+    ChartResponseData(ChartResponseData),
     SymbolInfo(SymbolInfo),
+    StudyResponseData(StudyResponseData),
     JsonValue(Value),
 }
 
@@ -69,7 +70,7 @@ impl PriceIterable for ChartHistoricalData {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ChartResponseData {
     #[serde(default)]
     pub node: Option<Ustr>,
@@ -77,7 +78,7 @@ pub struct ChartResponseData {
     pub series: Vec<DataPoint>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct StudyResponseData {
     #[serde(default)]
     pub node: Option<Ustr>,
@@ -88,7 +89,7 @@ pub struct StudyResponseData {
 }
 
 // TODO: Implement graphic parser for indexes response
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct GraphicDataResponse {
     pub d: Ustr,
     pub indexes: Value,

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
-    Error, QuoteValue, SeriesData, TradingViewDataEvent, error::TradingViewError,
+    Error, QuoteValue, SeriesDataResponse, TradingViewDataEvent, error::TradingViewError,
     live::handler::command::Command,
 };
 
@@ -38,8 +38,8 @@ macro_rules! event_setter {
 
 #[derive(Clone, Builder)]
 pub struct EventHandler {
-    #[builder(default = default_callback::<(TradingViewDataEvent, Vec<SeriesData>)>("ON_DATA"))]
-    pub on_series_data: Arc<CallbackFn<(TradingViewDataEvent, Vec<SeriesData>)>>,
+    #[builder(default = default_callback::<(TradingViewDataEvent, Vec<SeriesDataResponse>)>("ON_DATA"))]
+    pub on_series_data: Arc<CallbackFn<(TradingViewDataEvent, Vec<SeriesDataResponse>)>>,
 
     #[builder(default = default_callback::<(TradingViewDataEvent, Vec<Value>)>("ON_SIGNAL"))]
     pub on_signal: Arc<CallbackFn<(TradingViewDataEvent, Vec<Value>)>>,
@@ -56,7 +56,10 @@ pub struct EventHandler {
 
 impl EventHandler {
     event_setter!(on_internal_error, (Error, Vec<Value>));
-    event_setter!(on_series_data, (TradingViewDataEvent, Vec<SeriesData>));
+    event_setter!(
+        on_series_data,
+        (TradingViewDataEvent, Vec<SeriesDataResponse>)
+    );
     event_setter!(on_tradingview_error, (TradingViewError, Vec<Value>));
     event_setter!(on_signal, (TradingViewDataEvent, Vec<Value>));
 }

@@ -99,6 +99,8 @@ pub struct SocketMessageSer {
 pub struct SocketMessageDe {
     pub m: Ustr,
     pub p: Vec<Value>,
+    pub t: u64,    // Timestamp in seconds
+    pub t_ms: u64, // Timestamp in milliseconds
 }
 
 impl SocketMessageSer {

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ustr::{Ustr, ustr};
 
 use crate::{
-    Error, QuoteData, QuoteValue, Result, SeriesData,
+    Error, QuoteData, QuoteValue, Result, SeriesDataResponse,
     error::TradingViewError,
     live::{handler::types::EventHandler, models::TradingViewDataEvent},
     quote::utils::merge_quotes,
@@ -84,7 +84,7 @@ impl Handler {
                 continue;
             }
 
-            let value = SeriesData::deserialize(message)?;
+            let value = SeriesDataResponse::deserialize(message)?;
             series_data.push(value);
         }
 
