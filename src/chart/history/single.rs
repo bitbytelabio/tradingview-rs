@@ -2,7 +2,6 @@ use crate::{
     DataPoint, DataServer, Error, Interval, MarketSymbol, OHLCV as _, Result, SymbolInfo, Ticker,
     chart::ChartOptions,
     error::TradingViewError,
-    history::resolve_auth_token,
     live::handler::{
         command::CommandRunner,
         message::{Command, TradingViewResponse},
@@ -80,7 +79,6 @@ pub async fn retrieve(
     #[builder(default = false)] with_replay: bool,
     #[builder(default = Duration::from_secs(30))] timeout_duration: Duration,
 ) -> Result<(SymbolInfo, Vec<DataPoint>)> {
-    let auth_token = resolve_auth_token(auth_token)?;
     let range: Option<Ustr> = range.map(|r| r.into());
 
     let (symbol, exchange) = extract_symbol_exchange(ticker, symbol, exchange)?;
@@ -109,7 +107,7 @@ pub async fn retrieve(
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
     // Initialize WebSocket client with the standard data handler
-    let websocket = setup_websocket(&auth_token, server, data_tx).await?;
+    let websocket = setup_websocket(auth_token, server, data_tx).await?;
     let websocket_shared = Arc::new(websocket);
 
     // Create and start command runner
@@ -197,13 +195,13 @@ fn extract_symbol_exchange(
 
 /// Set up and initialize WebSocket connection with standard data handler
 async fn setup_websocket(
-    auth_token: &str,
+    auth_token: Option<&str>,
     server: Option<DataServer>,
     data_tx: DataTx,
 ) -> Result<Arc<WebSocketClient>> {
     let websocket = WebSocketClient::builder()
         .server(server.unwrap_or(DataServer::ProData))
-        .auth_token(auth_token)
+        .maybe_auth_token(auth_token)
         .data_tx(data_tx)
         .build()
         .await?;

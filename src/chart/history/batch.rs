@@ -2,7 +2,6 @@ use crate::{
     DataPoint, DataServer, Error, Interval, MarketSymbol, OHLCV as _, Result, SymbolInfo,
     chart::ChartOptions,
     error::TradingViewError,
-    history::resolve_auth_token,
     live::handler::{
         command::CommandRunner,
         message::{Command, TradingViewResponse},
@@ -220,13 +219,13 @@ fn extract_series_id(message: &[Value]) -> Option<Ustr> {
 
 /// Set up and initialize WebSocket connection (reused from single)
 async fn setup_websocket(
-    auth_token: &str,
+    auth_token: Option<&str>,
     server: Option<DataServer>,
     data_tx: DataTx,
 ) -> Result<Arc<WebSocketClient>> {
     let websocket = WebSocketClient::builder()
         .server(server.unwrap_or(DataServer::ProData))
-        .auth_token(auth_token)
+        .maybe_auth_token(auth_token)
         .data_tx(data_tx)
         .build()
         .await?;
@@ -511,7 +510,7 @@ pub async fn retrieve(
         return Err(Error::Internal(ustr("No symbols provided")));
     }
 
-    let auth_token = resolve_auth_token(auth_token)?;
+    // let auth_token = resolve_auth_token(auth_token)?;
     let symbol_count = symbols.len();
 
     tracing::info!("Starting batch retrieval for {} symbols", symbol_count);
@@ -524,7 +523,7 @@ pub async fn retrieve(
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
     // Setup WebSocket and command runner
-    let websocket = setup_websocket(&auth_token, server, data_tx).await?;
+    let websocket = setup_websocket(auth_token, server, data_tx).await?;
     let websocket_shared = Arc::new(websocket);
     let command_runner = CommandRunner::new(cmd_rx, Arc::clone(&websocket_shared));
     let shutdown_token = command_runner.shutdown_token();
