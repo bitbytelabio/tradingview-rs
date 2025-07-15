@@ -1,4 +1,3 @@
-use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, sync::Arc};
 use tokio::{
@@ -8,11 +7,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
-use ustr::{Ustr, ustr};
 
 use crate::{
-    Error, Interval, MarketAdjustment, Result, SessionType, Timezone, error::TradingViewError,
-    live::handler::types::CommandRx, options::Range, study::StudyConfiguration,
+    Error, Result,
+    error::TradingViewError,
+    live::handler::{message::*, types::CommandRx},
     websocket::WebSocketClient,
 };
 
@@ -20,238 +19,43 @@ use crate::{
 pub enum Command {
     Close,
     Ping,
-    SendRawMessage {
-        message: Ustr,
-    },
-    SetAuthToken {
-        auth_token: Ustr,
-    },
-    SetLocale {
-        language: Ustr,
-        country: Ustr,
-    },
-    SetDataQuality {
-        quality: Ustr,
-    },
-    SetTimeZone {
-        chart_session: Ustr,
-        timezone: Timezone,
-    },
+    SendRawMessage(CommandMsg),
+    SetAuthToken(CommandMsg),
+    SetLocale(SetLocaleCommandMsg),
+    SetDataQuality(CommandMsg),
+    SetTimeZone(SetTimeZoneCommandMsg),
 
-    // Quote Session Commands
-    CreateQuoteSession {
-        quote_session: Ustr,
-    },
-    DeleteQuoteSession {
-        quote_session: Ustr,
-    },
-    FastSymbols {
-        quote_session: Ustr,
-        symbols: Vec<Ustr>,
-    },
-    SetQuoteFields {
-        quote_session: Ustr,
-    },
-    AddQuoteSymbols {
-        quote_session: Ustr,
-        symbols: Vec<Ustr>,
-    },
-    RemoveQuoteSymbols {
-        quote_session: Ustr,
-        symbols: Vec<Ustr>,
-    },
+    /// Quote Session Commands
+    CreateQuoteSession(CommandMsg),
+    DeleteQuoteSession(CommandMsg),
+    FastSymbols(QuoteCommandMsg),
+    SetQuoteFields(CommandMsg),
+    AddQuoteSymbols(QuoteCommandMsg),
+    RemoveQuoteSymbols(QuoteCommandMsg),
 
     /// Chart Session Commands
-    CreateChartSession {
-        chart_session: Ustr,
-    },
-    DeleteChartSession {
-        chart_session: Ustr,
-    },
-    RequestMoreData {
-        chart_session: Ustr,
-        series_id: Ustr,
-        num: i64,
-    },
-    RequestMoreTickmarks {
-        chart_session: Ustr,
-        series_id: Ustr,
-        num: i64,
-    },
-    CreateChartSeries(ChartSeriesConfCommand),
-    ModifyChartSeries(ChartSeriesConfCommand),
-    RemoveSeries {
-        chart_session: Ustr,
-        series_identifier: Ustr,
-    },
-    ResolveSymbol(ResolveSymbolCommand),
+    CreateChartSession(CommandMsg),
+    DeleteChartSession(CommandMsg),
+    RequestMoreData(ChartDataRequestMsg),
+    RequestMoreTickmarks(ChartDataRequestMsg),
+    CreateChartSeries(ChartSeriesCommandMsg),
+    ModifyChartSeries(ChartSeriesCommandMsg),
+    RemoveSeries(SessionTerminationCommandMsg), // chart_session + series_id
+    ResolveSymbol(ResolveSymbolCommandMsg),
 
-    // Replay Session Commands
-    CreateReplaySession {
-        replay_session: Ustr,
-    },
-    DeleteReplaySession {
-        replay_session: Ustr,
-    },
-    AddReplaySeries(AddReplaySeriesCommand),
-    ReplayStep {
-        chart_session: Ustr,
-        series_id: Ustr,
-        step: i64, // Step in milliseconds
-    },
-    ReplayStart {
-        chart_session: Ustr,
-        series_id: Ustr,
-        interval: Interval,
-    },
-    ReplayStop {
-        chart_session: Ustr,
-        series_id: Ustr,
-    },
-    ReplayReset {
-        chart_session: Ustr,
-        series_id: Ustr,
-        timestamp: i64, // Reset to this timestamp in milliseconds
-    },
+    /// Replay Session Commands
+    CreateReplaySession(CommandMsg), // replay_session
+    DeleteReplaySession(CommandMsg), // replay_session
+    AddReplaySeries(AddReplaySeriesCommandMsg),
+    ReplayStep(ReplayStepCommandMsg),
+    ReplayStart(ReplayStartCommandMsg),
+    ReplayStop(SessionTerminationCommandMsg), // chart_session + series_id
+    ReplayReset(ReplayResetCommandMsg),
 
-    // Study Commands
-    CreateStudy(StudyConfCommand),
-    ModifyStudy(StudyConfCommand),
-    RemoveStudy {
-        chart_session: Ustr,
-        study_id: Ustr,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
-pub struct AddReplaySeriesCommand {
-    chart_session: Ustr,
-    series_id: Ustr,
-    instrument: Ustr, // e.g., "HOSE:FPT"
-    adjustment: Option<MarketAdjustment>,
-    session_type: Option<SessionType>,
-    currency: Option<Currency>,
-    interval: Interval,
-}
-
-#[bon::bon]
-impl AddReplaySeriesCommand {
-    #[builder]
-    pub fn new(
-        chart_session: &str,
-        series_id: &str,
-        instrument: &str,
-        interval: Interval,
-        adjustment: Option<MarketAdjustment>,
-        session_type: Option<SessionType>,
-        currency: Option<Currency>,
-    ) -> Self {
-        Self {
-            chart_session: ustr(chart_session),
-            series_id: ustr(series_id),
-            instrument: ustr(instrument),
-            adjustment,
-            session_type,
-            currency,
-            interval,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StudyConfCommand {
-    pub chart_session: Ustr,
-    pub study_ids: [Ustr; 2],
-    pub chart_series_id: Ustr,
-    pub study: StudyConfiguration,
-}
-
-#[bon::bon]
-impl StudyConfCommand {
-    #[builder]
-    pub fn new(
-        chart_session: &str,
-        study_ids: [Ustr; 2],
-        chart_series_id: &str,
-        study: StudyConfiguration,
-    ) -> Self {
-        Self {
-            chart_session: ustr(chart_session),
-            study_ids,
-            chart_series_id: ustr(chart_series_id),
-            study,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
-pub struct ChartSeriesConfCommand {
-    pub chart_session: Ustr,
-    pub series_identifier: Ustr, // (sds_2)
-    pub series_id: Ustr,         // (s1)
-    pub symbol_series_id: Ustr,  // (sds_sym_2)
-    pub interval: Interval,
-    pub bar_count: u64,
-    pub range: Option<Range>,
-}
-
-#[bon::bon]
-impl ChartSeriesConfCommand {
-    #[builder]
-    pub fn new(
-        chart_session: &str,
-        series_identifier: &str,
-        series_id: &str,
-        symbol_series_id: &str,
-        interval: Interval,
-        bar_count: u64,
-        range: Option<Range>,
-    ) -> Self {
-        Self {
-            chart_session: ustr(chart_session),
-            series_identifier: ustr(series_identifier),
-            series_id: ustr(series_id),
-            symbol_series_id: ustr(symbol_series_id),
-            interval,
-            bar_count,
-            range,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
-pub struct ResolveSymbolCommand {
-    pub session: Ustr,
-    pub symbol_series_id: Ustr,
-    pub instrument: Ustr, // e.g., "HOSE:FPT"
-    pub adjustment: Option<MarketAdjustment>,
-    pub currency: Option<Currency>,
-    pub session_type: Option<SessionType>,
-    pub replay_session: Option<Ustr>,
-}
-
-#[bon::bon]
-impl ResolveSymbolCommand {
-    #[builder]
-    pub fn new(
-        session: &str,
-        symbol_series_id: &str,
-        instrument: &str,
-        adjustment: Option<MarketAdjustment>,
-        currency: Option<Currency>,
-        session_type: Option<SessionType>,
-        replay_session: Option<&str>,
-    ) -> Self {
-        Self {
-            session: ustr(session),
-            symbol_series_id: ustr(symbol_series_id),
-            instrument: ustr(instrument),
-            adjustment,
-            currency,
-            session_type,
-            replay_session: replay_session.map(ustr),
-        }
-    }
+    /// Study Commands
+    CreateStudy(StudyCommandMsg),
+    ModifyStudy(StudyCommandMsg),
+    RemoveStudy(SessionTerminationCommandMsg), // chart_session + study_id
 }
 
 /// Connection state tracking with timestamps for better monitoring
@@ -879,16 +683,16 @@ impl CommandRunner {
             match cmd {
                 Close => self.ws.delete().await,
                 Ping => self.ws.try_ping().await,
-                SetAuthToken { auth_token } => self.ws.set_auth_token(&auth_token).await,
-                CreateQuoteSession { quote_session } => {
-                    self.ws.create_quote_session(&quote_session).await
+                SetAuthToken(auth_token) => self.ws.set_auth_token(&auth_token.inner).await,
+                CreateQuoteSession(session) => self.ws.create_quote_session(&session.inner).await,
+                SetLocale(locale) => self.ws.set_locale(&locale.language, &locale.country).await,
+                SetDataQuality(quality) => self.ws.set_data_quality(&quality.inner).await,
+                SetTimeZone(timezone) => {
+                    self.ws
+                        .set_timezone(&timezone.chart_session, timezone.timezone)
+                        .await
                 }
-                SetLocale { language, country } => self.ws.set_locale(&language, &country).await,
-                SetDataQuality { quality } => self.ws.set_data_quality(&quality).await,
-                SetTimeZone {
-                    chart_session,
-                    timezone,
-                } => self.ws.set_timezone(&chart_session, timezone).await,
+                // TODO: Implement other commands
                 _ => todo!("Handle other commands"),
             }
         })
@@ -1124,125 +928,3 @@ impl CommandRunner {
         self.command_queue.stats()
     }
 }
-
-// #[tracing::instrument(skip(self), level = "debug")]
-// #[builder]
-// pub async fn set_replay(
-//     &self,
-//     symbol: &str,
-//     options: ChartOptions,
-//     chart_session: &str,
-//     symbol_series_id: &str,
-// ) -> Result<()> {
-//     let replay_series_id = gen_id();
-//     let replay_session = gen_session_id("rs");
-
-//     self.create_replay_session(&replay_session).await?;
-//     self.add_replay_series()
-//         .chart_session(&replay_session)
-//         .series_id(&replay_series_id)
-//         .instrument(symbol)
-//         .interval(options.interval)
-//         .maybe_adjustment(options.adjustment)
-//         .maybe_currency(options.currency)
-//         .maybe_session_type(options.session_type)
-//         .call()
-//         .await?;
-
-//     self.replay_reset(&replay_session, &replay_series_id, options.replay_from)
-//         .await?;
-
-//     self.resolve_symbol()
-//         .symbol(options.symbol.as_str())
-//         .session(chart_session)
-//         .symbol_series_id(symbol_series_id)
-//         .maybe_adjustment(options.adjustment)
-//         .maybe_currency(options.currency)
-//         .replay_session(&replay_session)
-//         .call()
-//         .await?;
-
-//     Ok(())
-// }
-
-// pub async fn set_study(
-//     &self,
-//     study: StudyOptions,
-//     chart_session: &str,
-//     series_id: &str,
-// ) -> Result<()> {
-//     let study_count = self.studies_count.fetch_add(1, Ordering::SeqCst) + 1;
-
-//     let study_id = Ustr::from(&format!("st{study_count}"));
-
-//     let indicator = PineIndicator::build()
-//         .fetch(&study.script_id, &study.script_version, study.script_type)
-//         .await?;
-
-//     self.data_handler
-//         .metadata
-//         .studies
-//         .insert(indicator.metadata.data.id, study_id);
-
-//     // self.create_study(chart_session, &study_id, series_id, indicator)
-//     //     .await?;
-//     Ok(())
-// }
-
-// pub async fn set_market(&self, options: ChartOptions) -> Result<()> {
-//     let series_count = self.series_count.fetch_add(1, Ordering::SeqCst) + 1;
-//     let symbol_series_id = format!("sds_sym_{series_count}");
-//     let series_identifier = Ustr::from(&format!("sds_{series_count}"));
-//     let series_id = format!("s{series_count}");
-//     let chart_session = Ustr::from(&gen_session_id("cs"));
-//     let symbol = format!("{}:{}", options.exchange, options.symbol);
-//     self.create_chart_session(&chart_session).await?;
-
-//     if options.replay_mode {
-//         self.set_replay()
-//             .symbol(&symbol)
-//             .options(options)
-//             .chart_session(&chart_session)
-//             .symbol_series_id(&symbol_series_id)
-//             .call()
-//             .await?;
-//     } else {
-//         self.resolve_symbol()
-//             .session(&chart_session)
-//             .symbol_series_id(&symbol_series_id)
-//             .symbol(&symbol)
-//             .maybe_adjustment(options.adjustment)
-//             .maybe_currency(options.currency)
-//             .maybe_session_type(options.session_type)
-//             .call()
-//             .await?;
-//     }
-
-//     self.create_series()
-//         .chart_session(&chart_session)
-//         .series_identifier(&series_identifier)
-//         .series_id(&series_id)
-//         .symbol_series_id(&symbol_series_id)
-//         .interval(options.interval)
-//         .bar_count(options.bar_count)
-//         .maybe_range(options.range)
-//         .call()
-//         .await?;
-
-//     if let Some(study) = options.study_config {
-//         self.set_study(study, &chart_session, &series_identifier)
-//             .await?;
-//     }
-
-//     let series_info = SeriesInfo {
-//         chart_session,
-//         options,
-//     };
-
-//     self.data_handler
-//         .metadata
-//         .series
-//         .insert(series_identifier, series_info);
-
-//     Ok(())
-// }

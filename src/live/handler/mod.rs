@@ -1,3 +1,6 @@
 pub mod command;
 pub mod event;
-pub mod types;
+pub mod message;
+
+mod types;
+pub use types::*;

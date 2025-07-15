@@ -177,6 +177,24 @@ impl From<TradingViewError> for Error {
     }
 }
 
+impl From<String> for Error {
+    fn from(err: String) -> Self {
+        Error::Internal(err.into())
+    }
+}
+
+impl From<&str> for Error {
+    fn from(err: &str) -> Self {
+        Error::Internal(Ustr::from(err))
+    }
+}
+
+impl From<Ustr> for Error {
+    fn from(err: Ustr) -> Self {
+        Error::Internal(err)
+    }
+}
+
 #[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy, Serialize, Deserialize)]
 pub enum TradingViewError {
     #[error("Series error")]

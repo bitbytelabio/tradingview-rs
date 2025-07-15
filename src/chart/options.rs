@@ -1,24 +1,21 @@
-use std::fmt;
-use crate::models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType};
+use crate::{
+    Error,
+    models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType},
+};
 use bon::Builder;
 use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use ustr::Ustr;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Builder, Copy)]
+#[derive(Debug, Clone, Deserialize, Serialize, Copy)]
 pub struct ChartOptions {
-    #[builder(default)]
-    pub symbol: Ustr,
-    #[builder(default)]
-    pub exchange: Ustr,
-    #[builder(default = Interval::OneDay)]
+    pub symbol: Option<Ustr>,
+    pub exchange: Option<Ustr>,
     pub interval: Interval,
-    #[builder(default = 500_000)]
     pub bar_count: u64,
     pub range: Option<Range>,
-    #[builder(default = false)]
     pub replay_mode: bool,
-    #[builder(default = 0)]
     pub replay_from: i64,
     pub replay_session: Option<Ustr>,
     pub adjustment: Option<MarketAdjustment>,
@@ -126,32 +123,133 @@ pub struct StudyOptions {
 
 impl Default for ChartOptions {
     fn default() -> Self {
-        Self::builder().build()
+        Self::builder()
+            .build()
+            .expect("Failed to create default ChartOptions")
     }
 }
 
+#[bon::bon]
 impl ChartOptions {
-    pub fn new() -> Self {
-        Self::builder().build()
+    #[builder]
+    pub fn new(
+        instrument: Option<&str>,
+        symbol: Option<&str>,
+        exchange: Option<&str>,
+        #[builder(default = Interval::OneDay)] interval: Interval,
+        #[builder(default = 500_000)] bar_count: u64,
+        range: Option<Range>,
+        #[builder(default = false)] replay_mode: bool,
+        #[builder(default = 0)] replay_from: i64,
+        replay_session: Option<&str>,
+        adjustment: Option<MarketAdjustment>,
+        currency: Option<Currency>,
+        session_type: Option<SessionType>,
+        study_config: Option<StudyOptions>,
+    ) -> Result<Self, Error> {
+        let (validated_exchange, validated_symbol) =
+            Self::validate_instrument(instrument, symbol, exchange)?;
+
+        Ok(Self {
+            symbol: validated_symbol,
+            exchange: validated_exchange,
+            interval,
+            bar_count,
+            range,
+            replay_mode,
+            replay_from,
+            replay_session: replay_session.map(Ustr::from),
+            adjustment,
+            currency,
+            session_type,
+            study_config,
+        })
     }
 
-    pub fn new_with(symbol: &str, exchange: &str, interval: Interval) -> Self {
-        Self {
-            symbol: Ustr::from(symbol),
-            exchange: Ustr::from(exchange),
-            interval,
-            ..Default::default()
+    fn validate_instrument(
+        instrument: Option<&str>,
+        symbol: Option<&str>,
+        exchange: Option<&str>,
+    ) -> Result<(Option<Ustr>, Option<Ustr>), String> {
+        match (instrument, symbol, exchange) {
+            // Case 1: Only instrument provided
+            (Some(instrument), None, None) => {
+                if instrument.trim().is_empty() {
+                    return Err("Instrument cannot be empty or whitespace only".to_string());
+                }
+
+                let parts: Vec<&str> = instrument.split(':').collect();
+                if parts.len() != 2 {
+                    return Err("Instrument must be in format 'EXCHANGE:SYMBOL'".to_string());
+                }
+
+                let exchange_part = parts[0].trim();
+                let symbol_part = parts[1].trim();
+
+                if exchange_part.is_empty() || symbol_part.is_empty() {
+                    return Err(
+                        "Both exchange and symbol parts must be non-empty in instrument"
+                            .to_string(),
+                    );
+                }
+
+                // Validate characters (alphanumeric + common trading symbols)
+                if !Self::is_valid_identifier(exchange_part)
+                    || !Self::is_valid_identifier(symbol_part)
+                {
+                    return Err("Exchange and symbol must contain only alphanumeric characters, hyphens, dots, and underscores".to_string());
+                }
+
+                Ok((
+                    Some(Ustr::from(exchange_part)),
+                    Some(Ustr::from(symbol_part)),
+                ))
+            }
+
+            // Case 2: Both symbol and exchange provided
+            (None, Some(symbol), Some(exchange)) => {
+                let symbol = symbol.trim();
+                let exchange = exchange.trim();
+
+                if symbol.is_empty() {
+                    return Err("Symbol cannot be empty or whitespace only".to_string());
+                }
+                if exchange.is_empty() {
+                    return Err("Exchange cannot be empty or whitespace only".to_string());
+                }
+
+                if !Self::is_valid_identifier(symbol) || !Self::is_valid_identifier(exchange) {
+                    return Err("Symbol and exchange must contain only alphanumeric characters, hyphens, dots, and underscores".to_string());
+                }
+
+                Ok((Some(Ustr::from(exchange)), Some(Ustr::from(symbol))))
+            }
+
+            // Case 3: Invalid combinations
+            (None, None, None) => {
+                Err("Either instrument OR both symbol and exchange must be provided".to_string())
+            }
+            (Some(_), Some(_), _) | (Some(_), _, Some(_)) => {
+                Err("Cannot provide instrument together with symbol or exchange".to_string())
+            }
+            (None, Some(_), None) | (None, None, Some(_)) => {
+                Err("Symbol and exchange must be provided together".to_string())
+            }
         }
     }
 
-    pub fn symbol(mut self, symbol: &str) -> Self {
-        self.symbol = Ustr::from(symbol);
-        self
-    }
-
-    pub fn exchange(mut self, exchange: &str) -> Self {
-        self.exchange = Ustr::from(exchange);
-        self
+    fn is_valid_identifier(s: &str) -> bool {
+        !s.is_empty()
+            && s.chars().all(|c| {
+                c.is_alphanumeric()
+                    || c == '$'
+                    || c == '%'
+                    || c == '#'
+                    || c == '*'
+                    || c == '('
+                    || c == ')'
+                    || c == ':'
+            })
     }
 
     pub fn interval(mut self, interval: Interval) -> Self {

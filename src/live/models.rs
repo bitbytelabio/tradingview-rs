@@ -161,7 +161,7 @@ pub enum SocketMessage<T> {
     SocketServerInfo(SocketServerInfo),
     SocketMessage(T),
     Other(Value),
-    Unknown(String),
+    Unknown(Ustr),
 }
 
 #[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize, Copy, Eq)]
