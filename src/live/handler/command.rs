@@ -692,8 +692,53 @@ impl CommandRunner {
                         .set_timezone(&timezone.chart_session, timezone.timezone)
                         .await
                 }
-                // TODO: Implement other commands
-                _ => todo!("Handle other commands"),
+                CreateChartSession(session) => self.ws.create_chart_session(&session.inner).await,
+                DeleteChartSession(session) => self.ws.delete_chart_session(&session.inner).await,
+                RequestMoreData(request) => {
+                    self.ws
+                        .request_more_data(&request.chart_session, &request.series_id, request.num)
+                        .await
+                }
+                RequestMoreTickmarks(request) => {
+                    self.ws
+                        .request_more_tickmarks(
+                            &request.chart_session,
+                            &request.series_id,
+                            request.num,
+                        )
+                        .await
+                }
+                SendRawMessage(command_msg) => self.ws.send_raw_message(&command_msg.inner).await,
+                DeleteQuoteSession(session) => self.ws.delete_quote_session(&session.inner).await,
+                FastSymbols(quote_command_msg) => {
+                    self.ws
+                        .fast_symbols(
+                            &quote_command_msg.quote_session,
+                            &quote_command_msg
+                                .symbols
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>(),
+                        )
+                        .await
+                }
+                SetQuoteFields(command_msg) => todo!(),
+                AddQuoteSymbols(quote_command_msg) => todo!(),
+                RemoveQuoteSymbols(quote_command_msg) => todo!(),
+                CreateChartSeries(chart_series_command_msg) => todo!(),
+                ModifyChartSeries(chart_series_command_msg) => todo!(),
+                RemoveSeries(session_termination_command_msg) => todo!(),
+                ResolveSymbol(resolve_symbol_command_msg) => todo!(),
+                CreateReplaySession(command_msg) => todo!(),
+                DeleteReplaySession(command_msg) => todo!(),
+                AddReplaySeries(add_replay_series_command_msg) => todo!(),
+                ReplayStep(replay_step_command_msg) => todo!(),
+                ReplayStart(replay_start_command_msg) => todo!(),
+                ReplayStop(session_termination_command_msg) => todo!(),
+                ReplayReset(replay_reset_command_msg) => todo!(),
+                CreateStudy(study_command_msg) => todo!(),
+                ModifyStudy(study_command_msg) => todo!(),
+                RemoveStudy(session_termination_command_msg) => todo!(),
             }
         })
         .await;
@@ -704,7 +749,12 @@ impl CommandRunner {
     fn is_critical_command(&self, cmd: &Command) -> bool {
         matches!(
             cmd,
-            Command::SetAuthToken { .. } | Command::Close | Command::CreateQuoteSession { .. }
+            Command::SetAuthToken { .. }
+                | Command::Close
+                | Command::Ping
+                | Command::CreateQuoteSession { .. }
+                | Command::CreateChartSession { .. }
+                | Command::CreateReplaySession { .. }
         )
     }
 

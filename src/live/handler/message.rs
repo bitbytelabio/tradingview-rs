@@ -101,7 +101,7 @@ pub struct ResolveSymbolCommandMsg {
 pub struct ChartDataRequestMsg {
     pub chart_session: Ustr,
     pub series_id: Ustr,
-    pub num: i64,
+    pub num: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
