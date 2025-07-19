@@ -7,6 +7,14 @@ use crate::{
     Interval, MarketAdjustment, SessionType, Timezone, options::Range, study::StudyConfiguration,
 };
 
+#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+pub enum CommandCondition {
+    SessionExists(Ustr),
+    SymbolResolved(Ustr),
+    ConnectionHealthy,
+    QueueEmpty,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
 #[builder(on(Ustr, into))]
 pub struct CommandMsg {
