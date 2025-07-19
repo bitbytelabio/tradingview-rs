@@ -23,13 +23,13 @@ pub struct QuoteCommandMsg {
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
 #[builder(on(Ustr, into))]
 pub struct AddReplaySeriesCommandMsg {
-    chart_session: Ustr,
-    series_id: Ustr,
-    instrument: Ustr, // e.g., "HOSE:FPT"
-    adjustment: Option<MarketAdjustment>,
-    session_type: Option<SessionType>,
-    currency: Option<Currency>,
-    interval: Interval,
+    pub chart_session: Ustr,
+    pub series_id: Ustr,
+    pub instrument: Ustr, // e.g., "HOSE:FPT"
+    pub adjustment: Option<MarketAdjustment>,
+    pub session_type: Option<SessionType>,
+    pub currency: Option<Currency>,
+    pub interval: Interval,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]

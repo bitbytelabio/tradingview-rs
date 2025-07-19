@@ -62,4 +62,5 @@ impl EventHandler {
     );
     event_setter!(on_tradingview_error, (TradingViewError, Vec<Value>));
     event_setter!(on_signal, (TradingViewDataEvent, Vec<Value>));
+    event_setter!(on_quote_data, QuoteValue);
 }

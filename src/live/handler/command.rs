@@ -722,23 +722,164 @@ impl CommandRunner {
                         )
                         .await
                 }
-                SetQuoteFields(command_msg) => todo!(),
-                AddQuoteSymbols(quote_command_msg) => todo!(),
-                RemoveQuoteSymbols(quote_command_msg) => todo!(),
-                CreateChartSeries(chart_series_command_msg) => todo!(),
-                ModifyChartSeries(chart_series_command_msg) => todo!(),
-                RemoveSeries(session_termination_command_msg) => todo!(),
-                ResolveSymbol(resolve_symbol_command_msg) => todo!(),
-                CreateReplaySession(command_msg) => todo!(),
-                DeleteReplaySession(command_msg) => todo!(),
-                AddReplaySeries(add_replay_series_command_msg) => todo!(),
-                ReplayStep(replay_step_command_msg) => todo!(),
-                ReplayStart(replay_start_command_msg) => todo!(),
-                ReplayStop(session_termination_command_msg) => todo!(),
-                ReplayReset(replay_reset_command_msg) => todo!(),
-                CreateStudy(study_command_msg) => todo!(),
-                ModifyStudy(study_command_msg) => todo!(),
-                RemoveStudy(session_termination_command_msg) => todo!(),
+                SetQuoteFields(command_msg) => self.ws.set_fields(&command_msg.inner).await,
+                AddQuoteSymbols(quote_command_msg) => {
+                    self.ws
+                        .add_symbols(
+                            &quote_command_msg.quote_session,
+                            &quote_command_msg
+                                .symbols
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>(),
+                        )
+                        .await
+                }
+                RemoveQuoteSymbols(quote_command_msg) => {
+                    self.ws
+                        .remove_symbols(
+                            &quote_command_msg.quote_session,
+                            &quote_command_msg
+                                .symbols
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>(),
+                        )
+                        .await
+                }
+                CreateChartSeries(chart_series_command_msg) => {
+                    self.ws
+                        .create_series()
+                        .chart_session(&chart_series_command_msg.chart_session)
+                        .series_identifier(&chart_series_command_msg.series_identifier)
+                        .series_id(&chart_series_command_msg.series_id)
+                        .symbol_series_id(&chart_series_command_msg.symbol_series_id)
+                        .interval(chart_series_command_msg.interval)
+                        .bar_count(chart_series_command_msg.bar_count)
+                        .maybe_range(chart_series_command_msg.range)
+                        .call()
+                        .await
+                }
+                ModifyChartSeries(command) => {
+                    self.ws
+                        .modify_series()
+                        .chart_session(&command.chart_session)
+                        .series_identifier(&command.series_identifier)
+                        .series_id(&command.series_id)
+                        .symbol_series_id(&command.symbol_series_id)
+                        .interval(command.interval)
+                        .bar_count(command.bar_count)
+                        .maybe_range(command.range)
+                        .call()
+                        .await
+                }
+                RemoveSeries(command) => {
+                    self.ws
+                        .remove_series(&command.chart_session, &command.id)
+                        .await
+                }
+                ResolveSymbol(command) => {
+                    self.ws
+                        .resolve_symbol()
+                        .session(&command.session)
+                        .symbol_series_id(&command.symbol_series_id)
+                        .maybe_adjustment(command.adjustment)
+                        .maybe_currency(command.currency)
+                        .maybe_session_type(command.session_type)
+                        .maybe_replay_session(command.replay_session.as_deref())
+                        .instrument(&command.instrument)
+                        .call()
+                        .await
+                }
+                CreateReplaySession(command_msg) => {
+                    self.ws.create_replay_session(&command_msg.inner).await
+                }
+                DeleteReplaySession(command) => self.ws.delete_replay_session(&command.inner).await,
+                AddReplaySeries(command) => {
+                    self.ws
+                        .add_replay_series()
+                        .maybe_adjustment(command.adjustment)
+                        .maybe_currency(command.currency)
+                        .maybe_session_type(command.session_type)
+                        .chart_session(&command.chart_session)
+                        .series_id(&command.series_id)
+                        .interval(command.interval)
+                        .instrument(&command.instrument)
+                        .call()
+                        .await
+                }
+                ReplayStep(command) => {
+                    self.ws
+                        .replay_step(
+                            &command.chart_session,
+                            &command.series_id,
+                            command.step as u64,
+                        )
+                        .await
+                }
+                ReplayStart(command) => {
+                    self.ws
+                        .replay_start(&command.chart_session, &command.series_id, command.interval)
+                        .await
+                }
+                ReplayStop(command) => {
+                    self.ws
+                        .replay_stop(&command.chart_session, &command.id)
+                        .await
+                }
+                ReplayReset(command) => {
+                    self.ws
+                        .replay_reset(
+                            &command.chart_session,
+                            &command.series_id,
+                            command.timestamp,
+                        )
+                        .await
+                }
+                CreateStudy(command) => {
+                    self.ws
+                        .create_study()
+                        .chart_session(&command.chart_session)
+                        .study_ids(
+                            &command
+                                .study_ids
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .try_into()
+                                .unwrap(),
+                        )
+                        .chart_series_id(&command.chart_series_id)
+                        .study(command.study.clone())
+                        .call()
+                        .await
+                }
+                ModifyStudy(command) => {
+                    self.ws
+                        .modify_study()
+                        .chart_session(&command.chart_session)
+                        .study_ids(
+                            &command
+                                .study_ids
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .try_into()
+                                .expect("Study IDs must be exactly 2"),
+                        )
+                        .chart_series_id(&command.chart_series_id)
+                        .study(command.study.clone())
+                        .call()
+                        .await
+                }
+                RemoveStudy(session_termination_command_msg) => {
+                    self.ws
+                        .remove_study(
+                            &session_termination_command_msg.chart_session,
+                            &session_termination_command_msg.id,
+                        )
+                        .await
+                }
             }
         })
         .await;

@@ -34,7 +34,7 @@ use crate::{
     Error, Interval, MarketAdjustment, Result, SessionType, SocketServerInfo, Timezone,
     chart::{ChartOptions, options::Range},
     live::{
-        handler::event::Handler,
+        handler::Handler,
         models::{
             DataServer, Socket, SocketMessage, SocketMessageDe, SocketMessageSer,
             TradingViewDataEvent, WEBSOCKET_HEADERS,

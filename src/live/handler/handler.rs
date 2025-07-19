@@ -12,13 +12,13 @@ use crate::{
 };
 
 #[derive(Default, Clone)]
-pub(crate) struct Metadata {
+pub(crate) struct Cache {
     pub(crate) quotes: Arc<DashMap<Ustr, QuoteValue>>,
 }
 
 #[derive(Clone)]
 pub struct Handler {
-    pub(crate) metadata: Metadata,
+    pub(crate) cache: Cache,
     pub(crate) event_handler: EventHandler,
 }
 
@@ -138,12 +138,12 @@ impl Handler {
         let name = qsd.name;
         let value = qsd.value;
 
-        match self.metadata.quotes.get_mut(&name) {
+        match self.cache.quotes.get_mut(&name) {
             Some(mut prev_quote) => {
                 *prev_quote = merge_quotes(&prev_quote, &value);
             }
             None => {
-                self.metadata.quotes.insert(name, value);
+                self.cache.quotes.insert(name, value);
             }
         }
 
@@ -169,5 +169,14 @@ impl Handler {
     pub fn set_handler(mut self, handler: EventHandler) -> Self {
         self.event_handler = handler;
         self
+    }
+}
+
+impl Default for Handler {
+    fn default() -> Self {
+        Self {
+            cache: Cache::default(),
+            event_handler: EventHandler::builder().build(),
+        }
     }
 }
