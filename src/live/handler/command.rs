@@ -536,7 +536,7 @@ impl<T: Handler> CommandRunner<T> {
     /// Comprehensive health check that actively tests the connection
     async fn perform_health_check(&self) -> Result<()> {
         // First check basic connection state
-        if self.ws.is_closed().await {
+        if self.ws.is_closed() {
             return Err(Error::Internal("WebSocket is closed".into()));
         }
 
