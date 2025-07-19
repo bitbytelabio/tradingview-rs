@@ -11,7 +11,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     Error, Result,
     error::TradingViewError,
-    live::handler::{message::*, types::CommandRx},
+    live::handler::{CommandRx, Handler, message::*},
     websocket::WebSocketClient,
 };
 
@@ -410,9 +410,9 @@ impl Default for CommandRunnerConfig {
     }
 }
 
-pub struct CommandRunner {
+pub struct CommandRunner<T: Handler> {
     rx: CommandRx,
-    ws: Arc<WebSocketClient>,
+    ws: Arc<WebSocketClient<T>>,
     shutdown: CancellationToken,
     state: ConnectionState,
     command_queue: CommandQueue,
@@ -422,14 +422,14 @@ pub struct CommandRunner {
     start_time: Instant,
 }
 
-impl CommandRunner {
-    pub fn new(rx: CommandRx, ws: Arc<WebSocketClient>) -> Self {
+impl<T: Handler> CommandRunner<T> {
+    pub fn new(rx: CommandRx, ws: Arc<WebSocketClient<T>>) -> Self {
         Self::with_config(rx, ws, CommandRunnerConfig::default())
     }
 
     pub fn with_config(
         rx: CommandRx,
-        ws: Arc<WebSocketClient>,
+        ws: Arc<WebSocketClient<T>>,
         config: CommandRunnerConfig,
     ) -> Self {
         Self {

@@ -107,17 +107,19 @@ pub struct SeriesInfo {
     pub options: ChartOptions,
 }
 
-pub struct WebSocketClient {
+pub struct WebSocketClient<T: Handler> {
     pub server: DataServer,
     pub auth_token: Arc<RwLock<Ustr>>,
 
-    handler: Handler,
+    handler: T,
+
     // WebSocket connection
     cancellation: CancellationToken,
     is_closed: Arc<AtomicBool>,
 
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
     write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    buffer_size: usize,
 
     // Error handling and recovery
     error_stats: ErrorStats,
@@ -137,15 +139,16 @@ enum ErrorSeverity {
 }
 
 #[bon::bon]
-impl WebSocketClient {
+impl<T: Handler> WebSocketClient<T> {
     #[builder]
     pub async fn new(
         auth_token: Option<&str>,
         #[builder(default = DataServer::ProData)] server: DataServer,
-        handler: Handler,
+        handler: T,
+        #[builder(default = 1024*1024)] buffer_size: usize,
     ) -> Result<Arc<Self>> {
         let auth_token = Ustr::from(auth_token.unwrap_or("unauthorized_user_token"));
-        let (write, read) = Self::connect(server).await?;
+        let (write, read) = Self::connect(server, Some(buffer_size)).await?;
 
         let is_closed = Arc::new(AtomicBool::new(false));
         let auth_token = Arc::new(RwLock::new(auth_token));
@@ -159,6 +162,7 @@ impl WebSocketClient {
             write,
             auth_token,
             is_closed,
+            buffer_size,
             cancellation: CancellationToken::new(),
             error_stats: ErrorStats::default(),
             error_config: ErrorRecoveryConfig::default(),
@@ -177,6 +181,7 @@ impl WebSocketClient {
 
     async fn connect(
         server: DataServer,
+        buffer_size: Option<usize>,
     ) -> Result<(
         SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
         SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
@@ -185,6 +190,8 @@ impl WebSocketClient {
             "wss://{server}.tradingview.com/socket.io/websocket"
         ))?;
 
+        let buffer_size = buffer_size.unwrap_or(1024 * 1024);
+
         let mut request = url.into_client_request()?;
         request
             .headers_mut()
@@ -192,8 +199,8 @@ impl WebSocketClient {
 
         // Configure WebSocket with larger message size limits
         let conf = WebSocketConfig::default()
-            .read_buffer_size(1024 * 1024)
-            .write_buffer_size(1024 * 1024);
+            .read_buffer_size(buffer_size)
+            .write_buffer_size(buffer_size);
 
         let (socket, response) = connect_async_with_config(request, Some(conf), false).await?;
 
@@ -347,7 +354,7 @@ impl WebSocketClient {
         })];
 
         // Notify through the error callback
-        (self.handler.event_handler.on_internal_error)((*error, error_context));
+        self.handler.notify_error(*error, &error_context);
     }
 
     /// Log error with appropriate level based on severity
@@ -389,7 +396,7 @@ impl WebSocketClient {
 
     pub async fn reconnect(&self) -> Result<()> {
         let auth_token = self.auth_token.read().await;
-        let (write, read) = Self::connect(self.server).await?;
+        let (write, read) = Self::connect(self.server, Some(self.buffer_size)).await?;
         let mut write_guard = self.write.lock().await;
         let mut read_guard = self.read.lock().await;
         *write_guard = write;
@@ -863,7 +870,7 @@ impl WebSocketClient {
     }
 }
 
-impl Socket for WebSocketClient {
+impl<T: Handler> Socket for WebSocketClient<T> {
     async fn event_loop(
         &self,
         mut read: MutexGuard<'_, SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
@@ -998,7 +1005,7 @@ impl Socket for WebSocketClient {
     #[tracing::instrument(skip(self), level = "trace")]
     async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()> {
         let event = TradingViewDataEvent::from(message.m);
-        self.handler.handle_events(event, &message.p).await;
+        self.handler.handle_events(event, &message.p);
         Ok(())
     }
 
