@@ -51,7 +51,7 @@ tokio-util = { version = "0.7.15", features = ["futures-util", "tracing"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-criterion = { version = "0.6", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 anyhow = "1"
 dotenv = "0.15"
 tracing-subscriber = "0.3"
