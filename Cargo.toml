@@ -23,7 +23,7 @@ rustls-tls = ["reqwest/rustls-tls", "tokio-tungstenite/rustls-tls-webpki-roots"]
 tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "json",
     "cookies",
 ] }
