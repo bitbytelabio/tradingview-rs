@@ -31,7 +31,7 @@ lazy_static = "1"
 chrono = { version = "0.4", features = ["serde"] }
 url = "2"
 urlencoding = "2"
-rand = "0.9"
+rand = "0.10"
 regex = "1"
 tokio-tungstenite = { version = "0.27", features = ["url"] }
 tracing = "0.1"
