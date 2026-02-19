@@ -874,7 +874,7 @@ impl WebSocketClient {
         self.resolve_symbol(
             chart_session,
             symbol_series_id,
-            &options.symbol,
+            symbol,
             options,
             Some(&replay_session),
         )
