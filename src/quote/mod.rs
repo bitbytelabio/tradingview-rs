@@ -1,3 +1,12 @@
+//! Real-time quote data types and field definitions.
+//!
+//! TradingView delivers streaming quote updates via WebSocket. This module
+//! defines the data model for those updates and the complete set of available
+//! quote fields.
+//!
+//! [`ALL_QUOTE_FIELDS`] is a compile-time constant listing every field name
+//! TradingView may include in a quote packet.
+
 pub mod models;
 pub mod utils;
 

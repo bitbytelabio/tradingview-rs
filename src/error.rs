@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ustr::Ustr;
 
+/// The crate-wide error type.
+///
+/// Wraps all failure modes: network errors, JSON deserialization failures,
+/// WebSocket issues, auth errors, and TradingView-specific protocol errors.
+///
+/// # Conversion
+///
+/// Common external errors (`reqwest::Error`, `serde_json::Error`, `chrono::ParseError`,
+/// etc.) convert automatically via `From` impls.
 #[derive(Debug, Clone, Error, Copy, Serialize, Deserialize)]
 pub enum Error {
     #[error("Generic: {0}")]
@@ -177,6 +186,10 @@ impl From<Ustr> for Error {
     }
 }
 
+/// Errors returned by TradingView's data server (WebSocket protocol layer).
+///
+/// These correspond to TradingView's own error taxonomy — distinct from
+/// transport-level failures in [`enum@Error`].
 #[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy, Serialize, Deserialize)]
 pub enum TradingViewError {
     #[error("Series error")]
@@ -201,6 +214,7 @@ pub enum TradingViewError {
     InvalidSessionId,
 }
 
+/// Errors that can occur during user authentication (login flow).
 #[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy, Serialize, Deserialize)]
 pub enum LoginError {
     #[error("Username or password is empty")]

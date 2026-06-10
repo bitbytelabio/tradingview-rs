@@ -1,6 +1,6 @@
 //! Event sink abstraction.
 //!
-//! Sinks are the consumer side of the event pipeline. The [`EventSink`] trait
+//! Sinks are the consumer side of the event pipeline. The [`EventSink`](crate::sink::EventSink) trait
 //! defines a common interface for any downstream target. Built-in
 //! implementations are provided for in-memory channels and inline callbacks.
 

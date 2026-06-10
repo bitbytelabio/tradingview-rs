@@ -1,3 +1,29 @@
+//! Shared data types used across the crate.
+//!
+//! This module defines the core domain model for interacting with TradingView:
+//! market data types, symbol representations, time intervals, and search
+//! responses. Most types are `Serialize` + `Deserialize` for wire compatibility
+//! with TradingView's protocols.
+//!
+//! # Key Types
+//!
+//! | Type | Purpose |
+//! |------|---------|
+//! | [`Symbol`] | A tradable instrument (e.g. `BINANCE:BTCUSDT`) |
+//! | [`Interval`] | Time granularity for OHLCV bars |
+//! | [`SymbolType`] / [`MarketType`] | Categorization of instruments |
+//! | [`ChartOptions`] | Configuration for chart data subscriptions |
+//! | [`UserCookies`] | Authenticated session state |
+//! | [`OHLCV`] | A single OHLCV bar with timestamp |
+//!
+//! [`Symbol`]: Symbol
+//! [`Interval`]: Interval
+//! [`SymbolType`]: SymbolType
+//! [`MarketType`]: MarketType
+//! [`ChartOptions`]: crate::chart::ChartOptions
+//! [`UserCookies`]: UserCookies
+//! [`OHLCV`]: crate::quote::models::OHLCV
+
 pub use self::MarketType::*;
 pub use self::news::*;
 pub use crate::chart::*;
@@ -10,10 +36,18 @@ use std::{collections::HashMap, fmt::Display};
 pub mod news;
 pub mod pine_indicator;
 
+/// Trait for types that carry a symbol–exchange pair.
+///
+/// Provides a standard way to construct the TradingView-style identifier
+/// `"EXCHANGE:SYMBOL"` (e.g. `"BINANCE:BTCUSDT"`).
 pub trait MarketSymbol {
+    /// Create a new instance from symbol and exchange strings.
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self;
+    /// The raw symbol/ticker (e.g. `"BTCUSDT"`).
     fn symbol(&self) -> &str;
+    /// The exchange name (e.g. `"BINANCE"`).
     fn exchange(&self) -> &str;
+    /// The combined identifier `"EXCHANGE:SYMBOL"`.
     fn id(&self) -> String {
         format!("{}:{}", self.exchange(), self.symbol())
     }
@@ -36,17 +70,20 @@ impl MarketSymbol for Symbol {
     }
 }
 
+/// A chart drawing retrieved from TradingView (lines, shapes, annotations, etc.).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChartDrawing {
     pub success: bool,
     pub payload: ChartDrawingSource,
 }
 
+/// Container for chart drawing source data, keyed by drawing ID.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChartDrawingSource {
     pub sources: HashMap<String, ChartDrawingSourceData>,
 }
 
+/// Per-drawing metadata: symbol, currency, update time, and state.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartDrawingSourceData {
@@ -57,12 +94,14 @@ pub struct ChartDrawingSourceData {
     state: ChartDrawingSourceState,
 }
 
+/// The geometric state of a drawing: a collection of time/price anchor points.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartDrawingSourceState {
     points: Vec<ChartDrawingSourceStatePoint>,
 }
 
+/// A single anchor point in a chart drawing (time, offset, price).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChartDrawingSourceStatePoint {
     time_t: i64,
@@ -70,6 +109,13 @@ pub struct ChartDrawingSourceStatePoint {
     price: f64,
 }
 
+/// Authenticated TradingView user session state.
+///
+/// Contains the credentials needed for premium features: auth token, session
+/// hash, device token, and private channel ID. Obtain via
+/// [`UserCookies::login`].
+///
+/// Serialize to JSON for session persistence across restarts.
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct UserCookies {
     pub id: u32,
@@ -85,6 +131,10 @@ pub struct UserCookies {
     pub device_token: String,
 }
 
+/// Response from the TradingView symbol search endpoint.
+///
+/// `remaining` counts how many results are left beyond the returned page.
+/// `symbols` is the current page of matches.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct SymbolSearchResponse {
     #[serde(rename(deserialize = "symbols_remaining"))]
@@ -92,6 +142,20 @@ pub struct SymbolSearchResponse {
     pub symbols: Vec<Symbol>,
 }
 
+/// A tradable instrument on TradingView.
+///
+/// The canonical identifier is `"EXCHANGE:SYMBOL"` (e.g. `"NASDAQ:AAPL"`,
+/// `"BINANCE:BTCUSDT"`). Use [`Symbol::id()`] to obtain this string.
+///
+/// Construct via the builder:
+///
+/// ```rust
+/// use tradingview::Symbol;
+/// let sym = Symbol::builder()
+///     .symbol("BTCUSDT")
+///     .exchange("BINANCE")
+///     .build();
+/// ```
 #[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash)]
 pub struct Symbol {
     pub symbol: String,
@@ -130,6 +194,10 @@ impl Symbol {
     }
 }
 
+/// Metadata about an exchange / data source.
+///
+/// Returned as part of [`Symbol`] search results to identify the originating
+/// market data provider.
 #[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Hash)]
 pub struct ExchangeSource {
     pub id: String,
@@ -137,12 +205,17 @@ pub struct ExchangeSource {
     pub description: String,
 }
 
+/// Which part of the trading session to request.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum SessionType {
+    /// Standard market hours.
     #[default]
     Regular,
+    /// Extended-hours trading.
     Extended,
+    /// Pre-market session.
     PreMarket,
+    /// Post-market / after-hours session.
     PostMarket,
 }
 
@@ -157,10 +230,16 @@ impl Display for SessionType {
     }
 }
 
+/// Data adjustment applied to historical OHLCV bars.
+///
+/// When `Splits`, prices are adjusted for stock splits. When `Dividends`,
+/// prices are adjusted for dividend payments.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum MarketAdjustment {
+    /// Adjust for stock splits.
     #[default]
     Splits,
+    /// Adjust for dividend payments.
     Dividends,
 }
 
@@ -173,13 +252,19 @@ impl Display for MarketAdjustment {
     }
 }
 
+/// Current market session status as reported by TradingView.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum MarketStatus {
+    /// Market is closed for a holiday.
     Holiday,
+    /// Regular market hours — market is open.
     #[default]
     Open,
+    /// Market is closed (out of session).
     Close,
+    /// Post-market / after-hours trading.
     Post,
+    /// Pre-market trading.
     Pre,
 }
 
@@ -195,8 +280,12 @@ impl Display for MarketStatus {
     }
 }
 
+/// IANA timezone identifier for exchange trading schedules.
+///
+/// Maps to TradingView's timezone format. Default is [`EtcUTC`](Timezone::EtcUTC).
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum Timezone {
+    /// Africa/Cairo
     AfricaCairo,
     AfricaCasablanca,
     AfricaJohannesburg,
@@ -385,28 +474,65 @@ impl Display for Timezone {
     }
 }
 
+/// Time interval (granularity) for OHLCV/candle bars.
+///
+/// This is one of the most-used types in the crate. Every historical and
+/// real-time data request specifies an interval. The default is `OneDay`.
+///
+/// # Conversion
+///
+/// - `From<&str>` parses common string representations (`"1h"`, `"1D"`, `"1W"`, etc.).
+/// - `From<u8>` maps TradingView's numeric interval codes.
+/// - `From<Interval> for chrono::Duration` provides an approximate duration.
+/// - [`Display`](std::fmt::Display) outputs the TradingView wire format.
+///
+/// # Navigation
+///
+/// [`Interval::longer()`] steps up to the next coarser interval.
+///
+/// [`Interval::longer()`]: Interval::longer()
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum Interval {
+    /// 1 second.
     OneSecond = 0,
+    /// 5 seconds.
     FiveSeconds = 1,
+    /// 10 seconds.
     TenSeconds = 2,
+    /// 15 seconds.
     FifteenSeconds = 3,
+    /// 30 seconds.
     ThirtySeconds = 4,
+    /// 1 minute.
     OneMinute = 5,
+    /// 3 minutes.
     ThreeMinutes = 6,
+    /// 5 minutes.
     FiveMinutes = 7,
+    /// 15 minutes.
     FifteenMinutes = 8,
+    /// 30 minutes.
     ThirtyMinutes = 9,
+    /// 45 minutes.
     FortyFiveMinutes = 10,
+    /// 1 hour.
     OneHour = 11,
+    /// 2 hours.
     TwoHours = 12,
+    /// 4 hours.
     FourHours = 13,
+    /// 1 day (default).
     #[default]
     OneDay = 14,
+    /// 1 week.
     OneWeek = 15,
+    /// 1 month.
     OneMonth = 16,
+    /// 1 quarter (~3 months).
     OneQuarter = 17,
+    /// 6 months.
     SixMonths = 18,
+    /// 1 year.
     Yearly = 19,
 }
 
@@ -546,39 +672,73 @@ impl Display for Interval {
     }
 }
 
+/// Supported UI language for TradingView responses (news, descriptions, etc.).
+///
+/// Default is [`English`](LanguageCode::English).
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum LanguageCode {
+    /// Arabic.
     Arabic,
+    /// Chinese (Simplified).
     Chinese,
+    /// Czech.
     Czech,
+    /// Danish.
     Danish,
+    /// Catalan.
     Catalan,
+    /// Dutch.
     Dutch,
+    /// English (default).
     #[default]
     English,
+    /// Estonian.
     Estonian,
+    /// French.
     French,
+    /// German.
     German,
+    /// Greek.
     Greek,
+    /// Hebrew.
     Hebrew,
+    /// Hungarian.
     Hungarian,
+    /// Indonesian.
     Indonesian,
+    /// Italian.
     Italian,
+    /// Japanese.
     Japanese,
+    /// Korean.
     Korean,
+    /// Persian (Farsi).
     Persian,
+    /// Polish.
     Polish,
+    /// Portuguese.
     Portuguese,
+    /// Romanian.
     Romanian,
+    /// Russian.
     Russian,
+    /// Slovak.
     Slovak,
+    /// Spanish.
     Spanish,
+    /// Swedish.
     Swedish,
+    /// Thai.
     Thai,
+    /// Turkish.
     Turkish,
+    /// Vietnamese.
     Vietnamese,
+    /// Norwegian.
     Norwegian,
+    /// Malay.
     Malay,
+    /// Chinese (Traditional).
     TraditionalChinese,
 }
 
@@ -620,13 +780,22 @@ impl Display for LanguageCode {
     }
 }
 
+/// Financial reporting period for fundamental data.
+///
+/// Serialized as an untagged string (`"FY"`, `"FQ"`, `"FH"`, `"TTM"`, or any
+/// other custom period string).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum FinancialPeriod {
-    FiscalYear,           // FY
-    FiscalQuarter,        // FQ
-    FiscalHalfYear,       // FH
-    TrailingTwelveMonths, // TTM
+    /// Fiscal year.
+    FiscalYear,
+    /// Fiscal quarter.
+    FiscalQuarter,
+    /// Fiscal half-year.
+    FiscalHalfYear,
+    /// Trailing twelve months.
+    TrailingTwelveMonths,
+    /// Catch-all for unrecognized period strings.
     UnknownPeriod(String),
 }
 
@@ -658,29 +827,54 @@ impl Display for FinancialPeriod {
     }
 }
 
+/// Broad instrument type classification.
+///
+/// Used in symbol search filtering and displayed in TradingView's symbol info.
+/// Default is [`Stock`](SymbolType::Stock).
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum SymbolType {
+    /// Common or preferred stock.
     #[default]
     Stock,
+    /// Market index.
     Index,
+    /// Forex / currency pair.
     Forex,
+    /// Futures contract.
     Futures,
+    /// Bitcoin-denominated instrument.
     Bitcoin,
+    /// Cryptocurrency.
     Crypto,
+    /// Unclassified / undefined.
     Undefined,
+    /// Pine Script expression.
     Expression,
+    /// Spread instrument.
     Spread,
+    /// Contract for difference.
     Cfd,
+    /// Economic indicator.
     Economic,
+    /// Equity.
     Equity,
+    /// Depository receipt (ADR, GDR).
     Dr,
+    /// Bond.
     Bond,
+    /// Rights offering.
     Right,
+    /// Warrant.
     Warrant,
+    /// Fund (ETF, mutual fund, REIT).
     Fund,
+    /// Structured product.
     Structured,
+    /// Commodity.
     Commodity,
+    /// Fundamental data.
     Fundamental,
+    /// Spot market instrument.
     Spot,
 }
 
@@ -712,55 +906,93 @@ impl Display for SymbolType {
     }
 }
 
+/// Market category for filtering symbol search results.
+///
+/// The `Stocks`, `Crypto`, and `Funds` variants each carry a sub-type for
+/// finer-grained filtering. Default is [`All`](MarketType::All).
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum MarketType {
+    /// All markets (no filter).
     #[default]
     All,
+    /// Stocks, with optional sub-type.
     Stocks(StocksType),
+    /// Funds (ETF, mutual fund, REIT, trust), with optional sub-type.
     Funds(FundsType),
+    /// Futures contracts.
     Futures,
+    /// Forex / currencies.
     Forex,
+    /// Cryptocurrencies, with optional sub-type.
     Crypto(CryptoType),
+    /// Market indices.
     Indices,
+    /// Bonds.
     Bonds,
+    /// Economic indicators / data.
     Economy,
 }
 
+/// Stock sub-type for use with [`MarketType::Stocks`].
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum StocksType {
+    /// All stock types.
     #[default]
     All,
+    /// Common stock.
     Common,
+    /// Preferred stock.
     Preferred,
+    /// Depository receipt (ADR, GDR).
     DepositoryReceipt,
+    /// Warrant.
     Warrant,
 }
 
+/// Crypto sub-type for use with [`MarketType::Crypto`].
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum CryptoType {
+    /// All crypto types.
     #[default]
     All,
+    /// Spot market.
     Spot,
+    /// Futures / perpetual contracts.
     Futures,
+    /// Swap contracts.
     Swap,
+    /// Crypto index.
     Index,
+    /// Fundamental crypto data.
     Fundamental,
 }
 
+/// Fund sub-type for use with [`MarketType::Funds`].
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum FundsType {
+    /// All fund types.
     #[default]
     All,
+    /// Exchange-Traded Fund.
     ETF,
+    /// Mutual fund.
     MutualFund,
+    /// Trust.
     Trust,
+    /// Real Estate Investment Trust.
     REIT,
 }
 
+/// Centralization level for crypto markets.
+///
+/// Controls whether to search centralized or decentralized exchanges.
+/// Default is [`CEX`](CryptoCentralization::CEX).
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum CryptoCentralization {
+    /// Centralized exchange (e.g. Binance, Coinbase).
     #[default]
     CEX,
+    /// Decentralized exchange (e.g. Uniswap, PancakeSwap).
     DEX,
 }
 
@@ -838,16 +1070,25 @@ impl Display for CryptoCentralization {
     }
 }
 
+/// Futures product category for filtering futures symbol search.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum FuturesProductType {
+    /// Single-stock futures.
     SingleStock,
+    /// World index futures.
     WorldIndices,
+    /// Currency futures (default).
     #[default]
     Currencies,
+    /// Interest rate futures.
     InterestRates,
+    /// Energy futures.
     Energy,
+    /// Agricultural futures.
     Agriculture,
+    /// Metals futures.
     Metals,
+    /// Weather derivatives.
     Weather,
 }
 
@@ -866,29 +1107,54 @@ impl Display for FuturesProductType {
     }
 }
 
+/// Stock market sector classification.
+///
+/// Used in symbol search filtering for equity instruments.
+/// Default is [`Finance`](StockSector::Finance).
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum StockSector {
+    /// Commercial services.
     CommercialServices,
+    /// Communications.
     Communications,
+    /// Consumer durables.
     ConsumerDurables,
+    /// Consumer non-durables.
     ConsumerNonDurables,
+    /// Consumer services.
     ConsumerServices,
+    /// Distribution services.
     DistributionServices,
+    /// Electronic technology.
     ElectronicTechnology,
+    /// Energy minerals.
     EnergyMinerals,
+    /// Finance (default).
     #[default]
     Finance,
+    /// Government.
     Government,
+    /// Health services.
     HealthServices,
+    /// Health technology.
     HealthTechnology,
+    /// Industrial services.
     IndustrialServices,
+    /// Miscellaneous.
     Miscellaneous,
+    /// Non-energy minerals.
     NonEnergyMinerals,
+    /// Process industries.
     ProcessIndustries,
+    /// Producer manufacturing.
     ProducerManufacturing,
+    /// Retail trade.
     RetailTrade,
+    /// Technology services.
     TechnologyServices,
+    /// Transportation.
     Transportation,
+    /// Utilities.
     Utilities,
 }
 
@@ -920,29 +1186,82 @@ impl Display for StockSector {
     }
 }
 
+/// Source organization for economic indicator data.
+///
+/// Default is [`WorldBank`](EconomicSource::WorldBank).
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
 pub enum EconomicSource {
+    /// World Bank.
     #[default]
     WorldBank,
+    /// Eurostat (EU statistical office).
     EUROSTAT,
+    /// Akamai (internet/connectivity data).
     AKAMAI,
+    /// Transparency International.
     TransparencyInternational,
+    /// OECD.
     OrganizationForEconomicCooperationAndDevelopment,
+    /// World Economic Forum.
     WorldEconomicForum,
+    /// WageIndicator Foundation.
     WageIndicatorFoundation,
+    /// U.S. Bureau of Labor Statistics.
     BureauOfLaborStatistics,
+    /// U.S. Federal Reserve.
     FederalReserve,
+    /// Stockholm International Peace Research Institute.
     StockholmInternationalPeaceResearchInstitute,
+    /// Institute for Economics and Peace.
     InstituteForEconomicsAndPeace,
+    /// U.S. Bureau of Economic Analysis.
     BureauOfEconomicAnalysis,
+    /// World Gold Council.
     WorldGoldCouncil,
+    /// U.S. Census Bureau.
     CensusBureau,
+    /// Central Bank of West African States.
     CentralBankOfWestAfricanStates,
+    /// International Monetary Fund.
     InternationalMonetaryFund,
+    /// U.S. Energy Information Administration.
     USEnergyInformationAdministration,
+    /// Statistics Canada.
     StatisticCanada,
+    /// UK Office for National Statistics.
     OfficeForNationalStatistics,
+    /// Statistics Norway.
     StatisticsNorway,
+}
+
+/// Economic indicator category for filtering economic data.
+///
+/// Default is [`GDP`](EconomicCategory::GDP).
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
+pub enum EconomicCategory {
+    /// Gross Domestic Product.
+    #[default]
+    GDP,
+    /// Labor market indicators.
+    Labor,
+    /// Price indices (CPI, PPI, etc.).
+    Prices,
+    /// Health-related indicators.
+    Health,
+    /// Money supply and monetary indicators.
+    Money,
+    /// Trade balance and trade indicators.
+    Trade,
+    /// Government spending and fiscal data.
+    Government,
+    /// Business confidence and activity.
+    Business,
+    /// Consumer confidence and spending.
+    Consumer,
+    /// Housing market indicators.
+    Housing,
+    /// Tax-related data.
+    Taxes,
 }
 
 impl Display for EconomicSource {
@@ -972,21 +1291,6 @@ impl Display for EconomicSource {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Copy)]
-pub enum EconomicCategory {
-    #[default]
-    GDP,
-    Labor,
-    Prices,
-    Health,
-    Money,
-    Trade,
-    Government,
-    Business,
-    Consumer,
-    Housing,
-    Taxes,
-}
 
 impl Display for EconomicCategory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

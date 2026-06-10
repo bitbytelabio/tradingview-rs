@@ -16,6 +16,9 @@ use crate::{
     websocket::WebSocketClient,
 };
 
+/// Priority level for queued commands.
+///
+/// Higher-priority commands are dispatched before lower-priority ones.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommandPriority {
     Critical = 3,
@@ -24,6 +27,10 @@ pub enum CommandPriority {
     Low = 0,
 }
 
+/// A command to be dispatched to the TradingView WebSocket session.
+///
+/// Covers all protocol operations: chart sessions, quote subscriptions,
+/// replay mode, Pine Script studies, and connection management.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     Close,
@@ -178,6 +185,7 @@ pub struct ConnectionState {
     pub last_successful_operation: Option<Instant>,
 }
 
+/// Current state of the WebSocket connection.
 #[derive(Debug, Clone, PartialEq, Copy, Eq)]
 pub enum ConnectionStatus {
     Connected,
@@ -533,6 +541,17 @@ impl Default for CommandRunnerConfig {
     }
 }
 
+/// Central command dispatcher for the WebSocket session.
+///
+/// Reads [`Command`]s from an MPSC channel and dispatches them to the
+/// [`WebSocketClient`]. Manages connection lifecycle, reconnection, and
+/// error recovery.
+///
+/// Spawn via [`CommandRunner::run()`] — it blocks until shutdown is triggered.
+///
+/// [`Command`]: crate::live::handler::command::Command
+/// [`WebSocketClient`]: crate::websocket::WebSocketClient
+/// [`CommandRunner::run()`]: CommandRunner::run()
 pub struct CommandRunner<T: Handler> {
     rx: CommandRx,
     ws: Arc<WebSocketClient<T>>,

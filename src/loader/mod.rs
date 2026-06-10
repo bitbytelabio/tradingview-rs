@@ -1,7 +1,7 @@
 //! Generic event-driven data loader.
 //!
-//! `DataLoader` is the central orchestrator that connects a [`DataSource`] to
-//! one or more [`EventSink`]s. It handles:
+//! `DataLoader` is the central orchestrator that connects a [`DataSource`](crate::source::DataSource) to
+//! one or more [`EventSink`](crate::sink::EventSink)s. It handles:
 //!
 //! - Source → fan-out task → per-sink tasks pipeline
 //! - Bounded channels for backpressure

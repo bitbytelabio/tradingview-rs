@@ -1,4 +1,4 @@
-use crate::{MarketSymbol, MarketType, websocket::SeriesInfo};
+use crate::{websocket::SeriesInfo, MarketSymbol, MarketType};
 use bon::Builder;
 use chrono::{DateTime, Utc};
 use iso_currency::Currency;

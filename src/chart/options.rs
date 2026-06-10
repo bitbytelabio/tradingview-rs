@@ -1,6 +1,6 @@
 use crate::{
+    models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType},
     Error,
-    models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType},
 };
 use bon::Builder;
 use iso_currency::Currency;
@@ -8,6 +8,35 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use ustr::Ustr;
 
+/// Configuration for a real-time chart data subscription.
+///
+/// Specifies the instrument, time interval, bar count, replay settings,
+/// and optional study configuration for a TradingView WebSocket chart session.
+///
+/// # Construction
+///
+/// Use the builder pattern via [`bon`]:
+///
+/// ```rust
+/// use tradingview::{ChartOptions, Interval};
+///
+/// let opts = ChartOptions::builder()
+///     .symbol("BTCUSDT")
+///     .exchange("BINANCE")
+///     .interval(Interval::OneHour)
+///     .bar_count(500)
+///     .build()
+///     .unwrap();
+/// ```
+///
+/// Alternatively, pass an instrument string in `"EXCHANGE:SYMBOL"` format:
+///
+/// ```rust
+/// let opts = ChartOptions::builder()
+///     .instrument("BINANCE:BTCUSDT")
+///     .build()
+///     .unwrap();
+/// ```
 #[derive(Debug, Clone, Deserialize, Serialize, Copy)]
 pub struct ChartOptions {
     pub symbol: Option<Ustr>,
@@ -24,6 +53,10 @@ pub struct ChartOptions {
     pub study_config: Option<StudyOptions>,
 }
 
+/// Data range specifier for chart subscriptions.
+///
+/// Determines how much historical data to request. `FromTo(u64, u64)` specifies
+/// a custom Unix-timestamp range; the named variants are convenience presets.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Copy)]
 pub enum Range {
     FromTo(u64, u64),
@@ -114,6 +147,11 @@ impl From<Range> for Ustr {
     }
 }
 
+/// Configuration for a Pine Script study (indicator) within a chart session.
+///
+/// A study is identified by its `script_id` and `script_version`. The
+/// `script_type` determines how the study data is delivered (per-candle or
+/// as a standalone series).
 #[derive(Default, Debug, Clone, Deserialize, Serialize, Builder, Copy)]
 pub struct StudyOptions {
     pub script_id: Ustr,

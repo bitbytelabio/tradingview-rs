@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 use ustr::Ustr;
 
+/// A single quote field as delivered by TradingView's WebSocket stream.
+///
+/// Each quote update contains a field `name` (e.g. `"lp"`, `"bid"`, `"ask"`),
+/// a `status` code, and a [`QuoteValue`] payload.
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize, Copy)]
 pub struct QuoteData {
     #[serde(rename(deserialize = "n"))]
@@ -11,6 +15,11 @@ pub struct QuoteData {
     pub value: QuoteValue,
 }
 
+/// The value payload of a quote update.
+///
+/// All fields are optional — TradingView only includes the fields that have
+/// changed since the last update. Common fields include `price` (last price),
+/// `bid`/`ask`, `volume`, `change`/`change_percent`, and OHLC values.
 #[derive(Clone, PartialEq, Deserialize, Serialize, Debug, Default, Copy)]
 pub struct QuoteValue {
     #[serde(default)]

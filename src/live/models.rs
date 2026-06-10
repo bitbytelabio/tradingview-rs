@@ -27,6 +27,10 @@ pub static WEBSOCKET_HEADERS: LazyLock<HeaderMap<HeaderValue>> = LazyLock::new(|
     headers
 });
 
+/// WebSocket event types dispatched by TradingView's data server.
+///
+/// Maps TradingView's wire protocol event names (`"timescale_update"`,
+/// `"du"`, `"qsd"`, etc.) to Rust enum variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum TradingViewDataEvent {
     OnChartData,
@@ -88,12 +92,14 @@ impl From<Ustr> for TradingViewDataEvent {
     }
 }
 
+/// A serialized WebSocket message ready for transmission.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SocketMessageSer {
     pub m: Value,
     pub p: Value,
 }
 
+/// A deserialized WebSocket message from TradingView.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SocketMessageDe {
     pub m: Ustr,
@@ -121,6 +127,9 @@ impl SocketMessageSer {
     }
 }
 
+/// Server metadata sent by TradingView after a successful WebSocket connection.
+///
+/// Contains the session ID, server timestamp, and base URL for chart data.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SocketServerInfo {
@@ -166,6 +175,10 @@ pub enum SocketMessage<T> {
     Unknown(Ustr),
 }
 
+/// Which TradingView data server tier to connect to.
+///
+/// `ProData` is the default and recommended server. `Data` and
+/// `DataExtended` are alternatives with different capabilities.
 #[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize, Copy, Eq)]
 pub enum DataServer {
     #[default]
@@ -186,6 +199,12 @@ impl std::fmt::Display for DataServer {
     }
 }
 
+/// Trait for WebSocket message handling — serialize and deserialize from
+/// TradingView's wire format.
+///
+/// Implemented by [`SocketMessage`] for the two protocol variants.
+///
+/// [`SocketMessage`]: crate::live::models::SocketMessage
 pub trait Socket {
     fn event_loop(
         &self,

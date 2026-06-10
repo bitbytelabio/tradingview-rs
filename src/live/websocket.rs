@@ -174,6 +174,10 @@ impl ErrorStats {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// Severity classification for WebSocket errors.
+///
+/// Used by the error recovery system to decide whether to retry, reconnect,
+/// or open the circuit breaker.
 pub enum ErrorSeverity {
     /// Trace level - very minor, log only
     Trace,
@@ -189,6 +193,7 @@ pub enum ErrorSeverity {
 
 // Connection health tracking
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// Health status of a WebSocket connection.
 pub enum ConnectionHealth {
     Healthy,
     Degraded,
@@ -213,12 +218,37 @@ impl Default for HealthMetrics {
     }
 }
 
+/// Metadata for a chart data series returned by TradingView.
+///
+/// Includes the chart session ID and the [`ChartOptions`] used to request it.
+///
+/// [`ChartOptions`]: crate::chart::ChartOptions
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Copy)]
 pub struct SeriesInfo {
     pub chart_session: Ustr,
     pub options: ChartOptions,
 }
 
+/// The primary WebSocket client for TradingView real-time data.
+///
+/// Connects to a TradingView data server, authenticates with the provided token,
+/// and streams chart data, quotes, and study results via the handler trait.
+///
+/// # Architecture
+///
+/// The client uses a channel-based write path (no lock contention on sends)
+/// and a dedicated reader task that dispatches parsed messages to the handler.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let ws = WebSocketClient::builder()
+///     .auth_token("your_token")
+///     .server(DataServer::ProData)
+///     .handler(my_handler)
+///     .build()
+///     .await?;
+/// ```
 pub struct WebSocketClient<T: Handler> {
     pub server: DataServer,
     pub auth_token: Arc<RwLock<Ustr>>,

@@ -1,7 +1,7 @@
 //! Data source abstraction.
 //!
-//! Sources produce normalized [`MarketEvent`] batches and feed them into the
-//! loader pipeline. The [`DataSource`] trait is the extension point for new
+//! Sources produce normalized [`MarketEvent`](crate::events::MarketEvent) batches and feed them into the
+//! loader pipeline. The [`DataSource`](crate::source::DataSource) trait is the extension point for new
 //! data providers (REST APIs, WebSocket feeds, CSV files, etc.).
 
 use async_trait::async_trait;
@@ -85,7 +85,7 @@ impl Subscription {
 
 /// TradingView WebSocket data source adapter.
 ///
-/// Wraps the existing [`WebSocketClient`] and `CommandRunner` infrastructure
+/// Wraps the existing [`WebSocketClient`](crate::websocket::WebSocketClient) and `CommandRunner` infrastructure
 /// to produce normalized [`MarketEvent`] batches.
 ///
 /// Note: This is a forward-looking design. The full implementation that bridges

@@ -45,9 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Parse symbols: "AAPL,NASDAQ:MSFT,NASDAQ" or "AAPL,NASDAQ;MSFT,NASDAQ"
-    let symbols_raw = env::var("TV_SYMBOLS").unwrap_or_else(|_| {
-        "AAPL,NASDAQ".to_string()
-    });
+    let symbols_raw = env::var("TV_SYMBOLS").unwrap_or_else(|_| "AAPL:NASDAQ;FPT:HOSE".to_string());
 
     let mut symbols: Vec<(String, String)> = Vec::new();
     for pair_str in symbols_raw.split(|c| c == ',' || c == ';') {
@@ -122,7 +120,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for entry in &result.successful {
             if let Ok(hr) = &entry.result {
                 let bars = hr.data.len();
-                let first = hr.first_datetime().map(|d| d.format("%Y-%m-%d").to_string());
+                let first = hr
+                    .first_datetime()
+                    .map(|d| d.format("%Y-%m-%d").to_string());
                 let last = hr.last_datetime().map(|d| d.format("%Y-%m-%d").to_string());
                 println!(
                     "  {exch}:{sym}  bars={bars}  range={first}..{last}  elapsed={elapsed:?}",
