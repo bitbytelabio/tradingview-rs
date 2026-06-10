@@ -11,8 +11,10 @@ use crate::{
     live::handler::LegacyHandler,
     live::models::TradingViewDataEvent,
     live::websocket::WebSocketClient,
+    utils::symbol_init,
 };
 use serde_json::Value;
+use tracing::error;
 
 /// High-level client for fetching historical TradingView chart data.
 pub struct HistoricalClient {
@@ -51,10 +53,61 @@ impl HistoricalClient {
             .build()
             .await?;
 
-        // Resolve symbol — tells TradingView which instrument we want.
+        // ── Protocol sequence ──────────────────────────────────────────
+        // TradingView chart data protocol:
+        //   1. chart_create_session → server acknowledges with session
+        //   2. resolve_symbol       → server returns SymbolInfo
+        //   3. create_series        → server starts streaming chart data
+        //   4. OnSeriesCompleted    → all data received
+
         let instrument = format!("{exchange}:{symbol}");
-        ws.send("resolve_symbol", &[Value::from(instrument.as_str())])
+        let chart_session = format!("cs_{}", crate::utils::gen_id());
+        let symbol_series_id = format!("sds_sym_{}", crate::utils::gen_id());
+        let series_identifier = "sds_1".to_string();
+        let series_id = "s1".to_string();
+
+        // 1. Create chart session.
+        ws.send("chart_create_session", &[Value::from(chart_session.as_str())])
             .await?;
+        debug!(session = %chart_session, "Chart session created");
+
+        // 2. Resolve symbol within the session.
+        let symbol_init_str = symbol_init()
+            .instrument(&instrument)
+            .call()?;
+        ws.send(
+            "resolve_symbol",
+            &[
+                Value::from(chart_session.as_str()),
+                Value::from(symbol_series_id.as_str()),
+                Value::from(symbol_init_str),
+            ],
+        )
+        .await?;
+        debug!(instrument = %instrument, "Symbol resolution requested");
+
+        // 3. Create data series to start receiving chart data.
+        let bar_count = request.num_bars.unwrap_or(100);
+        ws.send(
+            "create_series",
+            &[
+                Value::from(chart_session.as_str()),
+                Value::from(series_identifier.as_str()),
+                Value::from(series_id.as_str()),
+                Value::from(symbol_series_id.as_str()),
+                Value::from(request.interval.to_string()),
+                Value::from(bar_count),
+                Value::from(""),
+            ],
+        )
+        .await?;
+        debug!(
+            interval = ?request.interval,
+            bars = bar_count,
+            "Data series created"
+        );
+
+        // Also set up a quote session for supplementary data.
         let qs = format!("qs_{}", crate::utils::gen_id());
         ws.send("quote_create_session", &[Value::from(qs.as_str())])
             .await?;
@@ -132,7 +185,8 @@ impl LegacyHandler for HistoricalDataHandler {
     fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]) {
         match event {
             TradingViewDataEvent::OnSymbolResolved => {
-                if let Some(sym_info) = message.first() {
+                // resolve_symbol response: [session, symbol_series_id, SymbolInfo]
+                if let Some(sym_info) = message.get(2) {
                     if let Ok(info) = serde_json::from_value::<SymbolInfo>(sym_info.clone()) {
                         debug!(name = %info.name, "Symbol resolved");
                         self.state.blocking_lock().record_symbol_info(info);
@@ -165,6 +219,11 @@ impl LegacyHandler for HistoricalDataHandler {
             TradingViewDataEvent::OnSeriesCompleted => {
                 info!("Series completed");
                 self.state.blocking_lock().complete();
+            }
+            TradingViewDataEvent::OnError(tv_error) => {
+                error!(?tv_error, "TradingView protocol error");
+                let mut state = self.state.blocking_lock();
+                state.fail(format!("TradingView error: {tv_error:?}"));
             }
             _ => {}
         }

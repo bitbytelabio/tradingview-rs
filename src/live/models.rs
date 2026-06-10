@@ -5,18 +5,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::MutexGuard};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream,
     tungstenite::{
         http::{HeaderMap, HeaderValue},
         protocol::Message,
     },
+    MaybeTlsStream, WebSocketStream,
 };
 use ustr::Ustr;
 
 use crate::{
-    Result, UA,
     error::{Error, TradingViewError},
     utils::format_packet,
+    Result, UA,
 };
 use std::sync::LazyLock;
 
@@ -98,8 +98,10 @@ pub struct SocketMessageSer {
 pub struct SocketMessageDe {
     pub m: Ustr,
     pub p: Vec<Value>,
-    pub t: u64,    // Timestamp in seconds
-    pub t_ms: u64, // Timestamp in milliseconds
+    #[serde(default)]
+    pub t: u64, // Timestamp in seconds (0 when absent, e.g. error messages)
+    #[serde(default)]
+    pub t_ms: u64, // Timestamp in milliseconds (0 when absent)
 }
 
 impl SocketMessageSer {
@@ -133,6 +135,7 @@ pub struct SocketServerInfo {
     pub auth_scheme_vsn: i64,
     pub protocol: Ustr,
     pub via: Ustr,
+    #[serde(rename = "javastudies")]
     pub sjavastudies: Vec<Ustr>,
 }
 
