@@ -3,10 +3,10 @@ use crate::{
     FuturesProductType, MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
     error::Error,
     pine_indicator::{self, BuiltinIndicators, PineInfo, PineMetadata, PineSearchResult},
-    utils::build_request,
+    utils::http_client,
 };
 use bon::builder;
-use reqwest::Response;
+use reqwest::{Response, header::COOKIE};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::{sync::Semaphore, task::JoinHandle};
@@ -56,7 +56,7 @@ impl ParameterBuilder {
     }
 }
 
-/// Sends an HTTP GET request to the specified URL using the provided client and returns the response.
+/// Sends an HTTP GET request using the shared HTTP client for connection pooling.
 ///
 /// # Arguments
 ///
@@ -67,16 +67,15 @@ impl ParameterBuilder {
 ///
 /// A `Result` containing a `Response` struct representing the response from the server, or an error if the request failed.
 async fn get(client: Option<&UserCookies>, url: &str) -> Result<Response> {
-    if let Some(client) = client {
+    let mut req = http_client().get(url);
+    if let Some(c) = client {
         let cookie = format!(
             "sessionid={}; sessionid_sign={}; device_t={};",
-            client.session, client.session_signature, client.device_token
+            c.session, c.session_signature, c.device_token
         );
-        let client = build_request(Some(&cookie))?;
-        let response = client.get(url).send().await?;
-        return Ok(response);
+        req = req.header(COOKIE, &cookie);
     }
-    Ok(build_request(None)?.get(url).send().await?)
+    Ok(req.send().await?)
 }
 
 pub async fn get_symbol(symbol: &str, exchange: &str) -> Option<Symbol> {

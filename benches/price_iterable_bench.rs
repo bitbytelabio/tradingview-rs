@@ -14,6 +14,9 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use std::hint::black_box;
 use tradingview::chart::{ChartHistoricalData, ChartOptions, DataPoint, OHLCV, PriceIterable};
 use tradingview::utils::gen_id;
+use tradingview::utils::parse_packet;
+#[allow(deprecated)]
+use tradingview::utils::{build_request, http_client};
 use tradingview::websocket::SeriesInfo;
 use ustr::Ustr;
 
@@ -141,11 +144,89 @@ fn bench_gen_id(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark HTTP client acquisition.
+///
+/// Compares the old `build_request(None)` (creates a fresh client every call)
+/// against the new `http_client()` (clones the shared `LazyLock` client —
+/// effectively an `Arc` increment).
+///
+/// Also benchmarks 100 sequential acquisitions to simulate request-heavy
+/// workloads.
+#[allow(deprecated)]
+fn bench_http_client(c: &mut Criterion) {
+    let mut group = c.benchmark_group("HttpClient");
+
+    // Single acquisition — old vs new
+    group.bench_function("old_build_request_none", |b| {
+        b.iter(|| {
+            #[allow(deprecated)]
+            black_box(build_request(None).unwrap());
+        });
+    });
+
+    group.bench_function("new_http_client", |b| {
+        b.iter(|| {
+            black_box(http_client());
+        });
+    });
+
+    // 100 sequential acquisitions — simulates 100 sequential requests
+    group.bench_function("old_100_sequential", |b| {
+        b.iter(|| {
+            for _ in 0..100 {
+                #[allow(deprecated)]
+                black_box(build_request(None).unwrap());
+            }
+        });
+    });
+
+    group.bench_function("new_100_sequential", |b| {
+        b.iter(|| {
+            for _ in 0..100 {
+                black_box(http_client());
+            }
+        });
+    });
+
+    group.finish();
+}
+
+/// Build synthetic TradingView WebSocket packets for benchmarking.
+/// Format: `~m~<len>~m~<JSON payload>` repeated `n` times.
+fn build_packets(n: usize) -> String {
+    let payload = r#"{"m":"timescale_update","p":["cs_1",{"s":[{"i":0,"v":[1685633880.0,100.0,105.0,99.0,102.0,1000.0]}]}]}"#;
+    let header = format!("~m~{}~m~", payload.len());
+    let mut buf = String::with_capacity((header.len() + payload.len()) * n);
+    for _ in 0..n {
+        buf.push_str(&header);
+        buf.push_str(payload);
+    }
+    buf
+}
+
+/// Benchmark `parse_packet()` at 1K, 10K, and 100K packet counts.
+fn bench_parse_packet(c: &mut Criterion) {
+    let sizes = [1_000usize, 10_000, 100_000];
+    let mut group = c.benchmark_group("Utils/parse_packet");
+
+    for &n in &sizes {
+        group.throughput(Throughput::Elements(n as u64));
+        let data = build_packets(n);
+        group.bench_with_input(BenchmarkId::new("parse", n), &data, |b, data| {
+            b.iter(|| black_box(parse_packet(data)));
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_vec_direct,
     bench_chart_fixed,
     bench_old_clone_based,
     bench_gen_id,
+    bench_http_client,
+    bench_parse_packet,
 );
 criterion_main!(benches);
