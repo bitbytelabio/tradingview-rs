@@ -16,44 +16,9 @@ pub type CommandTx = mpsc::Sender<Command>;
 /// Bounded receiver for the command channel.
 pub type CommandRx = mpsc::Receiver<Command>;
 
-/// Deprecated alias — use [`CommandTx`] (bounded) instead.
-#[deprecated(since = "0.2.0", note = "Use CommandTx (bounded mpsc::Sender) instead")]
-pub type UnboundedCommandTx = mpsc::UnboundedSender<Command>;
-
-/// Deprecated alias — use [`CommandRx`] (bounded) instead.
-#[deprecated(
-    since = "0.2.0",
-    note = "Use CommandRx (bounded mpsc::Receiver) instead"
-)]
-pub type UnboundedCommandRx = mpsc::UnboundedReceiver<Command>;
-
 // =============================================================================
-// Handler trait — v2
+// Handler trait
 // =============================================================================
-//
-// Migration guide:
-//
-//   v1 (deprecated)                    v2 (recommended)
-//   ─────────────────────────────────  ──────────────────────────────────
-//   trait Handler: Clone + Send + Sync trait Handler: Send + Sync + 'static
-//   {                                   {
-//       fn new(command_tx) -> Self;         // REMOVED — use HandlerFactory
-//       fn handle_events(...);              fn handle_events(...);
-//       fn handle_quote_data(...);          fn handle_quote_data(...);
-//       fn handle_series_data(...);         fn handle_series_data(...);
-//       fn notify_error(...);               fn notify_error(...);
-//   }                                   }
-//
-//   // Step 1: Remove `Clone` from your impl (if you don't need it).
-//   // Step 2: Remove `fn new()` from your impl — implement HandlerFactory
-//   //         as a separate type or use the convenience blanket impl.
-//   // Step 3: If you need shared ownership, use Arc<dyn Handler>.
-//
-//   // V1 code:
-//   let handler = MyHandler::new(tx);
-//
-//   // V2 code:
-//   let handler = MyHandlerFactory.create(tx);
 
 /// Core event handler trait — object-safe, supports `Arc<dyn Handler>`.
 ///
@@ -87,51 +52,7 @@ pub trait HandlerFactory: Send + Sync + 'static {
     fn create(&self, command_tx: CommandTx) -> Self::Handler;
 }
 
-// =============================================================================
-// Backward compatibility — v1 bridge
-// =============================================================================
 
-/// Legacy version of the Handler trait — **deprecated**.
-///
-/// Kept for backward compatibility.  New code should implement [`Handler`]
-/// and [`HandlerFactory`] instead.
-#[deprecated(
-    since = "0.2.0",
-    note = "Implement Handler + HandlerFactory instead.  See migration guide in module docs."
-)]
-pub trait LegacyHandler: Clone + Send + Sync + 'static {
-    fn new(command_tx: CommandTx) -> Self;
-    fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]);
-    fn handle_quote_data(&self, message: &[Value]);
-    fn handle_series_data(&self, event: TradingViewDataEvent, messages: &[Value]);
-    fn notify_error(&self, error: Error, message: &[Value]);
-}
-
-// Blanket impl: anything implementing the old trait also implements the new
-// ones.  This means all existing handlers continue to work without changes.
-#[allow(deprecated)]
-impl<T: LegacyHandler> Handler for T {
-    fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]) {
-        LegacyHandler::handle_events(self, event, message);
-    }
-    fn handle_quote_data(&self, message: &[Value]) {
-        LegacyHandler::handle_quote_data(self, message);
-    }
-    fn handle_series_data(&self, event: TradingViewDataEvent, messages: &[Value]) {
-        LegacyHandler::handle_series_data(self, event, messages);
-    }
-    fn notify_error(&self, error: Error, message: &[Value]) {
-        LegacyHandler::notify_error(self, error, message);
-    }
-}
-
-#[allow(deprecated)]
-impl<T: LegacyHandler> HandlerFactory for T {
-    type Handler = T;
-    fn create(&self, command_tx: CommandTx) -> Self::Handler {
-        T::new(command_tx)
-    }
-}
 
 // =============================================================================
 // Tests
@@ -161,20 +82,6 @@ mod tests {
     fn test_default_capacity_is_reasonable() {
         assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY >= 64);
         assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY <= 4096);
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn test_unbounded_alias_still_works() {
-        let (tx, _rx) = mpsc::unbounded_channel::<Command>();
-        let _old_tx: UnboundedCommandTx = tx;
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn test_unbounded_rx_alias_still_works() {
-        let (_tx, rx) = mpsc::unbounded_channel::<Command>();
-        let _old_rx: UnboundedCommandRx = rx;
     }
 
     #[tokio::test]
@@ -277,33 +184,4 @@ mod tests {
         let _arc: std::sync::Arc<dyn Handler> = std::sync::Arc::new(handler);
     }
 
-    /// Verify that a type implementing the old `LegacyHandler` trait
-    /// automatically satisfies the new `Handler` trait via the blanket impl.
-    #[test]
-    #[allow(deprecated)]
-    fn test_legacy_handler_is_new_handler() {
-        #[derive(Clone)]
-        struct OldHandler;
-        #[allow(deprecated)]
-        impl LegacyHandler for OldHandler {
-            fn new(_tx: CommandTx) -> Self {
-                OldHandler
-            }
-            fn handle_events(&self, _e: TradingViewDataEvent, _m: &[Value]) {}
-            fn handle_quote_data(&self, _m: &[Value]) {}
-            fn handle_series_data(&self, _e: TradingViewDataEvent, _m: &[Value]) {}
-            fn notify_error(&self, _e: Error, _m: &[Value]) {}
-        }
-
-        let (_tx, _rx) = mpsc::channel::<Command>(4);
-        let handler = OldHandler::new(_tx);
-
-        // Should compile — blanket impl bridges old → new
-        fn accept_handler(_h: &impl Handler) {}
-        accept_handler(&handler);
-
-        // Also as factory
-        fn accept_factory(_f: &impl HandlerFactory) {}
-        accept_factory(&handler);
-    }
 }

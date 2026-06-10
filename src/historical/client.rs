@@ -1,14 +1,11 @@
-#![allow(deprecated)]
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, warn};
 
 use crate::{
     DataPoint, DataServer, Error, Result, SymbolInfo,
     historical::{HistoricalRequest, HistoricalResult, state::HistoricalState},
-    live::handler::CommandTx,
-    live::handler::LegacyHandler,
+    live::handler::{CommandTx, Handler, HandlerFactory},
     live::models::TradingViewDataEvent,
     live::websocket::WebSocketClient,
     utils::symbol_init,
@@ -44,7 +41,8 @@ impl HistoricalClient {
 
         let (cmd_tx, _cmd_rx) =
             tokio::sync::mpsc::channel::<crate::live::handler::command::Command>(16);
-        let handler = HistoricalDataHandler::new(state.clone(), cmd_tx);
+        let factory = HistoricalDataHandlerFactory::new(state.clone());
+        let handler = factory.create(cmd_tx);
 
         let ws = WebSocketClient::builder()
             .auth_token(&self.auth_token)
@@ -67,14 +65,15 @@ impl HistoricalClient {
         let series_id = "s1".to_string();
 
         // 1. Create chart session.
-        ws.send("chart_create_session", &[Value::from(chart_session.as_str())])
-            .await?;
+        ws.send(
+            "chart_create_session",
+            &[Value::from(chart_session.as_str())],
+        )
+        .await?;
         debug!(session = %chart_session, "Chart session created");
 
         // 2. Resolve symbol within the session.
-        let symbol_init_str = symbol_init()
-            .instrument(&instrument)
-            .call()?;
+        let symbol_init_str = symbol_init().instrument(&instrument).call()?;
         ws.send(
             "resolve_symbol",
             &[
@@ -123,7 +122,7 @@ impl HistoricalClient {
 
         let result = tokio::time::timeout(request.timeout, Self::wait_for_completion(&state)).await;
 
-        let mut state_guard = state.lock().await;
+        let mut state_guard = state.lock().unwrap();
         let total_bars = state_guard.total_bars;
         let data = state_guard.finalize();
         let elapsed = started.elapsed();
@@ -150,7 +149,7 @@ impl HistoricalClient {
     async fn wait_for_completion(state: &Arc<Mutex<HistoricalState>>) {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            let guard = state.lock().await;
+            let guard = state.lock().unwrap();
             if guard.completed || guard.errored {
                 break;
             }
@@ -162,35 +161,26 @@ impl HistoricalClient {
 // HistoricalDataHandler
 // =============================================================================
 
+/// Event handler that accumulates chart data points into shared
+/// [`HistoricalState`].  Implements the [`Handler`] trait for use with
+/// [`WebSocketClient`].
 #[derive(Clone)]
-struct HistoricalDataHandler {
+pub struct HistoricalDataHandler {
     state: Arc<Mutex<HistoricalState>>,
     #[allow(dead_code)]
     cmd_tx: CommandTx,
 }
 
-impl HistoricalDataHandler {
-    fn new(state: Arc<Mutex<HistoricalState>>, cmd_tx: CommandTx) -> Self {
-        Self { state, cmd_tx }
-    }
-}
-
-#[allow(deprecated)]
-#[allow(deprecated)]
-impl LegacyHandler for HistoricalDataHandler {
-    fn new(_command_tx: CommandTx) -> Self {
-        unreachable!()
-    }
-
+impl Handler for HistoricalDataHandler {
     fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]) {
         match event {
             TradingViewDataEvent::OnSymbolResolved => {
                 // resolve_symbol response: [session, symbol_series_id, SymbolInfo]
-                if let Some(sym_info) = message.get(2) {
-                    if let Ok(info) = serde_json::from_value::<SymbolInfo>(sym_info.clone()) {
-                        debug!(name = %info.name, "Symbol resolved");
-                        self.state.blocking_lock().record_symbol_info(info);
-                    }
+                if let Some(sym_info) = message.get(2)
+                    && let Ok(info) = serde_json::from_value::<SymbolInfo>(sym_info.clone())
+                {
+                    debug!(name = %info.name, "Symbol resolved");
+                    self.state.lock().unwrap().record_symbol_info(info);
                 }
             }
             TradingViewDataEvent::OnChartData | TradingViewDataEvent::OnChartDataUpdate => {
@@ -205,7 +195,7 @@ impl LegacyHandler for HistoricalDataHandler {
                                 .filter_map(|v| serde_json::from_value(v.clone()).ok())
                                 .collect();
                             if !points.is_empty() {
-                                let mut state = self.state.blocking_lock();
+                                let mut state = self.state.lock().unwrap();
                                 state.data.extend(points);
                                 state.total_bars += s_arr.len();
                                 if state.first_data_at.is_none() {
@@ -218,11 +208,11 @@ impl LegacyHandler for HistoricalDataHandler {
             }
             TradingViewDataEvent::OnSeriesCompleted => {
                 info!("Series completed");
-                self.state.blocking_lock().complete();
+                self.state.lock().unwrap().complete();
             }
             TradingViewDataEvent::OnError(tv_error) => {
                 error!(?tv_error, "TradingView protocol error");
-                let mut state = self.state.blocking_lock();
+                let mut state = self.state.lock().unwrap();
                 state.fail(format!("TradingView error: {tv_error:?}"));
             }
             _ => {}
@@ -231,11 +221,40 @@ impl LegacyHandler for HistoricalDataHandler {
 
     fn handle_quote_data(&self, _message: &[Value]) {}
     fn handle_series_data(&self, _event: TradingViewDataEvent, _messages: &[Value]) {}
+
     fn notify_error(&self, error: Error, _message: &[Value]) {
         warn!(?error, "Historical handler error");
-        let mut state = self.state.blocking_lock();
+        let mut state = self.state.lock().unwrap();
         if state.record_error() {
             state.fail(format!("Too many errors: {error:?}"));
+        }
+    }
+}
+
+// =============================================================================
+// HistoricalDataHandlerFactory
+// =============================================================================
+
+/// Factory for creating [`HistoricalDataHandler`] instances that share a
+/// common [`HistoricalState`].
+pub struct HistoricalDataHandlerFactory {
+    state: Arc<Mutex<HistoricalState>>,
+}
+
+impl HistoricalDataHandlerFactory {
+    /// Create a new factory wrapping the given shared state.
+    pub fn new(state: Arc<Mutex<HistoricalState>>) -> Self {
+        Self { state }
+    }
+}
+
+impl HandlerFactory for HistoricalDataHandlerFactory {
+    type Handler = HistoricalDataHandler;
+
+    fn create(&self, command_tx: CommandTx) -> Self::Handler {
+        HistoricalDataHandler {
+            state: Arc::clone(&self.state),
+            cmd_tx: command_tx,
         }
     }
 }

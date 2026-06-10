@@ -511,7 +511,7 @@ mod tests {
     /// For correctness-critical parsing, prefer `parse_packet`.
     #[test]
     fn parse_packet_regex_handles_ping_digits_before_frame() {
-        let result = _parse_packet("~h~9999999999~m~5~m~hello");
+        let result = parse_packet("~h~9999999999~m~5~m~hello");
         // Regex returns 2 segments (digits + frame payload), manual returns 1.
         assert_eq!(
             result.len(),
@@ -535,7 +535,7 @@ mod tests {
     #[test]
     fn parse_packet_regex_consecutive_pings_only() {
         let input = "~h~9999999999".repeat(10);
-        let result = _parse_packet(&input);
+        let result = parse_packet(&input);
         // Regex strips all `~h~`, leaving "9999999999" repeated 10 times.
         // No `~m~\d+~m~` delimiters → the remaining digits form non-empty
         // segments that fail JSON parse → Unknown variants.
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(result.len(), 2);
 
         // Regex should produce the same count.
-        let regex_result = _parse_packet(input);
+        let regex_result = parse_packet(input);
         assert_eq!(regex_result.len(), 2);
     }
 
@@ -590,7 +590,6 @@ mod tests {
     /// length field area is handled by the manual parser character-by-
     /// character.
     #[test]
-    #[test]
     fn debug_minimal_parser() {
         // Minimal tests to understand the parser behavior
         let r1 = parse_packet("~m~5~m~hello");
@@ -614,25 +613,25 @@ mod tests {
         let ping = format!("~h~{}", "9".repeat(100));
         let result = parse_packet(&ping);
         assert!(result.is_empty());
-        let regex_result = _parse_packet(&ping);
+        let regex_result = parse_packet(&ping);
         // Regex strips `~h~`, leaving 100 digits → one Unknown segment.
         assert_eq!(regex_result.len(), 1);
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // _parse_packet — regex-based variant tests
+    // parse_packet — regex-based variant tests
     // ──────────────────────────────────────────────────────────────────
 
     #[test]
     fn parse_packet_regex_empty_returns_empty() {
-        assert!(_parse_packet("").is_empty());
+        assert!(parse_packet("").is_empty());
     }
 
     #[test]
     fn parse_packet_regex_strips_heartbeats() {
         // ~h~ markers are removed by the regex cleaner.
         let input = "~h~~h~~m~23~m~{\"m\":\"test\",\"p\":[\"a\"]}~h~";
-        let result = _parse_packet(input);
+        let result = parse_packet(input);
         assert_eq!(result.len(), 1);
     }
 
@@ -642,53 +641,17 @@ mod tests {
             "~m~23~m~{\"m\":\"test1\",\"p\":[\"a\"]}",
             "~m~23~m~{\"m\":\"test2\",\"p\":[\"b\"]}",
         );
-        let result = _parse_packet(input);
+        let result = parse_packet(input);
         assert_eq!(result.len(), 2);
     }
 
     #[test]
     fn parse_packet_regex_invalid_json_becomes_unknown() {
-        let result = _parse_packet("~m~9~m~not_a_json");
+        let result = parse_packet("~m~9~m~not_a_json");
         assert_eq!(result.len(), 1);
         match &result[0] {
             SocketMessage::Unknown(s) => assert_eq!(s.as_str(), "not_a_json"),
             other => panic!("expected Unknown, got {other:?}"),
-        }
-    }
-
-    /// Both `parse_packet` (manual) and `_parse_packet` (regex) should
-    /// produce equivalent results for well-formed inputs.
-    #[test]
-    fn parse_packet_manual_and_regex_are_equivalent() {
-        let payloads: &[&str] = &[
-            r#"{"m":"test","p":["hello"]}"#,
-            r#"{"session_id":"abc","timestamp":1,"timestamp_ms":1000,"release":"v1","studies_metadata_hash":"h","auth_scheme_vsn":2,"protocol":"p","via":"v","javastudies":[]}"#,
-            r#"{"m":"qsd","p":[{"n":"AAPL","v":{"bid":150.0}}],"t":100,"t_ms":100000}"#,
-            r#"{"random":"json","number":42}"#,
-        ];
-
-        for payload_str in payloads {
-            let len = payload_str.len();
-            // Build manual-format packet (with and without heartbeats).
-            let clean = format!("~m~{}~m~{payload_str}", len);
-            let with_hb = format!("~h~~m~{}~m~{payload_str}~h~", len);
-
-            let manual_clean = parse_packet(&clean);
-            let regex_clean = _parse_packet(&clean);
-            let manual_hb = parse_packet(&with_hb);
-            let regex_hb = _parse_packet(&with_hb);
-
-            assert_eq!(manual_clean.len(), 1, "manual clean for {payload_str}");
-            assert_eq!(regex_clean.len(), 1, "regex clean for {payload_str}");
-            assert_eq!(manual_hb.len(), 1, "manual hb for {payload_str}");
-            assert_eq!(regex_hb.len(), 1, "regex hb for {payload_str}");
-
-            // Both parsers should produce the same variant type.
-            assert_eq!(
-                core::mem::discriminant(&manual_clean[0]),
-                core::mem::discriminant(&regex_clean[0]),
-                "variant mismatch for {payload_str}"
-            );
         }
     }
 

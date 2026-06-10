@@ -14,12 +14,8 @@ name = "tradingview"
 path = "src/lib.rs"
 
 [[bench]]
+harness = false
 name = "price_iterable_bench"
-harness = false
-
-[[bench]]
-name = "parse_packet_bench"
-harness = false
 
 [dependencies]
 async-trait = "0.1"
