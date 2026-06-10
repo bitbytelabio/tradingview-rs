@@ -54,7 +54,6 @@ tracing = "0.1"
 url = "2"
 urlencoding = "2"
 ustr = { version = "1.1.0", features = ["serde"] }
-zip = "4"
 
 [dev-dependencies]
 anyhow = "1"

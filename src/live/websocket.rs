@@ -49,7 +49,7 @@ use crate::{
 
 // Error recovery configuration
 #[derive(Debug, Clone, Copy)]
-struct ErrorRecoveryConfig {
+pub(crate) struct ErrorRecoveryConfig {
     max_consecutive_errors: u64,
     error_reset_interval: Duration,
     max_recovery_attempts: u32,
@@ -252,6 +252,7 @@ pub struct WebSocketClient<T: Handler> {
 }
 
 #[bon::bon]
+#[allow(private_interfaces)]
 impl<T: Handler> WebSocketClient<T> {
     #[builder]
     pub async fn new(

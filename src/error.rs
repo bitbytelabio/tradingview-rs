@@ -61,12 +61,6 @@ pub enum Error {
     #[error("URL parsing failed: {0}")]
     UrlParse(Ustr),
 
-    #[error("Base64 decode failed: {0}")]
-    Base64Decode(Ustr),
-
-    #[error("ZIP error: {0}")]
-    Zip(Ustr),
-
     #[error("Date/time parsing failed: {0}")]
     ChronoParse(Ustr),
 
@@ -138,18 +132,6 @@ impl From<tokio::task::JoinError> for Error {
 impl From<url::ParseError> for Error {
     fn from(err: url::ParseError) -> Self {
         Error::UrlParse(err.to_string().into())
-    }
-}
-
-impl From<base64::DecodeError> for Error {
-    fn from(err: base64::DecodeError) -> Self {
-        Error::Base64Decode(err.to_string().into())
-    }
-}
-
-impl From<zip::result::ZipError> for Error {
-    fn from(err: zip::result::ZipError) -> Self {
-        Error::Zip(err.to_string().into())
     }
 }
 

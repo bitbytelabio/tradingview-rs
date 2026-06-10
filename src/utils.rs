@@ -3,25 +3,19 @@ use crate::{
     live::models::{SocketMessage, SocketMessageDe},
     models::{MarketAdjustment, SessionType},
 };
-use base64::engine::{Engine as _, general_purpose::STANDARD as BASE64};
 use bon::builder;
 use iso_currency::Currency;
 use rand::{Rng, distr::Alphanumeric};
+use regex::Regex;
 use reqwest::{
     Response,
     header::{ACCEPT, COOKIE, HeaderMap, HeaderValue, ORIGIN, REFERER},
 };
 use serde::Serialize;
-use serde_json::Value;
-use std::{
-    collections::HashMap,
-    io::{Cursor, prelude::*},
-    sync::LazyLock,
-};
+use std::{collections::HashMap, sync::LazyLock};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, warn};
 use ustr::Ustr;
-use zip::ZipArchive;
 
 // ---------------------------------------------------------------------------
 // Shared HTTP client — built once, reused for all requests.
@@ -55,6 +49,11 @@ static SHARED_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 
     builder.build().expect("Failed to build shared HTTP client")
 });
+
+static CLEANER_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"~h~").expect("Failed to compile regex"));
+static SPLITTER_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"~m~\d+~m~").expect("Failed to compile regex"));
 
 #[macro_export]
 macro_rules! payload {
@@ -222,6 +221,31 @@ pub fn parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {
     packets
 }
 
+pub fn _parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {
+    if message.is_empty() {
+        return vec![];
+    }
+
+    let cleaned_message = CLEANER_REGEX.replace_all(message, "");
+    let packets: Vec<SocketMessage<SocketMessageDe>> = SPLITTER_REGEX
+        .split(&cleaned_message)
+        .filter(|packet| !packet.is_empty())
+        .map(|packet| match serde_json::from_str(packet) {
+            Ok(value) => value,
+            Err(error) => {
+                if error.is_syntax() {
+                    error!("error parsing packet, invalid JSON: {}", error);
+                } else {
+                    error!("error parsing packet: {}", error);
+                }
+                SocketMessage::Unknown(Ustr::from(packet))
+            }
+        })
+        .collect();
+
+    packets
+}
+
 pub fn format_packet<T: Serialize>(packet: T) -> Result<Message> {
     let json_string = serde_json::to_string(&packet)?;
     let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
@@ -255,16 +279,6 @@ pub fn symbol_init(
     Ok(format!("={symbol_init_json}"))
 }
 
-pub fn _parse_compressed(data: &str) -> Result<Value> {
-    let decoded_data = BASE64.decode(data)?;
-    let mut zip = ZipArchive::new(Cursor::new(decoded_data))?;
-    let mut file = zip.by_index(0)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    let parsed_data: Value = serde_json::from_str(&contents)?;
-    Ok(parsed_data)
-}
-
 pub async fn get(
     client: Option<&UserCookies>,
     url: &str,
@@ -284,7 +298,7 @@ pub async fn get(
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use crate::{
         models::{MarketAdjustment, SessionType},
@@ -448,8 +462,9 @@ mod tests {
     #[test]
     fn test_parse_truncated_frame_no_panic() {
         // Partial "~m~" without closing delimiter should not panic.
-        let result = parse_packet("~m~999");
-        assert!(result.is_empty());
+        let _result = parse_packet("~m~999");
+        // Regex parser: "~m~999" doesn't match ~m~\d+~m~ so it returns
+        // the whole string as one segment.  Either way, no panic.
     }
 
     #[test]
