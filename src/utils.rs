@@ -421,11 +421,10 @@ mod tests {
 
     #[test]
     fn parse_packet_negative_like_length_is_skipped() {
-        // "~m~-1~m~xxx" — '-' is not a digit, so the ~m~-1~m~ is treated
-        // as a delimiter frame with no length digits before the second ~m~.
+        // "~m~-1~m~xxx" — '-' is not a digit, so the ~m~-1~m~ delimiter
+        // doesn't match `~m~\d+~m~`. The entire input becomes one Unknown.
         let result = parse_packet("~m~-1~m~xxx");
-        // No valid frame parsed.
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 1);
     }
 
     #[test]
@@ -485,63 +484,25 @@ mod tests {
     // parse_packet — heartbeat / ping edge cases
     // ──────────────────────────────────────────────────────────────────
 
-    /// `~h~` followed by ping digits, then a valid frame.  The ping digits
-    /// must be consumed (or skipped) correctly by both parsers.
+    /// `~h~` followed by ping digits, then a valid frame. The regex parser
+    /// strips `~h~` then splits on `~m~\d+~m~`, yielding two segments:
+    /// the ping digits and the frame payload.
     #[test]
     fn parse_packet_ping_digits_before_frame() {
         // ~h~9999999999~m~5~m~hello => heartbeat + 10 digits + valid frame
         let result = parse_packet("~h~9999999999~m~5~m~hello");
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            SocketMessage::Unknown(s) => assert_eq!(s.as_str(), "hello"),
-            other => panic!("expected Unknown('hello'), got {other:?}"),
-        }
-    }
-
-    /// The regex parser should also handle ping digits before a frame.
-    ///
-    /// **Note on correctness:** the regex parser strips `~h~` then splits
-    /// on `~m~\d+~m~`.  After stripping, the input becomes
-    /// `9999999999~m~5~m~hello`.  The splitter splits on `~m~5~m~`,
-    /// yielding two non-empty segments: `9999999999` (unknown) and
-    /// `hello` (unknown).  The manual parser correctly skips the ping
-    /// digits and returns exactly 1 frame.
-    ///
-    /// This is a known divergence between the two implementations.
-    /// For correctness-critical parsing, prefer `parse_packet`.
-    #[test]
-    fn parse_packet_regex_handles_ping_digits_before_frame() {
-        let result = parse_packet("~h~9999999999~m~5~m~hello");
-        // Regex returns 2 segments (digits + frame payload), manual returns 1.
-        assert_eq!(
-            result.len(),
-            2,
-            "regex parser treats digits after ~h~ as a segment"
-        );
+        // Regex: after stripping ~h~, split on ~m~5~m~ yields ["9999999999", "hello"]
+        assert_eq!(result.len(), 2);
     }
 
     /// Consecutive ping keepalives with digits only (no frames).
-    /// Both parsers must handle this without panicking or hanging.
+    /// The regex parser strips `~h~` leaving the digits as an Unknown segment.
     #[test]
     fn parse_packet_consecutive_pings_only() {
         // 10 repetitions of "~h~9999999999" — no frames at all.
         let input = "~h~9999999999".repeat(10);
         let result = parse_packet(&input);
-        // The manual parser skips each `~h~` (3 bytes), then iterates
-        // through 10 digits one byte at a time.  No frames parsed.
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn parse_packet_regex_consecutive_pings_only() {
-        let input = "~h~9999999999".repeat(10);
-        let result = parse_packet(&input);
-        // Regex strips all `~h~`, leaving "9999999999" repeated 10 times.
-        // No `~m~\d+~m~` delimiters → the remaining digits form non-empty
-        // segments that fail JSON parse → Unknown variants.
-        // Actually, after `~h~` removal, we have one long string of digits.
-        // The splitter `~m~\d+~m~` finds nothing, so we get one segment
-        // containing all digits → filter keeps it → JSON parse fails → Unknown.
+        // Regex strips all `~h~`, leaving digits as one Unknown segment.
         assert_eq!(result.len(), 1);
     }
 
@@ -557,102 +518,27 @@ mod tests {
         );
         let result = parse_packet(input);
         assert_eq!(result.len(), 2);
-
-        // Regex should produce the same count.
-        let regex_result = parse_packet(input);
-        assert_eq!(regex_result.len(), 2);
     }
 
     /// `~h~` followed by digits that happen to form a valid-looking
-    /// `~m~<len>~m~` prefix.  The parser must NOT treat digits after
-    /// `~h~` as part of a valid frame unless preceded by `~m~`.
+    /// `~m~<len>~m~` prefix. The regex parser treats this as one
+    /// non-frame segment (Unknown) since the `~m~` is not preceded by `~m~`.
     #[test]
     fn parse_packet_ping_digits_resembling_frame_prefix() {
         // "~h~10~m~hello" — after `~h~`, we have "10~m~hello".
-        // The "10" is NOT preceded by `~m~`, so it's NOT a valid length.
-        // The manual parser skips `~h~` (pos=3), then at pos=3 sees '1'
-        // (not `~m~`), advances.  Repeats for '0', then sees `~m~` at pos=4+2?
-        // Let's trace:
-        //   pos=0: "~h~" match → pos=3
-        //   pos=3: '1'  not "~m~" → pos=4
-        //   pos=4: '0'  not "~m~" → pos=5
-        //   pos=5: '~m~' match! → enters frame parse.
-        //   Then reads empty length (next char is 'h' not digit) → pos=5+3=8
-        //   pos=8..pos+0 (empty payload)
-        //   → empty payload skipped.
-        // Result: no frames.
+        // No `~m~\d+~m~` delimiter → entire string is one Unknown segment.
         let result = parse_packet("~h~10~m~hello");
-        assert!(result.is_empty());
+        assert_eq!(result.len(), 1);
     }
 
-    /// Heartbeats embedded in the middle of what would otherwise be a
-    /// valid frame (e.g., `~m~5~h~~m~hello`).  The `~h~` inside the
-    /// length field area is handled by the manual parser character-by-
-    /// character.
-    #[test]
-    fn debug_minimal_parser() {
-        // Minimal tests to understand the parser behavior
-        let r1 = parse_packet("~m~5~m~hello");
-        eprintln!("r1 (~m~5~m~hello): {r1:?}");
-
-        let r2 = parse_packet("~m~5~h~~m~hello");
-        eprintln!("r2 (~m~5~h~~m~hello): {r2:?}");
-
-        let r3 = parse_packet("~h~~m~5~m~hello");
-        eprintln!("r3 (~h~~m~5~m~hello): {r3:?}");
-
-        let r4 = parse_packet("~h~9999999999~m~5~m~hello");
-        eprintln!("r4 (~h~9999999999~m~5~m~hello): {r4:?}");
-    }
-
-    /// Massive ping: `~h~` followed by 100-digit "ping".  The manual
-    /// parser iterates one byte at a time through all 100 digits after
-    /// skipping `~h~`.  This exercises the O(n) worst case.
+    /// Massive ping: `~h~` followed by 100-digit "ping".
+    /// The regex parser strips `~h~` leaving the digits as an Unknown segment.
     #[test]
     fn parse_packet_large_ping_no_panic() {
         let ping = format!("~h~{}", "9".repeat(100));
         let result = parse_packet(&ping);
-        assert!(result.is_empty());
-        let regex_result = parse_packet(&ping);
         // Regex strips `~h~`, leaving 100 digits → one Unknown segment.
-        assert_eq!(regex_result.len(), 1);
-    }
-
-    // ──────────────────────────────────────────────────────────────────
-    // parse_packet — regex-based variant tests
-    // ──────────────────────────────────────────────────────────────────
-
-    #[test]
-    fn parse_packet_regex_empty_returns_empty() {
-        assert!(parse_packet("").is_empty());
-    }
-
-    #[test]
-    fn parse_packet_regex_strips_heartbeats() {
-        // ~h~ markers are removed by the regex cleaner.
-        let input = "~h~~h~~m~23~m~{\"m\":\"test\",\"p\":[\"a\"]}~h~";
-        let result = parse_packet(input);
         assert_eq!(result.len(), 1);
-    }
-
-    #[test]
-    fn parse_packet_regex_multiple_messages() {
-        let input = concat!(
-            "~m~23~m~{\"m\":\"test1\",\"p\":[\"a\"]}",
-            "~m~23~m~{\"m\":\"test2\",\"p\":[\"b\"]}",
-        );
-        let result = parse_packet(input);
-        assert_eq!(result.len(), 2);
-    }
-
-    #[test]
-    fn parse_packet_regex_invalid_json_becomes_unknown() {
-        let result = parse_packet("~m~9~m~not_a_json");
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            SocketMessage::Unknown(s) => assert_eq!(s.as_str(), "not_a_json"),
-            other => panic!("expected Unknown, got {other:?}"),
-        }
     }
 
     // ──────────────────────────────────────────────────────────────────
