@@ -220,6 +220,44 @@ fn bench_parse_packet(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark WebSocket write-path throughput using an mpsc channel.
+///
+/// Simulates a command burst: N messages are queued concurrently into the
+/// channel, and a dummy receiver drains them.  This measures the raw
+/// channel send throughput without network I/O.
+fn bench_ws_write_path(c: &mut Criterion) {
+    use tokio::runtime::Runtime;
+    use tokio::sync::mpsc;
+
+    let rt = Runtime::new().unwrap();
+    let sizes = [100usize, 1_000, 10_000];
+
+    let mut group = c.benchmark_group("WebSocket/write-path-channel");
+    for &n in &sizes {
+        group.throughput(Throughput::Elements(n as u64));
+        group.bench_with_input(
+            criterion::BenchmarkId::new("send_n_messages", n),
+            &n,
+            |b, &n| {
+                b.iter(|| {
+                    rt.block_on(async {
+                        let (tx, mut rx) = mpsc::channel::<String>(1024);
+                        // Spawn a dummy consumer to prevent channel backpressure.
+                        let consumer =
+                            tokio::spawn(async move { while rx.recv().await.is_some() {} });
+                        for i in 0..n {
+                            let _ = tx.send(format!("msg_{i}")).await;
+                        }
+                        drop(tx);
+                        let _ = consumer.await;
+                    });
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_vec_direct,
@@ -228,5 +266,6 @@ criterion_group!(
     bench_gen_id,
     bench_http_client,
     bench_parse_packet,
+    bench_ws_write_path,
 );
 criterion_main!(benches);

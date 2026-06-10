@@ -15,7 +15,8 @@ use std::{
 };
 use tokio::{
     net::TcpStream,
-    sync::{Mutex, MutexGuard, RwLock},
+    sync::{Mutex, MutexGuard, RwLock, mpsc},
+    task::JoinHandle,
     time::timeout,
 };
 use tokio_tungstenite::{
@@ -222,7 +223,15 @@ pub struct WebSocketClient<T: Handler> {
     is_closed: Arc<AtomicBool>,
 
     read: Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
-    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    /// Channel-based write path — eliminates `Arc<Mutex<SplitSink>>` lock contention.
+    /// All outgoing messages are sent on this channel; a dedicated writer task
+    /// drains it and writes to the `SplitSink`.
+    ///
+    /// Wrapped in `Arc<RwLock<>>`: the hot `send()` path acquires a read lock
+    /// (concurrent, cheap).  Only `reconnect()` acquires the write lock.
+    write_tx: Arc<RwLock<mpsc::Sender<Message>>>,
+    /// Handle to the writer task so we can abort it on reconnect.
+    writer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     buffer_size: usize,
 
     // Enhanced error handling and recovery
@@ -250,16 +259,21 @@ impl<T: Handler> WebSocketClient<T> {
 
         let is_closed = Arc::new(AtomicBool::new(false));
         let auth_token = Arc::new(RwLock::new(auth_token));
-        let write = Arc::new(Mutex::new(write));
         let read = Arc::new(Mutex::new(read));
+
+        // Channel-based write path: 1024 messages of buffering before backpressure.
+        let (write_tx, write_rx) = mpsc::channel(1024);
+        let write_tx = Arc::new(RwLock::new(write_tx));
+        let writer_handle = Arc::new(Mutex::new(None::<JoinHandle<()>>));
 
         let client = Arc::new(Self {
             handler,
             server,
             read,
-            write,
+            write_tx: write_tx.clone(),
+            writer_handle: writer_handle.clone(),
             auth_token,
-            is_closed,
+            is_closed: is_closed.clone(),
             buffer_size,
             cancellation: CancellationToken::new(),
             error_stats: ErrorStats::default(),
@@ -268,6 +282,9 @@ impl<T: Handler> WebSocketClient<T> {
             circuit_breaker_open: Arc::new(AtomicBool::new(false)),
             circuit_breaker_opened_at: Arc::new(RwLock::new(None)),
         });
+
+        // Spawn the dedicated writer task.
+        Self::spawn_writer(write, write_rx, writer_handle, is_closed.clone());
 
         // Start health monitoring task
         client.spawn_health_monitor();
@@ -280,6 +297,36 @@ impl<T: Handler> WebSocketClient<T> {
             if let Err(e) = self.subscribe().await {
                 error!("Reader task failed: {}", e);
             }
+        });
+    }
+
+    /// Spawn a dedicated writer task that owns the `SplitSink` directly (no
+    /// `Mutex`) and drains the mpsc channel.  Eliminates write lock contention.
+    fn spawn_writer(
+        mut sink: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        mut rx: mpsc::Receiver<Message>,
+        handle_storage: Arc<Mutex<Option<JoinHandle<()>>>>,
+        is_closed: Arc<AtomicBool>,
+    ) {
+        let handle = tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                if is_closed.load(Ordering::Relaxed) {
+                    break;
+                }
+                if sink.send(msg).await.is_err() {
+                    is_closed.store(true, Ordering::Relaxed);
+                    break;
+                }
+            }
+            // Channel closed or connection dead — close the sink.
+            let _ = sink.close().await;
+            is_closed.store(true, Ordering::Relaxed);
+        });
+
+        // Store the handle so reconnect can abort it.
+        tokio::spawn(async move {
+            let mut guard = handle_storage.lock().await;
+            *guard = Some(handle);
         });
     }
 
@@ -648,10 +695,32 @@ impl<T: Handler> WebSocketClient<T> {
 
     pub async fn reconnect(&self) -> Result<()> {
         let auth_token = self.auth_token.read().await;
+
+        // Abort the old writer task.
+        let mut wh = self.writer_handle.lock().await;
+        if let Some(handle) = wh.take() {
+            handle.abort();
+        }
+        drop(wh);
+
         let (write, read) = Self::connect(self.server, Some(self.buffer_size)).await?;
-        let mut write_guard = self.write.lock().await;
+
+        // Create a new channel and spawn a new writer task.
+        let (new_tx, new_rx) = mpsc::channel(1024);
+        Self::spawn_writer(
+            write,
+            new_rx,
+            self.writer_handle.clone(),
+            self.is_closed.clone(),
+        );
+
+        // Atomically swap the sender so future writes go to the new connection.
+        {
+            let mut tx_guard = self.write_tx.write().await;
+            *tx_guard = new_tx;
+        }
+
         let mut read_guard = self.read.lock().await;
-        *write_guard = write;
         *read_guard = read;
         self.is_closed.store(false, Ordering::Relaxed);
         self.set_auth_token(&auth_token).await?;
@@ -669,10 +738,11 @@ impl<T: Handler> WebSocketClient<T> {
             return Err(Error::Internal("Circuit breaker is open".into()));
         }
 
-        match timeout(Duration::from_secs(10), async {
-            let mut write_guard = self.write.lock().await;
-            write_guard.send(Message::Text(message.into())).await
-        })
+        let tx = self.write_tx.read().await;
+        match timeout(
+            Duration::from_secs(10),
+            tx.send(Message::Text(message.into())),
+        )
         .await
         {
             Ok(Ok(_)) => {
@@ -689,17 +759,19 @@ impl<T: Handler> WebSocketClient<T> {
         if self.is_closed.load(Ordering::Relaxed) {
             return Err(Error::Internal("WebSocket is closed".into()));
         }
-        let mut write_guard = self.write.lock().await;
-        write_guard
-            .send(SocketMessageSer::new(m, p).to_message()?)
-            .await?;
+        let tx = self.write_tx.read().await;
+        tx.send(SocketMessageSer::new(m, p).to_message()?)
+            .await
+            .map_err(|e| Error::WebSocket(e.to_string().into()))?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn ping(&self, ping: &Message) -> Result<()> {
-        let mut write_guard = self.write.lock().await;
-        write_guard.send(ping.clone()).await?;
+        let tx = self.write_tx.read().await;
+        tx.send(ping.clone())
+            .await
+            .map_err(|e| Error::WebSocket(e.to_string().into()))?;
         if ping.is_close() {
             self.is_closed.store(true, Ordering::Relaxed);
             tracing::warn!("ping message is close, closing session");
@@ -709,7 +781,14 @@ impl<T: Handler> WebSocketClient<T> {
 
     pub async fn close(&self) -> Result<()> {
         self.is_closed.store(true, Ordering::Relaxed);
-        self.write.lock().await.close().await?;
+        // Drop the send half of the channel — this signals the writer task
+        // that no more messages are coming, causing `rx.recv()` to return
+        // `None` and the writer task to exit.
+        let (dummy_tx, _dummy_rx) = mpsc::channel::<Message>(1);
+        let mut tx_guard = self.write_tx.write().await;
+        let old_tx = std::mem::replace(&mut *tx_guard, dummy_tx);
+        drop(old_tx); // closes the old channel
+        drop(tx_guard);
         Ok(())
     }
 
