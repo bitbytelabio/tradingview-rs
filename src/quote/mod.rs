@@ -1,5 +1,5 @@
 pub mod models;
-pub(crate) mod utils;
+pub mod utils;
 
 /// All TradingView quote field names as a compile-time constant slice.
 /// Zero runtime allocation — the data lives in the binary's `.rodata` section.
