@@ -17,6 +17,10 @@ path = "src/lib.rs"
 name = "price_iterable_bench"
 harness = false
 
+[[bench]]
+name = "parse_packet_bench"
+harness = false
+
 [dependencies]
 async-trait = "0.1"
 base64 = "0.22"
@@ -60,6 +64,7 @@ anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 colored = "3"
 criterion = { version = "0.6", features = ["html_reports"] }
+csv = "1"
 dotenv = "0.15"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = "0.3"
