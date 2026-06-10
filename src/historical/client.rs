@@ -15,8 +15,8 @@ use tracing::error;
 
 /// High-level client for fetching historical TradingView chart data.
 pub struct HistoricalClient {
-    auth_token: String,
-    server: DataServer,
+    pub(crate) auth_token: String,
+    pub(crate) server: DataServer,
 }
 
 impl HistoricalClient {
