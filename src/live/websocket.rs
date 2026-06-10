@@ -11,7 +11,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     net::TcpStream,
@@ -83,7 +83,8 @@ struct ErrorStats {
     recovery_attempts: Arc<AtomicU64>,
     connection_drops: Arc<AtomicU64>,
     last_successful_message: Arc<RwLock<Option<Instant>>>,
-    error_history: Arc<RwLock<Vec<(Instant, String, ErrorSeverity)>>>,
+    recent_critical_times: Arc<RwLock<[u64; 4]>>,
+    recent_critical_count: Arc<AtomicU64>,
 }
 
 impl Default for ErrorStats {
@@ -95,7 +96,8 @@ impl Default for ErrorStats {
             recovery_attempts: Arc::new(AtomicU64::new(0)),
             connection_drops: Arc::new(AtomicU64::new(0)),
             last_successful_message: Arc::new(RwLock::new(Some(Instant::now()))),
-            error_history: Arc::new(RwLock::new(Vec::new())),
+            recent_critical_times: Arc::new(RwLock::new([0u64; 4])),
+            recent_critical_count: Arc::new(AtomicU64::new(0)),
         }
     }
 }
@@ -121,15 +123,13 @@ impl ErrorStats {
         *last_success = Some(Instant::now());
     }
 
-    async fn record_error(&self, error_msg: String, severity: ErrorSeverity) {
-        let mut history = self.error_history.write().await;
-        history.push((Instant::now(), error_msg, severity));
-        let history_len = history.len();
-
-        // Keep only last 100 errors to prevent memory growth
-        if history_len > 100 {
-            history.drain(0..history_len - 100);
-        }
+    async fn record_critical_error(&self, now_secs: u64) {
+        let mut times = self.recent_critical_times.write().await;
+        times[0] = times[1];
+        times[1] = times[2];
+        times[2] = times[3];
+        times[3] = now_secs;
+        self.recent_critical_count.fetch_add(1, Ordering::Relaxed);
     }
 
     async fn should_reset_consecutive_errors(&self, reset_interval: Duration) -> bool {
@@ -154,15 +154,22 @@ impl ErrorStats {
         self.consecutive_errors.load(Ordering::SeqCst)
     }
 
-    async fn get_recent_error_pattern(&self) -> Vec<ErrorSeverity> {
-        let history = self.error_history.read().await;
-        let cutoff = Instant::now() - Duration::from_secs(300); // Last 5 minutes
-
-        history
-            .iter()
-            .filter(|(time, _, _)| *time > cutoff)
-            .map(|(_, _, severity)| *severity)
-            .collect()
+    async fn get_recent_critical_count(&self, window_secs: u64) -> usize {
+        if self.recent_critical_count.load(Ordering::Relaxed) == 0 {
+            return 0;
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        if let Ok(times) = self.recent_critical_times.try_read() {
+            times
+                .iter()
+                .filter(|&&t| t > 0 && now.saturating_sub(t) <= window_secs)
+                .count()
+        } else {
+            0
+        }
     }
 }
 
@@ -363,8 +370,8 @@ impl<T: Handler> WebSocketClient<T> {
     /// Classify error severity for appropriate response
     async fn classify_error_severity(&self, error: &Error, context: &str) -> ErrorSeverity {
         // Check recent error pattern for escalation
-        let recent_errors = self.error_stats.get_recent_error_pattern().await;
         let consecutive_errors = self.error_stats.get_consecutive_errors();
+        let recent_critical = self.error_stats.get_recent_critical_count(300).await;
 
         // Pattern-based escalation
         let base_severity = match error {
@@ -414,12 +421,7 @@ impl<T: Handler> WebSocketClient<T> {
         };
 
         // Escalate based on error patterns
-        if recent_errors
-            .iter()
-            .filter(|&&s| s >= ErrorSeverity::Critical)
-            .count()
-            >= 3
-        {
+        if recent_critical >= 3 {
             ErrorSeverity::Fatal
         } else if consecutive_errors >= self.error_config.max_consecutive_errors {
             std::cmp::max(base_severity, ErrorSeverity::Critical)
@@ -636,9 +638,13 @@ impl<T: Handler> WebSocketClient<T> {
     /// Enhanced error notification with context
     async fn notify_error_handlers(&self, error: &Error, context: &str, severity: ErrorSeverity) {
         // Record error in history
-        self.error_stats
-            .record_error(error.to_string(), severity)
-            .await;
+        if severity >= ErrorSeverity::Critical {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            self.error_stats.record_critical_error(now).await;
+        }
 
         // Create comprehensive context information
         let health_metrics = self.health_metrics.read().await;
