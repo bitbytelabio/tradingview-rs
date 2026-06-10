@@ -76,13 +76,12 @@ pub fn gen_session_id(session_type: &str) -> String {
 
 #[inline]
 pub fn gen_id() -> Ustr {
-    let rng = rand::rng();
-    let result: String = rng
-        .sample_iter(&Alphanumeric)
-        .take(12)
-        .map(char::from)
-        .collect();
-    Ustr::from(&result)
+    let mut rng = rand::rng();
+    let buf: [u8; 12] = std::array::from_fn(|_| rng.sample(Alphanumeric));
+    // SAFETY: `Alphanumeric` samples only ASCII bytes (0-9, A-Z, a-z),
+    // which are always valid UTF-8. The `expect` documents this invariant.
+    let s = core::str::from_utf8(&buf).expect("Alphanumeric produces only ASCII");
+    Ustr::from(s)
 }
 
 pub fn parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {

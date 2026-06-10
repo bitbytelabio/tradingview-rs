@@ -13,6 +13,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
 use tradingview::chart::{ChartHistoricalData, ChartOptions, DataPoint, OHLCV, PriceIterable};
+use tradingview::utils::gen_id;
 use tradingview::websocket::SeriesInfo;
 use ustr::Ustr;
 
@@ -130,10 +131,21 @@ fn bench_old_clone_based(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark `gen_id()` — measures ID generation throughput.
+fn bench_gen_id(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Utils/gen_id");
+    group.throughput(Throughput::Elements(1));
+    group.bench_function("generate", |b| {
+        b.iter(|| black_box(gen_id()));
+    });
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_vec_direct,
     bench_chart_fixed,
     bench_old_clone_based,
+    bench_gen_id,
 );
 criterion_main!(benches);
