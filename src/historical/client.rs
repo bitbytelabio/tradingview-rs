@@ -1,172 +1,102 @@
-// use dashmap::DashMap;
-// use std::{
-//     collections::VecDeque,
-//     sync::{Arc, atomic::AtomicUsize},
-// };
-// use tokio::sync::mpsc::UnboundedSender;
-// use ustr::Ustr;
+use std::sync::Arc;
+use std::time::Instant;
+use tracing::{debug, instrument};
 
-// use crate::{
-//     live::handler::{EventHandler, command::Command},
-//     utils::gen_id,
-//     websocket::WebSocketClient,
-// };
+use crate::{
+    DataServer, Error, Result,
+    chart::ChartOptions,
+    historical::{HistoricalRequest, HistoricalResult, state::HistoricalState},
+    live::handler::Handler,
+    live::websocket::WebSocketClient,
+};
 
-// pub struct HistoricalDataClient {
-//     series_count: Arc<AtomicUsize>,
-//     study_count: Arc<AtomicUsize>,
-//     session_count: Arc<AtomicUsize>,
+pub struct HistoricalClient<H: Handler> {
+    auth_token: String,
+    server: DataServer,
+    _phantom: std::marker::PhantomData<H>,
+}
 
-//     ws: Option<WebSocketClient>,
+impl<H: Handler> HistoricalClient<H> {
+    pub fn new(auth_token: impl Into<String>, server: DataServer) -> Self {
+        Self {
+            auth_token: auth_token.into(),
+            server,
+            _phantom: std::marker::PhantomData,
+        }
+    }
 
-//     study_map: Arc<DashMap<Ustr, Ustr>>,
-//     series_map: Arc<DashMap<Ustr, Ustr>>,
-//     event_handlers: Arc<EventHandler>,
+    #[instrument(skip(self), fields(symbol, exchange))]
+    pub async fn retrieve(&self, request: HistoricalRequest) -> Result<HistoricalResult> {
+        let started = Instant::now();
+        let (symbol, exchange) = request.resolve_symbol_exchange()?;
+        debug!(symbol = %symbol, exchange = %exchange, "Historical retrieval started");
 
-//     command_tx: Option<UnboundedSender<Command>>,
+        let options = ChartOptions::builder()
+            .symbol(&symbol)
+            .exchange(&exchange)
+            .interval(request.interval)
+            .maybe_range(request.range)
+            .maybe_bar_count(request.num_bars)
+            .replay_mode(false)
+            .build()?;
 
-//     symbol_deque: Arc<VecDeque<Ustr>>,
-// }
+        let mut state = if let Some(n) = request.num_bars {
+            HistoricalState::with_capacity(n as usize)
+        } else {
+            HistoricalState::new()
+        };
 
-// impl HistoricalDataClient {
-//     pub fn new(auth_token: Option<&str>) -> Arc<Self> {
-//         let series_count = Arc::new(AtomicUsize::new(0));
-//         let study_count = Arc::new(AtomicUsize::new(0));
-//         let session_count = Arc::new(AtomicUsize::new(0));
+        self.run_session(&options, &mut state, request.timeout)
+            .await?;
 
-//         let ws = WebSocketClient::builder().maybe_auth_token(auth_token);
-//         // let study_map = Arc::new(DashMap::new());
-//         // let series_map = Arc::new(DashMap::new());
+        let total_bars = state.total_bars;
+        let data = state.finalize();
+        let elapsed = started.elapsed();
+        let symbol_info = state
+            .symbol_info
+            .take()
+            .ok_or_else(|| Error::Internal("No symbol info received".into()))?;
 
-//         todo!()
-//     }
+        Ok(HistoricalResult {
+            symbol_info,
+            data,
+            series_info: state.series_info.take(),
+            total_bars_received: total_bars,
+            replay_used: request.with_replay,
+            elapsed,
+        })
+    }
 
-//     pub async fn set_instrument(&self) {}
+    async fn run_session(
+        &self,
+        _options: &ChartOptions,
+        state: &mut HistoricalState,
+        timeout_dur: std::time::Duration,
+    ) -> Result<()> {
+        let ws = WebSocketClient::<H>::builder()
+            .auth_token(&self.auth_token)
+            .server(self.server)
+            .handler(self.create_handler())
+            .build()
+            .await?;
 
-//     pub async fn set_replay(&self) {
-//         let replay_series_id = gen_id();
-//     }
-//     pub async fn set_study() {}
-// }
+        // spawn_reader_task takes self: Arc<Self>, so we clone the Arc.
+        Arc::clone(&ws).spawn_reader_task();
 
-// // #[tracing::instrument(skip(self), level = "debug")]
-// // #[builder]
-// // pub async fn set_replay(
-// //     &self,
-// //     symbol: &str,
-// //     options: ChartOptions,
-// //     chart_session: &str,
-// //     symbol_series_id: &str,
-// // ) -> Result<()> {
-// //     let replay_series_id = gen_id();
-// //     let replay_session = gen_session_id("rs");
+        tokio::time::timeout(timeout_dur, self.wait_for_data(&ws, state))
+            .await
+            .map_err(|_| Error::Timeout("Historical data retrieval timed out".into()))?
+    }
 
-// //     self.create_replay_session(&replay_session).await?;
-// //     self.add_replay_series()
-// //         .chart_session(&replay_session)
-// //         .series_id(&replay_series_id)
-// //         .instrument(symbol)
-// //         .interval(options.interval)
-// //         .maybe_adjustment(options.adjustment)
-// //         .maybe_currency(options.currency)
-// //         .maybe_session_type(options.session_type)
-// //         .call()
-// //         .await?;
+    fn create_handler(&self) -> H {
+        unimplemented!("HistoricalClient requires a concrete Handler type parameter H")
+    }
 
-// //     self.replay_reset(&replay_session, &replay_series_id, options.replay_from)
-// //         .await?;
-
-// //     self.resolve_symbol()
-// //         .symbol(options.symbol.as_str())
-// //         .session(chart_session)
-// //         .symbol_series_id(symbol_series_id)
-// //         .maybe_adjustment(options.adjustment)
-// //         .maybe_currency(options.currency)
-// //         .replay_session(&replay_session)
-// //         .call()
-// //         .await?;
-
-// //     Ok(())
-// // }
-
-// // pub async fn set_study(
-// //     &self,
-// //     study: StudyOptions,
-// //     chart_session: &str,
-// //     series_id: &str,
-// // ) -> Result<()> {
-// //     let study_count = self.studies_count.fetch_add(1, Ordering::SeqCst) + 1;
-
-// //     let study_id = Ustr::from(&format!("st{study_count}"));
-
-// //     let indicator = PineIndicator::build()
-// //         .fetch(&study.script_id, &study.script_version, study.script_type)
-// //         .await?;
-
-// //     self.data_handler
-// //         .metadata
-// //         .studies
-// //         .insert(indicator.metadata.data.id, study_id);
-
-// //     // self.create_study(chart_session, &study_id, series_id, indicator)
-// //     //     .await?;
-// //     Ok(())
-// // }
-
-// // pub async fn set_market(&self, options: ChartOptions) -> Result<()> {
-// //     let series_count = self.series_count.fetch_add(1, Ordering::SeqCst) + 1;
-// //     let symbol_series_id = format!("sds_sym_{series_count}");
-// //     let series_identifier = Ustr::from(&format!("sds_{series_count}"));
-// //     let series_id = format!("s{series_count}");
-// //     let chart_session = Ustr::from(&gen_session_id("cs"));
-// //     let symbol = format!("{}:{}", options.exchange, options.symbol);
-// //     self.create_chart_session(&chart_session).await?;
-
-// //     if options.replay_mode {
-// //         self.set_replay()
-// //             .symbol(&symbol)
-// //             .options(options)
-// //             .chart_session(&chart_session)
-// //             .symbol_series_id(&symbol_series_id)
-// //             .call()
-// //             .await?;
-// //     } else {
-// //         self.resolve_symbol()
-// //             .session(&chart_session)
-// //             .symbol_series_id(&symbol_series_id)
-// //             .symbol(&symbol)
-// //             .maybe_adjustment(options.adjustment)
-// //             .maybe_currency(options.currency)
-// //             .maybe_session_type(options.session_type)
-// //             .call()
-// //             .await?;
-// //     }
-
-// //     self.create_series()
-// //         .chart_session(&chart_session)
-// //         .series_identifier(&series_identifier)
-// //         .series_id(&series_id)
-// //         .symbol_series_id(&symbol_series_id)
-// //         .interval(options.interval)
-// //         .bar_count(options.bar_count)
-// //         .maybe_range(options.range)
-// //         .call()
-// //         .await?;
-
-// //     if let Some(study) = options.study_config {
-// //         self.set_study(study, &chart_session, &series_identifier)
-// //             .await?;
-// //     }
-
-// //     let series_info = SeriesInfo {
-// //         chart_session,
-// //         options,
-// //     };
-
-// //     self.data_handler
-// //         .metadata
-// //         .series
-// //         .insert(series_identifier, series_info);
-
-// //     Ok(())
-// // }
+    async fn wait_for_data(
+        &self,
+        _ws: &WebSocketClient<H>,
+        _state: &mut HistoricalState,
+    ) -> Result<()> {
+        Ok(())
+    }
+}
