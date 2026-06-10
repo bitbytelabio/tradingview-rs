@@ -10,21 +10,27 @@
 
 This is a data source library for algorithmic trading written in Rust inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API). It provides programmatic access to TradingView's data and features through a robust, async-first API.
 
+The library exposes **two usage tiers**:
+- **High-level** — An event-driven [`DataLoader`](https://docs.rs/tradingview-rs/latest/tradingview/loader/struct.DataLoader.html) that connects a source to multiple sinks with backpressure and graceful shutdown.
+- **Low-level** — Direct access to HTTP clients, WebSocket sessions, and raw message parsing for full control.
+
 ⚠️ **Alpha Stage**: This library is currently in **alpha** stage and not ready for production use. Breaking changes may occur between versions.
 
 ## Features
 
-- [x] **Async Support** - Built with Tokio for high-performance async operations
-- [x] **Multi-Threading** - Handle large amounts of data efficiently
-- [x] **Session Management** - Shared sessions between threads to respect TradingView's rate limits
-- [x] **TradingView Premium Features** - Access premium data and indicators
-- [x] **Real-time Data** - WebSocket-based live market data
-- [x] **Historical Data** - Fetch OHLCV data with batch operations
-- [x] **Custom Indicators** - Work with Pine Script indicators
-- [x] **Chart Drawings** - Retrieve your chart drawings and annotations
-- [x] **Replay Mode** - Historical market replay functionality
-- [x] **Symbol Search** - Search and filter symbols by market, country, and type
-- [x] **News Integration** - Access TradingView news and headlines
+- [x] **Async Support** — Built with Tokio for high-performance async operations
+- [x] **Event-Driven Pipeline** — `DataSource` → fan-out → `EventSink` architecture with bounded channels, cancellation tokens, and error recovery
+- [x] **Multiple Sinks** — Built-in channel, callback, and Kafka (RedPanda) sinks; implement your own via the `EventSink` trait
+- [x] **Real-time Data** — WebSocket-based live market data with automatic reconnection and circuit breaker
+- [x] **Historical Data** — Fetch OHLCV data for single symbols and concurrent batch operations
+- [x] **Session Management** — Shared sessions between threads to respect TradingView's rate limits
+- [x] **Custom Indicators** — Work with Pine Script indicators via study configurations
+- [x] **Chart Drawings** — Retrieve your chart drawings and annotations
+- [x] **Replay Mode** — Historical market replay functionality
+- [x] **Symbol Search** — Search and filter symbols by market, country, and type
+- [x] **News Integration** — Access TradingView news and headlines
+- [x] **User Authentication** — Login with username/password + TOTP 2FA support
+- [x] **Premium Features** — Access TradingView Pro/Premium/Expert data tiers
 - [ ] Fundamental data
 - [ ] Technical analysis signals
 - [ ] Invite-only indicators support
@@ -39,7 +45,26 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
+# From crates.io (recommended):
+tradingview-rs = "0.1"
+
+# Or from the Git repository:
 tradingview-rs = { git = "https://github.com/bitbytelabio/tradingview-rs.git", branch = "main" }
+```
+
+### Feature Flags
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `rustls-tls` | ✅ | TLS via rustls (recommended) |
+| `native-tls` | — | TLS via platform-native libraries |
+| `user` | ✅ | User authentication (login, 2FA, session cookies) |
+
+Example with optional features:
+
+```toml
+[dependencies]
+tradingview-rs = { version = "0.1", default-features = false, features = ["native-tls", "user"] }
 ```
 
 ## Quick Start
@@ -249,30 +274,32 @@ async fn main() -> anyhow::Result<()> {
 
 ## Examples
 
-The [`examples/`](examples/) directory contains comprehensive examples:
+The [`examples/`](examples/) directory contains runnable examples for every major feature:
 
-- [`historical_data.rs`](examples/historical_data.rs) - Fetch historical OHLCV data for a single symbol
-- [`historical_data_batch.rs`](examples/historical_data_batch.rs) - Batch historical data operations
-- [`historical_data_with_replay.rs`](examples/historical_data_with_replay.rs) - Historical data with replay mode
-- [`live.rs`](examples/live.rs) - Real-time market data via WebSocket
-- [`user.rs`](examples/user.rs) - User authentication and session management
-- [`indicator.rs`](examples/indicator.rs) - Working with Pine Script indicators
-- [`search.rs`](examples/search.rs) - Symbol search and filtering
-- [`misc.rs`](examples/misc.rs) - Miscellaneous utility functions
+| Example | Description |
+|---------|-------------|
+| [`historical_data_fetch.rs`](examples/historical_data_fetch.rs) | Fetch historical OHLCV for a single symbol |
+| [`batch_historical_fetch.rs`](examples/batch_historical_fetch.rs) | Concurrent batch historical data |
+| [`live_quote.rs`](examples/live_quote.rs) | Real-time quote streaming via WebSocket |
+| [`channel_consumer.rs`](examples/channel_consumer.rs) | Event-driven loader with a channel sink |
+| [`callback_consumer.rs`](examples/callback_consumer.rs) | Event-driven loader with an inline callback sink |
+| [`user.rs`](examples/user.rs) | User authentication and session management |
+| [`search.rs`](examples/search.rs) | Symbol search and filtering |
+| [`misc.rs`](examples/misc.rs) | Miscellaneous utility functions |
 
 Run an example:
 
 ```bash
-cargo run --example historical_data
-cargo run --example live
-cargo run --example search
+cargo run --example historical_data_fetch
+cargo run --example live_quote
+cargo run --example channel_consumer
 ```
 
 ## Prerequisites
 
-- **Rust 1.70+** - This library uses modern Rust features
-- **TradingView Account** - Required for authenticated features
-- **Network Access** - Connects to TradingView's servers
+- **Rust 1.85+** (edition 2024) — This library uses modern Rust features
+- **TradingView Account** — Required for authenticated features (free tier works for most)
+- **Network Access** — Connects to TradingView's servers
 
 ### Environment Variables
 
@@ -285,26 +312,62 @@ TV_TOTP_SECRET=your_2fa_secret  # Optional, for 2FA
 TV_AUTH_TOKEN=your_auth_token   # Get from user authentication
 ```
 
-### Feature Flags
+## Architecture
 
-Some examples require specific features to be enabled:
-
-```toml
-[dependencies]
-tradingview-rs = { git = "https://github.com/bitbytelabio/tradingview-rs.git", branch = "main", features = ["user"] }
+```text
+┌──────────────────────────────────────────────────┐
+│                   tradingview-rs                   │
+├──────────────────────────────────────────────────┤
+│  High-Level API (event-driven)                    │
+│  ┌──────────┐    ┌───────────┐    ┌────────────┐ │
+│  │  Source   │───▶│ DataLoader │───▶│ EventSink  │ │
+│  │ (TV feed) │    │  (fan-out) │    │ (channel,  │ │
+│  │           │    │            │    │  callback, │ │
+│  │           │    │            │    │  kafka)    │ │
+│  └──────────┘    └───────────┘    └────────────┘ │
+├──────────────────────────────────────────────────┤
+│  Low-Level API (direct access)                    │
+│  ┌──────────────┐ ┌──────────────┐ ┌───────────┐ │
+│  │  historical  │ │    live      │ │   client   │ │
+│  │ (WebSocket)  │ │ (WebSocket)  │ │  (REST)    │ │
+│  └──────────────┘ └──────────────┘ └───────────┘ │
+├──────────────────────────────────────────────────┤
+│  Shared: models, chart, quote, error, utils       │
+└──────────────────────────────────────────────────┘
 ```
+
+| Module | Purpose |
+|--------|---------|
+| [`historical`](https://docs.rs/tradingview-rs/latest/tradingview/historical/) | Single + batch OHLCV retrieval via WebSocket |
+| [`live`](https://docs.rs/tradingview-rs/latest/tradingview/live/) | Real-time WebSocket streaming (quotes, charts, studies) |
+| [`client`](https://docs.rs/tradingview-rs/latest/tradingview/client/) | REST HTTP client (search, news, financial calendar) |
+| [`loader`](https://docs.rs/tradingview-rs/latest/tradingview/loader/) | Event-driven orchestrator (source → fan-out → sinks) |
+| [`source`](https://docs.rs/tradingview-rs/latest/tradingview/source/) | `DataSource` trait + TradingView WebSocket adapter |
+| [`sink`](https://docs.rs/tradingview-rs/latest/tradingview/sink/) | `EventSink` trait + channel, callback, Kafka sinks |
+| [`events`](https://docs.rs/tradingview-rs/latest/tradingview/events/) | Normalized `MarketEvent` types (Candle, Quote, News, etc.) |
+| [`chart`](https://docs.rs/tradingview-rs/latest/tradingview/chart/) | Chart session config + Pine Script studies |
+| [`quote`](https://docs.rs/tradingview-rs/latest/tradingview/quote/) | Real-time quote data model + field definitions |
 
 ## Use Cases
 
-- **[VNQuant Datafeed](https://github.com/bitbytelabio/vnquant-datafeed)** - Event-driven data engine with RedPanda (Kafka)
-- **Algorithmic Trading Bots** - Real-time market data for trading strategies
-- **Market Research** - Historical data analysis and backtesting
-- **Portfolio Management** - Track and analyze investment performance
-- **Technical Analysis** - Custom indicators and studies
+- **[VNQuant Datafeed](https://github.com/bitbytelabio/vnquant-datafeed)** — Event-driven data engine with RedPanda (Kafka)
+- **Algorithmic Trading Bots** — Real-time market data for trading strategies
+- **Market Research** — Historical data analysis and backtesting
+- **Portfolio Management** — Track and analyze investment performance
+- **Technical Analysis** — Custom indicators and studies
 
 ## Documentation
 
-Since this library is in **alpha stage**, documentation is actively being developed. The best way to learn is through the examples in the [`examples/`](examples/) directory.
+Full API documentation is published on [docs.rs](https://docs.rs/tradingview-rs). All public types, traits, and modules are documented with examples.
+
+Quick links to key types:
+- [`DataLoader`](https://docs.rs/tradingview-rs/latest/tradingview/loader/struct.DataLoader.html) — event-driven orchestrator
+- [`HistoricalClient`](https://docs.rs/tradingview-rs/latest/tradingview/historical/client/struct.HistoricalClient.html) — historical data
+- [`WebSocketClient`](https://docs.rs/tradingview-rs/latest/tradingview/websocket/struct.WebSocketClient.html) — real-time streaming
+- [`Symbol`](https://docs.rs/tradingview-rs/latest/tradingview/models/struct.Symbol.html) — instrument representation
+- [`Interval`](https://docs.rs/tradingview-rs/latest/tradingview/models/enum.Interval.html) — time granularity
+
+For the project roadmap, see [ROADMAP.md](ROADMAP.md).
 
 ## Before Opening an Issue
 
@@ -316,11 +379,16 @@ Since this library is in **alpha stage**, documentation is actively being develo
 
 ## Known Issues & Limitations
 
-- **Rate Limiting** - TradingView enforces rate limits; respect them to avoid bans
-- **Session Expiry** - User sessions expire and need renewal
-- **Alpha Quality** - Breaking changes may occur between versions
-- **Premium Features** - Some features require TradingView Pro/Premium subscription
-- **Indicator Data Loading** - Some study data series loading needs fixes (see TODO in indicator example)
+- **Rate Limiting** — TradingView enforces rate limits; respect them to avoid bans
+- **Session Expiry** — User sessions expire periodically and need renewal
+- **Alpha Quality** — Breaking changes may occur between minor versions
+- **Premium Features** — Some features require TradingView Pro/Premium/Expert subscription
+- **Study Series Loading** — Some Pine Script study data series need fixes (see `TODO` in indicator code)
+- **Parse Round-Trip** — `SocketMessage` deserialization has known round-trip mismatches with the serde `untagged` enum (7 tests currently skipped)
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features, milestones, and version timeline.
 
 ## Contributing
 

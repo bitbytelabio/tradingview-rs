@@ -22,7 +22,7 @@
 //! [`MarketType`]: MarketType
 //! [`ChartOptions`]: crate::chart::ChartOptions
 //! [`UserCookies`]: UserCookies
-//! [`OHLCV`]: crate::quote::models::OHLCV
+//! [`OHLCV`]: crate::chart::OHLCV
 
 pub use self::MarketType::*;
 pub use self::news::*;
@@ -484,7 +484,7 @@ impl Display for Timezone {
 /// - `From<&str>` parses common string representations (`"1h"`, `"1D"`, `"1W"`, etc.).
 /// - `From<u8>` maps TradingView's numeric interval codes.
 /// - `From<Interval> for chrono::Duration` provides an approximate duration.
-/// - [`Display`](std::fmt::Display) outputs the TradingView wire format.
+/// - [`Display`] outputs the TradingView wire format.
 ///
 /// # Navigation
 ///
@@ -909,7 +909,7 @@ impl Display for SymbolType {
 /// Market category for filtering symbol search results.
 ///
 /// The `Stocks`, `Crypto`, and `Funds` variants each carry a sub-type for
-/// finer-grained filtering. Default is [`All`](MarketType::All).
+/// finer-grained filtering. Default is [`All`].
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, Hash)]
 pub enum MarketType {
     /// All markets (no filter).
