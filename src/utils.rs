@@ -73,7 +73,7 @@ pub fn gen_session_id(session_type: &str) -> String {
     session_type.to_owned() + "_" + &gen_id()
 }
 
-#[inline(always)]
+#[inline]
 pub fn gen_id() -> Ustr {
     let rng = rand::rng();
     let result: String = rng
@@ -84,7 +84,6 @@ pub fn gen_id() -> Ustr {
     Ustr::from(&result)
 }
 
-#[inline(always)]
 pub fn parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {
     if message.is_empty() {
         return vec![];
@@ -110,7 +109,6 @@ pub fn parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {
     packets
 }
 
-#[inline(always)]
 pub fn format_packet<T: Serialize>(packet: T) -> Result<Message> {
     let json_string = serde_json::to_string(&packet)?;
     let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
