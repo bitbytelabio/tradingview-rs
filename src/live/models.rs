@@ -68,7 +68,7 @@ impl From<String> for TradingViewDataEvent {
             "replay_resolutions" => TradingViewDataEvent::OnReplayResolutions,
             "replay_data_end" => TradingViewDataEvent::OnReplayDataEnd,
 
-            "study_loading" => TradingViewDataEvent::OnSeriesLoading,
+            "study_loading" => TradingViewDataEvent::OnStudyLoading,
             "study_completed" => TradingViewDataEvent::OnStudyCompleted,
 
             "symbol_error" => TradingViewDataEvent::OnError(TradingViewError::SymbolError),
@@ -204,4 +204,63 @@ pub trait Socket {
     ) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_error(&self, error: Error, context: Ustr) -> impl Future<Output = Result<()>> + Send;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_study_loading_maps_to_on_study_loading() {
+        let event = TradingViewDataEvent::from("study_loading".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnStudyLoading);
+    }
+
+    #[test]
+    fn test_series_loading_is_not_study_loading() {
+        let event = TradingViewDataEvent::from("series_loading".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnSeriesLoading);
+    }
+
+    #[test]
+    fn test_study_completed_maps_correctly() {
+        let event = TradingViewDataEvent::from("study_completed".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnStudyCompleted);
+    }
+
+    #[test]
+    fn test_series_completed_maps_correctly() {
+        let event = TradingViewDataEvent::from("series_completed".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnSeriesCompleted);
+    }
+
+    #[test]
+    fn test_all_study_and_series_events_are_distinct() {
+        let loading = TradingViewDataEvent::from("study_loading".to_string());
+        let completed = TradingViewDataEvent::from("study_completed".to_string());
+        let series_loading = TradingViewDataEvent::from("series_loading".to_string());
+        let series_completed = TradingViewDataEvent::from("series_completed".to_string());
+
+        // All four should be distinct
+        assert_ne!(loading, series_loading);
+        assert_ne!(completed, series_completed);
+        assert_ne!(loading, completed);
+        assert_ne!(series_loading, series_completed);
+
+        // Verify mapping expectations
+        assert_eq!(loading, TradingViewDataEvent::OnStudyLoading);
+        assert_eq!(completed, TradingViewDataEvent::OnStudyCompleted);
+        assert_eq!(series_loading, TradingViewDataEvent::OnSeriesLoading);
+        assert_eq!(series_completed, TradingViewDataEvent::OnSeriesCompleted);
+    }
+
+    #[test]
+    fn test_ustr_from_maps_correctly() {
+        let event: TradingViewDataEvent = ustr::ustr("study_loading").into();
+        assert_eq!(event, TradingViewDataEvent::OnStudyLoading);
+    }
 }

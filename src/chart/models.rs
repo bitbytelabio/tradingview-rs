@@ -66,7 +66,7 @@ impl PriceIterable for ChartHistoricalData {
     type Item = DataPoint;
 
     fn to_vec(&self) -> impl Iterator<Item = &Self::Item> + '_ {
-        self.data.to_vec()
+        self.data.iter()
     }
 }
 
@@ -439,4 +439,290 @@ pub struct Subsession {
     pub session: Ustr,
     #[serde(rename(deserialize = "session-display"))]
     pub session_display: Ustr,
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: build a valid OHLCV `DataPoint` from raw values.
+    /// Layout: [timestamp, open, high, low, close, volume]
+    fn dp(ts: i64, o: f64, h: f64, l: f64, c: f64, v: f64) -> DataPoint {
+        DataPoint {
+            index: 0,
+            value: vec![ts as f64, o, h, l, c, v],
+        }
+    }
+
+    /// Build a vector of `N` consecutive daily candles starting at `base_ts`.
+    fn make_candles(n: usize) -> Vec<DataPoint> {
+        let base_ts = 1_700_000_000i64; // Nov 2023
+        (0..n)
+            .map(|i| {
+                let ts = base_ts + i as i64 * 86_400;
+                let o = 100.0 + i as f64;
+                let c = 101.0 + i as f64;
+                dp(ts, o, o + 1.0, o - 1.0, c, 1000.0 + i as f64)
+            })
+            .collect()
+    }
+
+    /// Helper: build a `ChartHistoricalData` with the given candles.
+    /// Constructs a valid `ChartOptions` to satisfy the `SeriesInfo` invariant.
+    fn make_chart(data: Vec<DataPoint>) -> ChartHistoricalData {
+        let options = crate::chart::ChartOptions::builder()
+            .instrument("NASDAQ:AAPL")
+            .build()
+            .expect("valid ChartOptions for testing");
+        ChartHistoricalData {
+            symbol_info: SymbolInfo::default(),
+            series_info: SeriesInfo {
+                chart_session: Ustr::default(),
+                options,
+            },
+            data,
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Vec<DataPoint> — PriceIterable
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_vec_to_vec_returns_references() {
+        let candles = make_candles(5);
+        let collected: Vec<&DataPoint> = candles.to_vec().collect();
+        assert_eq!(collected.len(), 5);
+        // The original Vec is still usable — we only borrowed.
+        assert_eq!(candles.len(), 5);
+    }
+
+    #[test]
+    fn test_vec_closes() {
+        let candles = make_candles(3);
+        let closes: Vec<f64> = candles.closes().collect();
+        assert_eq!(closes, vec![101.0, 102.0, 103.0]);
+    }
+
+    #[test]
+    fn test_vec_opens() {
+        let candles = make_candles(3);
+        let opens: Vec<f64> = candles.opens().collect();
+        assert_eq!(opens, vec![100.0, 101.0, 102.0]);
+    }
+
+    #[test]
+    fn test_vec_highs() {
+        let candles = make_candles(3);
+        let highs: Vec<f64> = candles.highs().collect();
+        assert_eq!(highs, vec![101.0, 102.0, 103.0]);
+    }
+
+    #[test]
+    fn test_vec_lows() {
+        let candles = make_candles(3);
+        let lows: Vec<f64> = candles.lows().collect();
+        assert_eq!(lows, vec![99.0, 100.0, 101.0]);
+    }
+
+    #[test]
+    fn test_vec_volumes() {
+        let candles = make_candles(3);
+        let volumes: Vec<f64> = candles.volumes().collect();
+        assert_eq!(volumes, vec![1000.0, 1001.0, 1002.0]);
+    }
+
+    #[test]
+    fn test_vec_timestamps() {
+        let candles = make_candles(3);
+        let base = 1_700_000_000i64;
+        let timestamps: Vec<i64> = candles.timestamps().collect();
+        assert_eq!(timestamps, vec![base, base + 86_400, base + 2 * 86_400]);
+    }
+
+    #[test]
+    fn test_vec_datetimes() {
+        let candles = make_candles(2);
+        let base = 1_700_000_000i64;
+        let datetimes: Vec<DateTime<Utc>> = candles.datetimes().collect();
+        assert_eq!(datetimes.len(), 2);
+        // First candle timestamp
+        let expected = DateTime::<Utc>::from_timestamp(base, 0).unwrap();
+        assert_eq!(datetimes[0], expected);
+    }
+
+    // ------------------------------------------------------------------
+    // ChartHistoricalData — PriceIterable
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_chart_historical_to_vec_returns_references() {
+        let candles = make_candles(5);
+        let chart = make_chart(candles.clone());
+        let collected: Vec<&DataPoint> = chart.to_vec().collect();
+        assert_eq!(collected.len(), 5);
+        // Original chart still usable — to_vec() borrows.
+        assert_eq!(chart.data.len(), 5);
+    }
+
+    #[test]
+    fn test_chart_historical_closes() {
+        let candles = make_candles(3);
+        let chart = make_chart(candles);
+        let closes: Vec<f64> = chart.closes().collect();
+        assert_eq!(closes, vec![101.0, 102.0, 103.0]);
+    }
+
+    #[test]
+    fn test_chart_historical_opens() {
+        let candles = make_candles(3);
+        let chart = make_chart(candles);
+        let opens: Vec<f64> = chart.opens().collect();
+        assert_eq!(opens, vec![100.0, 101.0, 102.0]);
+    }
+
+    #[test]
+    fn test_chart_historical_highs() {
+        let candles = make_candles(3);
+        let chart = make_chart(candles);
+        let highs: Vec<f64> = chart.highs().collect();
+        assert_eq!(highs, vec![101.0, 102.0, 103.0]);
+    }
+
+    #[test]
+    fn test_chart_historical_lows() {
+        let candles = make_candles(3);
+        let chart = make_chart(candles);
+        let lows: Vec<f64> = chart.lows().collect();
+        assert_eq!(lows, vec![99.0, 100.0, 101.0]);
+    }
+
+    #[test]
+    fn test_chart_historical_volumes() {
+        let candles = make_candles(3);
+        let chart = make_chart(candles);
+        let volumes: Vec<f64> = chart.volumes().collect();
+        assert_eq!(volumes, vec![1000.0, 1001.0, 1002.0]);
+    }
+
+    #[test]
+    fn test_chart_historical_timestamps() {
+        let candles = make_candles(3);
+        let chart = make_chart(candles);
+        let base = 1_700_000_000i64;
+        let timestamps: Vec<i64> = chart.timestamps().collect();
+        assert_eq!(timestamps, vec![base, base + 86_400, base + 2 * 86_400]);
+    }
+
+    #[test]
+    fn test_empty_vec_no_panic() {
+        let empty: Vec<DataPoint> = vec![];
+        // All iterator methods should work on empty data.
+        assert_eq!(empty.to_vec().count(), 0);
+        assert_eq!(empty.closes().count(), 0);
+        assert_eq!(empty.opens().count(), 0);
+        assert_eq!(empty.highs().count(), 0);
+        assert_eq!(empty.lows().count(), 0);
+        assert_eq!(empty.volumes().count(), 0);
+        assert_eq!(empty.timestamps().count(), 0);
+        assert_eq!(empty.datetimes().count(), 0);
+    }
+
+    #[test]
+    fn test_empty_chart_no_panic() {
+        let chart = make_chart(vec![]);
+        assert_eq!(chart.to_vec().count(), 0);
+        assert_eq!(chart.closes().count(), 0);
+        assert_eq!(chart.opens().count(), 0);
+        assert_eq!(chart.highs().count(), 0);
+        assert_eq!(chart.lows().count(), 0);
+        assert_eq!(chart.volumes().count(), 0);
+        assert_eq!(chart.timestamps().count(), 0);
+        assert_eq!(chart.datetimes().count(), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // Consistency: both impls must produce the same output for the same data
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_vec_and_chart_produce_same_closes() {
+        let candles = make_candles(50);
+        let chart = make_chart(candles.clone());
+        let from_vec: Vec<f64> = candles.closes().collect();
+        let from_chart: Vec<f64> = chart.closes().collect();
+        assert_eq!(from_vec, from_chart);
+    }
+
+    #[test]
+    fn test_vec_and_chart_produce_same_opens() {
+        let candles = make_candles(50);
+        let chart = make_chart(candles.clone());
+        let from_vec: Vec<f64> = candles.opens().collect();
+        let from_chart: Vec<f64> = chart.opens().collect();
+        assert_eq!(from_vec, from_chart);
+    }
+
+    #[test]
+    fn test_vec_and_chart_produce_same_timestamps() {
+        let candles = make_candles(50);
+        let chart = make_chart(candles.clone());
+        let from_vec: Vec<i64> = candles.timestamps().collect();
+        let from_chart: Vec<i64> = chart.timestamps().collect();
+        assert_eq!(from_vec, from_chart);
+    }
+
+    // ------------------------------------------------------------------
+    // OHLCV trait methods
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_ohlcv_validate_rejects_invalid_high_low() {
+        // high < low
+        let bad = dp(1_700_000_000, 100.0, 99.0, 100.0, 100.5, 1000.0);
+        assert!(!bad.validate());
+    }
+
+    #[test]
+    fn test_ohlcv_validate_rejects_close_above_high() {
+        let bad = dp(1_700_000_000, 100.0, 105.0, 99.0, 106.0, 1000.0);
+        assert!(!bad.validate());
+    }
+
+    #[test]
+    fn test_ohlcv_validate_rejects_close_below_low() {
+        let bad = dp(1_700_000_000, 100.0, 105.0, 99.0, 98.0, 1000.0);
+        assert!(!bad.validate());
+    }
+
+    #[test]
+    fn test_ohlcv_validate_accepts_valid_candle() {
+        let good = dp(1_700_000_000, 100.0, 105.0, 99.0, 102.0, 1000.0);
+        assert!(good.validate());
+    }
+
+    #[test]
+    fn test_ohlcv_tr() {
+        let prev = dp(1_700_000_000, 100.0, 105.0, 99.0, 102.0, 1000.0);
+        let curr = dp(1_700_086_400, 101.0, 108.0, 100.0, 104.0, 1100.0);
+        // TR = max(high, prev_close) - min(low, prev_close)
+        // = max(108, 102) - min(100, 102) = 108 - 100 = 8
+        let tr = curr.tr(&prev);
+        assert!((tr - 8.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_ohlcv_is_rising() {
+        let rising = dp(1_700_000_000, 100.0, 105.0, 99.0, 102.0, 1000.0);
+        assert!(rising.is_rising());
+    }
+
+    #[test]
+    fn test_ohlcv_is_falling() {
+        let falling = dp(1_700_000_000, 102.0, 105.0, 99.0, 100.0, 1000.0);
+        assert!(falling.is_falling());
+    }
 }
