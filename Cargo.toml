@@ -33,7 +33,6 @@ futures-util = {
 }
 google-authenticator = { version = "0.4", optional = true }
 iso_currency = { version = "0.5", features = ["with-serde"] }
-lazy_static = "1"
 rand = "0.9"
 regex = "1"
 reqwest = {

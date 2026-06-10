@@ -18,15 +18,14 @@ use crate::{
     error::{Error, TradingViewError},
     utils::format_packet,
 };
+use std::sync::LazyLock;
 
-lazy_static::lazy_static! {
-    pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
-        let mut headers = HeaderMap::new();
-        headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
-        headers.insert("User-Agent", UA.parse().unwrap());
-        headers
-    };
-}
+pub static WEBSOCKET_HEADERS: LazyLock<HeaderMap<HeaderValue>> = LazyLock::new(|| {
+    let mut headers = HeaderMap::new();
+    headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
+    headers.insert("User-Agent", UA.parse().unwrap());
+    headers
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum TradingViewDataEvent {

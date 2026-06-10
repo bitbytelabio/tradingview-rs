@@ -297,9 +297,7 @@ impl<T: Handler> WebSocketClient<T> {
         let buffer_size = buffer_size.unwrap_or(1024 * 1024);
 
         let mut request = url.into_client_request()?;
-        request
-            .headers_mut()
-            .extend(WEBSOCKET_HEADERS.clone().into_iter());
+        request.headers_mut().extend((*WEBSOCKET_HEADERS).clone());
 
         // Configure WebSocket with larger message size limits
         let conf = WebSocketConfig::default()
@@ -740,7 +738,7 @@ impl<T: Handler> WebSocketClient<T> {
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn set_fields(&self, quote_session: &str) -> Result<()> {
         let mut quote_fields = payload![quote_session];
-        quote_fields.extend(ALL_QUOTE_FIELDS.clone().into_iter().map(Value::from));
+        quote_fields.extend(ALL_QUOTE_FIELDS.iter().copied().map(|s| Value::from(s)));
         self.send("quote_set_fields", &quote_fields).await?;
         Ok(())
     }

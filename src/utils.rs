@@ -17,16 +17,17 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     io::{Cursor, prelude::*},
+    sync::LazyLock,
 };
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error};
 use ustr::Ustr;
 use zip::ZipArchive;
 
-lazy_static::lazy_static! {
-    static ref CLEANER_REGEX: Regex = Regex::new(r"~h~").expect("Failed to compile regex");
-    static ref SPLITTER_REGEX: Regex = Regex::new(r"~m~\d+~m~").expect("Failed to compile regex");
-}
+static CLEANER_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"~h~").expect("Failed to compile regex"));
+static SPLITTER_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"~m~\d+~m~").expect("Failed to compile regex"));
 
 #[macro_export]
 macro_rules! payload {
