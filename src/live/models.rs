@@ -5,25 +5,32 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::MutexGuard};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream,
     tungstenite::{
         http::{HeaderMap, HeaderValue},
         protocol::Message,
     },
+    MaybeTlsStream, WebSocketStream,
 };
 use ustr::Ustr;
 
-use crate::{Result, UA, error::Error, error::TradingViewError, utils::format_packet};
+use crate::{
+    error::{Error, TradingViewError},
+    utils::format_packet,
+    Result, UA,
+};
+use std::sync::LazyLock;
 
-lazy_static::lazy_static! {
-    pub static ref WEBSOCKET_HEADERS: HeaderMap<HeaderValue> = {
-        let mut headers = HeaderMap::new();
-        headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
-        headers.insert("User-Agent", UA.parse().unwrap());
-        headers
-    };
-}
+pub static WEBSOCKET_HEADERS: LazyLock<HeaderMap<HeaderValue>> = LazyLock::new(|| {
+    let mut headers = HeaderMap::new();
+    headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
+    headers.insert("User-Agent", UA.parse().unwrap());
+    headers
+});
 
+/// WebSocket event types dispatched by TradingView's data server.
+///
+/// Maps TradingView's wire protocol event names (`"timescale_update"`,
+/// `"du"`, `"qsd"`, etc.) to Rust enum variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum TradingViewDataEvent {
     OnChartData,
@@ -64,7 +71,7 @@ impl From<String> for TradingViewDataEvent {
             "replay_resolutions" => TradingViewDataEvent::OnReplayResolutions,
             "replay_data_end" => TradingViewDataEvent::OnReplayDataEnd,
 
-            "study_loading" => TradingViewDataEvent::OnSeriesLoading,
+            "study_loading" => TradingViewDataEvent::OnStudyLoading,
             "study_completed" => TradingViewDataEvent::OnStudyCompleted,
 
             "symbol_error" => TradingViewDataEvent::OnError(TradingViewError::SymbolError),
@@ -79,16 +86,28 @@ impl From<String> for TradingViewDataEvent {
     }
 }
 
+impl From<Ustr> for TradingViewDataEvent {
+    fn from(s: Ustr) -> Self {
+        TradingViewDataEvent::from(s.to_string())
+    }
+}
+
+/// A serialized WebSocket message ready for transmission.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SocketMessageSer {
     pub m: Value,
     pub p: Value,
 }
 
+/// A deserialized WebSocket message from TradingView.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SocketMessageDe {
     pub m: Ustr,
     pub p: Vec<Value>,
+    #[serde(default)]
+    pub t: u64, // Timestamp in seconds (0 when absent, e.g. error messages)
+    #[serde(default)]
+    pub t_ms: u64, // Timestamp in milliseconds (0 when absent)
 }
 
 impl SocketMessageSer {
@@ -108,6 +127,9 @@ impl SocketMessageSer {
     }
 }
 
+/// Server metadata sent by TradingView after a successful WebSocket connection.
+///
+/// Contains the session ID, server timestamp, and base URL for chart data.
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SocketServerInfo {
@@ -122,6 +144,7 @@ pub struct SocketServerInfo {
     pub auth_scheme_vsn: i64,
     pub protocol: Ustr,
     pub via: Ustr,
+    #[serde(rename = "javastudies")]
     pub sjavastudies: Vec<Ustr>,
 }
 
@@ -149,9 +172,13 @@ pub enum SocketMessage<T> {
     SocketServerInfo(SocketServerInfo),
     SocketMessage(T),
     Other(Value),
-    Unknown(String),
+    Unknown(Ustr),
 }
 
+/// Which TradingView data server tier to connect to.
+///
+/// `ProData` is the default and recommended server. `Data` and
+/// `DataExtended` are alternatives with different capabilities.
 #[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize, Copy, Eq)]
 pub enum DataServer {
     #[default]
@@ -172,6 +199,12 @@ impl std::fmt::Display for DataServer {
     }
 }
 
+/// Trait for WebSocket message handling — serialize and deserialize from
+/// TradingView's wire format.
+///
+/// Implemented by [`SocketMessage`] for the two protocol variants.
+///
+/// [`SocketMessage`]: crate::live::models::SocketMessage
 pub trait Socket {
     fn event_loop(
         &self,
@@ -192,4 +225,63 @@ pub trait Socket {
     ) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_error(&self, error: Error, context: Ustr) -> impl Future<Output = Result<()>> + Send;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_study_loading_maps_to_on_study_loading() {
+        let event = TradingViewDataEvent::from("study_loading".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnStudyLoading);
+    }
+
+    #[test]
+    fn test_series_loading_is_not_study_loading() {
+        let event = TradingViewDataEvent::from("series_loading".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnSeriesLoading);
+    }
+
+    #[test]
+    fn test_study_completed_maps_correctly() {
+        let event = TradingViewDataEvent::from("study_completed".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnStudyCompleted);
+    }
+
+    #[test]
+    fn test_series_completed_maps_correctly() {
+        let event = TradingViewDataEvent::from("series_completed".to_string());
+        assert_eq!(event, TradingViewDataEvent::OnSeriesCompleted);
+    }
+
+    #[test]
+    fn test_all_study_and_series_events_are_distinct() {
+        let loading = TradingViewDataEvent::from("study_loading".to_string());
+        let completed = TradingViewDataEvent::from("study_completed".to_string());
+        let series_loading = TradingViewDataEvent::from("series_loading".to_string());
+        let series_completed = TradingViewDataEvent::from("series_completed".to_string());
+
+        // All four should be distinct
+        assert_ne!(loading, series_loading);
+        assert_ne!(completed, series_completed);
+        assert_ne!(loading, completed);
+        assert_ne!(series_loading, series_completed);
+
+        // Verify mapping expectations
+        assert_eq!(loading, TradingViewDataEvent::OnStudyLoading);
+        assert_eq!(completed, TradingViewDataEvent::OnStudyCompleted);
+        assert_eq!(series_loading, TradingViewDataEvent::OnSeriesLoading);
+        assert_eq!(series_completed, TradingViewDataEvent::OnSeriesCompleted);
+    }
+
+    #[test]
+    fn test_ustr_from_maps_correctly() {
+        let event: TradingViewDataEvent = ustr::ustr("study_loading").into();
+        assert_eq!(event, TradingViewDataEvent::OnStudyLoading);
+    }
 }

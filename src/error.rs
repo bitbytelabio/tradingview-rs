@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ustr::Ustr;
 
+/// The crate-wide error type.
+///
+/// Wraps all failure modes: network errors, JSON deserialization failures,
+/// WebSocket issues, auth errors, and TradingView-specific protocol errors.
+///
+/// # Conversion
+///
+/// Common external errors (`reqwest::Error`, `serde_json::Error`, `chrono::ParseError`,
+/// etc.) convert automatically via `From` impls.
 #[derive(Debug, Clone, Error, Copy, Serialize, Deserialize)]
 pub enum Error {
     #[error("Generic: {0}")]
@@ -60,12 +69,6 @@ pub enum Error {
 
     #[error("URL parsing failed: {0}")]
     UrlParse(Ustr),
-
-    #[error("Base64 decode failed: {0}")]
-    Base64Decode(Ustr),
-
-    #[error("ZIP error: {0}")]
-    Zip(Ustr),
 
     #[error("Date/time parsing failed: {0}")]
     ChronoParse(Ustr),
@@ -141,18 +144,6 @@ impl From<url::ParseError> for Error {
     }
 }
 
-impl From<base64::DecodeError> for Error {
-    fn from(err: base64::DecodeError) -> Self {
-        Error::Base64Decode(err.to_string().into())
-    }
-}
-
-impl From<zip::result::ZipError> for Error {
-    fn from(err: zip::result::ZipError) -> Self {
-        Error::Zip(err.to_string().into())
-    }
-}
-
 impl From<chrono::ParseError> for Error {
     fn from(err: chrono::ParseError) -> Self {
         Error::ChronoParse(err.to_string().into())
@@ -177,6 +168,28 @@ impl From<TradingViewError> for Error {
     }
 }
 
+impl From<String> for Error {
+    fn from(err: String) -> Self {
+        Error::Internal(err.into())
+    }
+}
+
+impl From<&str> for Error {
+    fn from(err: &str) -> Self {
+        Error::Internal(Ustr::from(err))
+    }
+}
+
+impl From<Ustr> for Error {
+    fn from(err: Ustr) -> Self {
+        Error::Internal(err)
+    }
+}
+
+/// Errors returned by TradingView's data server (WebSocket protocol layer).
+///
+/// These correspond to TradingView's own error taxonomy — distinct from
+/// transport-level failures in [`enum@Error`].
 #[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy, Serialize, Deserialize)]
 pub enum TradingViewError {
     #[error("Series error")]
@@ -201,6 +214,7 @@ pub enum TradingViewError {
     InvalidSessionId,
 }
 
+/// Errors that can occur during user authentication (login flow).
 #[derive(Debug, Clone, Error, PartialEq, Eq, Hash, Copy, Serialize, Deserialize)]
 pub enum LoginError {
     #[error("Username or password is empty")]

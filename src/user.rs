@@ -2,10 +2,13 @@ pub use crate::models::UserCookies;
 use crate::{
     Result,
     error::{Error, LoginError},
-    utils::build_request,
+    utils::http_client,
 };
 use google_authenticator::{GA_AUTH, get_code};
-use reqwest::{Response, header::CONTENT_TYPE};
+use reqwest::{
+    Response,
+    header::{CONTENT_TYPE, COOKIE},
+};
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
@@ -21,7 +24,7 @@ impl UserCookies {
         password: &str,
         totp_secret: Option<&str>,
     ) -> Result<Self> {
-        let client = build_request(None)?;
+        let client = http_client();
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
@@ -151,12 +154,10 @@ impl UserCookies {
             });
         }
 
-        let client = build_request(Some(&format!(
-            "sessionid={session}; sessionid_sign={signature};"
-        )))?;
-
-        let response = client
+        let cookie = format!("sessionid={session}; sessionid_sign={signature};");
+        let response = http_client()
             .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
+            .header(COOKIE, &cookie)
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(format!(
                 "code={}",

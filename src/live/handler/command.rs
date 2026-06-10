@@ -1,4 +1,5 @@
-use crate::{Error, Result, error::TradingViewError, live::handler::message::Command};
+use core::fmt;
+use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, sync::Arc};
 use tokio::{
     select,
@@ -7,9 +8,174 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
-use ustr::ustr;
 
-use crate::{live::handler::types::CommandRx, websocket::WebSocketClient};
+use crate::{
+    Error, Result,
+    error::TradingViewError,
+    live::handler::{CommandRx, Handler, message::*},
+    websocket::WebSocketClient,
+};
+
+/// Priority level for queued commands.
+///
+/// Higher-priority commands are dispatched before lower-priority ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CommandPriority {
+    Critical = 3,
+    High = 2,
+    Normal = 1,
+    Low = 0,
+}
+
+/// A command to be dispatched to the TradingView WebSocket session.
+///
+/// Covers all protocol operations: chart sessions, quote subscriptions,
+/// replay mode, Pine Script studies, and connection management.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Command {
+    Close,
+    Ping,
+    SendRawMessage(CommandMsg),
+    SetAuthToken(CommandMsg),
+    SetLocale(SetLocaleCommandMsg),
+    SetDataQuality(CommandMsg),
+    SetTimeZone(SetTimeZoneCommandMsg),
+
+    /// Quote Session Commands
+    CreateQuoteSession(CommandMsg),
+    DeleteQuoteSession(CommandMsg),
+    FastSymbols(QuoteCommandMsg),
+    SetQuoteFields(CommandMsg),
+    AddQuoteSymbols(QuoteCommandMsg),
+    RemoveQuoteSymbols(QuoteCommandMsg),
+
+    /// Chart Session Commands
+    CreateChartSession(CommandMsg),
+    DeleteChartSession(CommandMsg),
+    RequestMoreData(ChartDataRequestMsg),
+    RequestMoreTickmarks(ChartDataRequestMsg),
+    CreateChartSeries(ChartSeriesCommandMsg),
+    ModifyChartSeries(ChartSeriesCommandMsg),
+    RemoveSeries(SessionTerminationCommandMsg),
+    ResolveSymbol(ResolveSymbolCommandMsg),
+
+    /// Replay Session Commands
+    CreateReplaySession(CommandMsg),
+    DeleteReplaySession(CommandMsg),
+    AddReplaySeries(AddReplaySeriesCommandMsg),
+    ReplayStep(ReplayStepCommandMsg),
+    ReplayStart(ReplayStartCommandMsg),
+    ReplayStop(SessionTerminationCommandMsg),
+    ReplayReset(ReplayResetCommandMsg),
+
+    /// Study Commands
+    CreateStudy(StudyCommandMsg),
+    ModifyStudy(StudyCommandMsg),
+    RemoveStudy(SessionTerminationCommandMsg),
+
+    /// Batch Commands
+    BatchCommands(Vec<Command>),
+
+    /// Conditional Commands
+    ConditionalCommand {
+        condition: CommandCondition,
+        command: Box<Command>,
+        fallback: Option<Box<Command>>,
+    },
+}
+
+impl Command {
+    /// Validate command parameters
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            Command::CreateQuoteSession(msg)
+            | Command::CreateChartSession(msg)
+            | Command::CreateReplaySession(msg) => {
+                if msg.inner.is_empty() {
+                    return Err(Error::Internal("Session name cannot be empty".into()));
+                }
+            }
+            Command::AddQuoteSymbols(msg)
+            | Command::RemoveQuoteSymbols(msg)
+            | Command::FastSymbols(msg) => {
+                if msg.symbols.is_empty() {
+                    return Err(Error::Internal("Symbol list cannot be empty".into()));
+                }
+                if msg.quote_session.is_empty() {
+                    return Err(Error::Internal("Quote session cannot be empty".into()));
+                }
+            }
+            Command::CreateChartSeries(msg) | Command::ModifyChartSeries(msg) => {
+                if msg.chart_session.is_empty()
+                    || msg.series_id.is_empty()
+                    || msg.symbol_series_id.is_empty()
+                {
+                    return Err(Error::Internal(
+                        "Chart series parameters cannot be empty".into(),
+                    ));
+                }
+                if msg.bar_count == 0 {
+                    return Err(Error::Internal("Bar count must be greater than 0".into()));
+                }
+            }
+            Command::BatchCommands(commands) => {
+                if commands.is_empty() {
+                    return Err(Error::Internal("Batch commands cannot be empty".into()));
+                }
+                if commands.len() > 100 {
+                    return Err(Error::Internal("Batch size too large (max 100)".into()));
+                }
+                for cmd in commands {
+                    cmd.validate()?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Get command priority for queue management
+    pub fn priority(&self) -> CommandPriority {
+        match self {
+            Command::Close | Command::SetAuthToken(_) => CommandPriority::Critical,
+            Command::Ping => CommandPriority::High,
+            Command::CreateQuoteSession(_)
+            | Command::CreateChartSession(_)
+            | Command::CreateReplaySession(_) => CommandPriority::High,
+            Command::BatchCommands(_) => CommandPriority::Normal,
+            Command::ConditionalCommand { .. } => CommandPriority::Normal,
+            _ => CommandPriority::Normal,
+        }
+    }
+
+    /// Get estimated execution time for timeout management
+    pub fn estimated_duration(&self) -> Duration {
+        match self {
+            Command::Ping => Duration::from_secs(1),
+            Command::CreateChartSeries(_)
+            | Command::ModifyChartSeries(_)
+            | Command::ResolveSymbol(_) => Duration::from_secs(5),
+            Command::BatchCommands(commands) => Duration::from_millis(commands.len() as u64 * 100),
+            _ => Duration::from_secs(3),
+        }
+    }
+
+    /// Check if command requires session to exist
+    pub fn requires_session(&self) -> Option<&str> {
+        match self {
+            Command::DeleteQuoteSession(msg) | Command::SetQuoteFields(msg) => Some(&msg.inner),
+            Command::AddQuoteSymbols(msg)
+            | Command::RemoveQuoteSymbols(msg)
+            | Command::FastSymbols(msg) => Some(&msg.quote_session),
+            Command::DeleteChartSession(msg) => Some(&msg.inner),
+            Command::CreateChartSeries(msg) | Command::ModifyChartSeries(msg) => {
+                Some(&msg.chart_session)
+            }
+            Command::RemoveSeries(msg) | Command::RemoveStudy(msg) => Some(&msg.chart_session),
+            _ => None,
+        }
+    }
+}
 
 /// Connection state tracking with timestamps for better monitoring
 #[derive(Debug, Clone, PartialEq, Copy, Eq)]
@@ -19,6 +185,7 @@ pub struct ConnectionState {
     pub last_successful_operation: Option<Instant>,
 }
 
+/// Current state of the WebSocket connection.
 #[derive(Debug, Clone, PartialEq, Copy, Eq)]
 pub enum ConnectionStatus {
     Connected,
@@ -136,159 +303,169 @@ impl ExponentialBackoff {
 
 #[derive(Debug, Clone)]
 pub struct CommandQueue {
+    critical_queue: VecDeque<Command>,
+    high_queue: VecDeque<Command>,
     normal_queue: VecDeque<Command>,
-    priority_queue: VecDeque<Command>,
+    low_queue: VecDeque<Command>,
     max_size: usize,
     dropped_count: u64,
+    session_tracker: std::collections::HashSet<String>,
 }
 
 impl CommandQueue {
     fn new(max_size: usize) -> Self {
         Self {
+            critical_queue: VecDeque::new(),
+            high_queue: VecDeque::new(),
             normal_queue: VecDeque::new(),
-            priority_queue: VecDeque::new(),
+            low_queue: VecDeque::new(),
             max_size,
             dropped_count: 0,
+            session_tracker: std::collections::HashSet::new(),
         }
     }
 
-    fn enqueue(&mut self, cmd: Command) -> bool {
-        let is_priority = Self::is_priority_command(&cmd);
+    fn enqueue(&mut self, cmd: Command) -> Result<()> {
+        // Validate command first
+        cmd.validate()?;
 
-        if is_priority {
-            // Handle priority commands
-            if self.priority_queue.len() >= self.max_size {
-                // Don't drop priority commands if queue is at absolute max
-                return false;
+        // Check if command requires existing session
+        if let Some(session) = cmd.requires_session() {
+            if !self.session_tracker.contains(session) {
+                return Err(Error::Internal(
+                    format!("Session '{}' does not exist", session).into(),
+                ));
             }
-            self.priority_queue.push_back(cmd);
-        } else {
-            // Handle normal commands
-            let max_normal_capacity = self.max_size / 2;
-
-            // Drop the oldest normal command if queue is full
-            if self.normal_queue.len() >= max_normal_capacity {
-                if let Some(_dropped) = self.normal_queue.pop_front() {
-                    self.dropped_count += 1;
-                    warn!(
-                        "Dropped normal command due to queue overflow (total dropped: {})",
-                        self.dropped_count
-                    );
-                }
-            }
-
-            self.normal_queue.push_back(cmd);
         }
 
-        true
+        // Track session creation/deletion
+        match &cmd {
+            Command::CreateQuoteSession(msg)
+            | Command::CreateChartSession(msg)
+            | Command::CreateReplaySession(msg) => {
+                self.session_tracker.insert(msg.inner.to_string());
+            }
+            Command::DeleteQuoteSession(msg)
+            | Command::DeleteChartSession(msg)
+            | Command::DeleteReplaySession(msg) => {
+                self.session_tracker.remove(&msg.inner.to_string());
+            }
+            _ => {}
+        }
+
+        // Check capacity and drop if necessary
+        if self.total_len() >= self.max_size {
+            // Try to drop from lower priority queues first
+            if self.drop_lowest_priority() {
+                self.dropped_count += 1;
+                warn!(
+                    "Dropped command due to queue overflow (total dropped: {})",
+                    self.dropped_count
+                );
+            } else {
+                return Err(Error::Internal("Command queue is full".into()));
+            }
+        }
+
+        let queue = match cmd.priority() {
+            CommandPriority::Critical => &mut self.critical_queue,
+            CommandPriority::High => &mut self.high_queue,
+            CommandPriority::Normal => &mut self.normal_queue,
+            CommandPriority::Low => &mut self.low_queue,
+        };
+
+        queue.push_back(cmd);
+        Ok(())
+    }
+
+    fn drop_lowest_priority(&mut self) -> bool {
+        if let Some(_) = self.low_queue.pop_front() {
+            return true;
+        }
+        if let Some(_) = self.normal_queue.pop_front() {
+            return true;
+        }
+        if let Some(_) = self.high_queue.pop_front() {
+            return true;
+        }
+        false
+    }
+
+    fn dequeue(&mut self) -> Option<Command> {
+        self.critical_queue
+            .pop_front()
+            .or_else(|| self.high_queue.pop_front())
+            .or_else(|| self.normal_queue.pop_front())
+            .or_else(|| self.low_queue.pop_front())
     }
 
     fn drain(&mut self) -> Vec<Command> {
-        // Priority commands first, then normal commands
-        let mut commands = Vec::with_capacity(self.len());
+        let mut commands = Vec::with_capacity(self.total_len());
 
-        // Drain priority queue first
-        while let Some(cmd) = self.priority_queue.pop_front() {
-            commands.push(cmd);
-        }
-
-        // Then drain normal queue
-        while let Some(cmd) = self.normal_queue.pop_front() {
+        while let Some(cmd) = self.dequeue() {
             commands.push(cmd);
         }
 
         commands
     }
 
+    fn total_len(&self) -> usize {
+        self.critical_queue.len()
+            + self.high_queue.len()
+            + self.normal_queue.len()
+            + self.low_queue.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.total_len() == 0
+    }
+
     fn clear(&mut self) {
-        self.priority_queue.clear();
+        self.critical_queue.clear();
+        self.high_queue.clear();
         self.normal_queue.clear();
+        self.low_queue.clear();
+        self.session_tracker.clear();
     }
 
-    fn len(&self) -> usize {
-        self.priority_queue.len() + self.normal_queue.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.priority_queue.is_empty() && self.normal_queue.is_empty()
-    }
-
-    pub fn capacity_info(&self) -> (usize, usize, usize) {
-        let total_capacity = self.max_size;
-        let priority_capacity = self.max_size;
-        let normal_capacity = self.max_size / 2;
-        (total_capacity, priority_capacity, normal_capacity)
-    }
-
-    fn is_priority_command(cmd: &Command) -> bool {
-        matches!(
-            cmd,
-            Command::SetAuthToken { .. }
-                | Command::Delete
-                | Command::Ping
-                | Command::CreateQuoteSession
-                | Command::CreateChartSession { .. }
-        )
-    }
-
-    fn stats(&self) -> (usize, usize, u64) {
-        (
-            self.priority_queue.len(),
-            self.normal_queue.len(),
-            self.dropped_count,
-        )
-    }
-
-    /// Get detailed queue statistics
-    pub fn detailed_stats(&self) -> CommandQueueStats {
-        let (total_cap, priority_cap, normal_cap) = self.capacity_info();
+    fn detailed_stats(&self) -> CommandQueueStats {
         CommandQueueStats {
-            priority_queue_len: self.priority_queue.len(),
+            critical_queue_len: self.critical_queue.len(),
+            high_queue_len: self.high_queue.len(),
             normal_queue_len: self.normal_queue.len(),
-            total_len: self.len(),
-            priority_queue_capacity: priority_cap,
-            normal_queue_capacity: normal_cap,
-            total_capacity: total_cap,
+            low_queue_len: self.low_queue.len(),
+            total_len: self.total_len(),
+            max_capacity: self.max_size,
             dropped_count: self.dropped_count,
-            priority_utilization: if priority_cap > 0 {
-                (self.priority_queue.len() as f64 / priority_cap as f64) * 100.0
-            } else {
-                0.0
-            },
-            normal_utilization: if normal_cap > 0 {
-                (self.normal_queue.len() as f64 / normal_cap as f64) * 100.0
-            } else {
-                0.0
-            },
+            active_sessions: self.session_tracker.len(),
         }
     }
 }
 
-/// Detailed statistics for the command queue
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct CommandQueueStats {
-    pub priority_queue_len: usize,
+    pub critical_queue_len: usize,
+    pub high_queue_len: usize,
     pub normal_queue_len: usize,
+    pub low_queue_len: usize,
     pub total_len: usize,
-    pub priority_queue_capacity: usize,
-    pub normal_queue_capacity: usize,
-    pub total_capacity: usize,
+    pub max_capacity: usize,
     pub dropped_count: u64,
-    pub priority_utilization: f64, // Percentage
-    pub normal_utilization: f64,   // Percentage
+    pub active_sessions: usize,
 }
 
-impl std::fmt::Display for CommandQueueStats {
+impl fmt::Display for CommandQueueStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Queue Stats: P:{}/{} ({:.1}%), N:{}/{} ({:.1}%), Dropped:{}",
-            self.priority_queue_len,
-            self.priority_queue_capacity,
-            self.priority_utilization,
+            "Queue: C:{} H:{} N:{} L:{} | Total:{}/{} | Sessions:{} | Dropped:{}",
+            self.critical_queue_len,
+            self.high_queue_len,
             self.normal_queue_len,
-            self.normal_queue_capacity,
-            self.normal_utilization,
+            self.low_queue_len,
+            self.total_len,
+            self.max_capacity,
+            self.active_sessions,
             self.dropped_count
         )
     }
@@ -364,9 +541,20 @@ impl Default for CommandRunnerConfig {
     }
 }
 
-pub struct CommandRunner {
+/// Central command dispatcher for the WebSocket session.
+///
+/// Reads [`Command`]s from an MPSC channel and dispatches them to the
+/// [`WebSocketClient`]. Manages connection lifecycle, reconnection, and
+/// error recovery.
+///
+/// Spawn via [`CommandRunner::run()`] — it blocks until shutdown is triggered.
+///
+/// [`Command`]: crate::live::handler::command::Command
+/// [`WebSocketClient`]: crate::websocket::WebSocketClient
+/// [`CommandRunner::run()`]: CommandRunner::run()
+pub struct CommandRunner<T: Handler> {
     rx: CommandRx,
-    ws: Arc<WebSocketClient>,
+    ws: Arc<WebSocketClient<T>>,
     shutdown: CancellationToken,
     state: ConnectionState,
     command_queue: CommandQueue,
@@ -376,14 +564,14 @@ pub struct CommandRunner {
     start_time: Instant,
 }
 
-impl CommandRunner {
-    pub fn new(rx: CommandRx, ws: Arc<WebSocketClient>) -> Self {
+impl<T: Handler> CommandRunner<T> {
+    pub fn new(rx: CommandRx, ws: Arc<WebSocketClient<T>>) -> Self {
         Self::with_config(rx, ws, CommandRunnerConfig::default())
     }
 
     pub fn with_config(
         rx: CommandRx,
-        ws: Arc<WebSocketClient>,
+        ws: Arc<WebSocketClient<T>>,
         config: CommandRunnerConfig,
     ) -> Self {
         Self {
@@ -483,14 +671,14 @@ impl CommandRunner {
         }
 
         self.cleanup().await;
-        self.log_final_stats();
+
         Ok(())
     }
 
     /// Comprehensive health check that actively tests the connection
     async fn perform_health_check(&self) -> Result<()> {
         // First check basic connection state
-        if self.ws.is_closed().await {
+        if self.ws.is_closed() {
             return Err(Error::Internal("WebSocket is closed".into()));
         }
 
@@ -537,13 +725,6 @@ impl CommandRunner {
         if auth_token != "unauthorized_user_token" {
             info!("Sending initial authentication token");
             self.ws.set_auth_token(&auth_token).await?;
-        }
-
-        // Create a quote session if not already created
-        if self.ws.quote_session.read().await.is_empty() {
-            info!("Creating initial quote session");
-            self.ws.create_quote_session().await?;
-            self.ws.set_fields().await?;
         }
 
         self.state.mark_successful_operation();
@@ -608,12 +789,9 @@ impl CommandRunner {
         match self.state.status {
             ConnectionStatus::Connected => self.process_command(cmd).await,
             ConnectionStatus::Reconnecting => {
-                if self.command_queue.enqueue(cmd) {
-                    let (priority, normal, dropped) = self.command_queue.stats();
-                    debug!(
-                        "Command queued during reconnection (priority: {}, normal: {}, dropped: {})",
-                        priority, normal, dropped
-                    );
+                if let Ok(()) = self.command_queue.enqueue(cmd) {
+                    let stats = self.command_queue.detailed_stats();
+                    info!("Command queued during reconnection: {}", stats);
                 }
                 Ok(())
             }
@@ -625,7 +803,7 @@ impl CommandRunner {
                     self.handle_reconnection(backoff).await?;
                     self.process_command(cmd).await
                 } else {
-                    self.command_queue.enqueue(cmd);
+                    self.command_queue.enqueue(cmd)?;
                     Ok(())
                 }
             }
@@ -638,242 +816,275 @@ impl CommandRunner {
 
     #[instrument(skip(self, cmd), fields(command_type = ?std::mem::discriminant(&cmd)))]
     async fn process_command(&mut self, cmd: Command) -> Result<()> {
-        use Command::*;
+        // Validate command before processing
+        cmd.validate()?;
 
-        let result = timeout(self.config.command_timeout, async {
+        // Use an iterative approach for nested commands
+        let mut command_stack = VecDeque::new();
+        command_stack.push_back(cmd);
+
+        while let Some(current_cmd) = command_stack.pop_front() {
+            match current_cmd {
+                Command::BatchCommands(commands) => {
+                    // Add all batch commands to the front of the stack in reverse order
+                    // so they're processed in the correct order
+                    for cmd in commands.into_iter().rev() {
+                        command_stack.push_front(cmd);
+                    }
+                    continue;
+                }
+                Command::ConditionalCommand {
+                    condition,
+                    command,
+                    fallback,
+                } => {
+                    let condition_met = self.evaluate_condition(&condition).await;
+
+                    if condition_met {
+                        debug!("Condition met, executing primary command");
+                        command_stack.push_front(*command);
+                    } else if let Some(fallback_cmd) = fallback {
+                        debug!("Condition not met, executing fallback command");
+                        command_stack.push_front(*fallback_cmd);
+                    } else {
+                        debug!("Condition not met and no fallback provided");
+                    }
+                    continue;
+                }
+                _ => {
+                    // Process regular command
+                    self.execute_single_command(current_cmd).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn execute_single_command(&mut self, cmd: Command) -> Result<()> {
+        // Use dynamic timeout based on command type
+        let timeout_duration = cmd.estimated_duration().mul_f32(1.5); // 50% buffer
+
+        let result = timeout(timeout_duration, async {
             match cmd {
-                Ping => self
-                    .ws
-                    .try_ping()
-                    .await
-                    .map_err(|e| Error::Internal(ustr(&e.to_string()))),
-                Delete => {
-                    self.cleanup().await;
-                    Ok(())
+                Command::Close => self.ws.close().await,
+                Command::Ping => self.ws.try_ping().await,
+                Command::SetAuthToken(auth_token) => {
+                    self.ws.set_auth_token(&auth_token.inner).await
                 }
-                SetAuthToken { auth_token } => {
-                    self.ws.set_auth_token(&auth_token).await?;
-                    Ok(())
+                Command::CreateQuoteSession(session) => {
+                    self.ws.create_quote_session(&session.inner).await
                 }
-                SetLocals { language, country } => {
-                    self.ws.set_locale((&language, &country)).await?;
-                    Ok(())
+                Command::SetLocale(locale) => {
+                    self.ws.set_locale(&locale.language, &locale.country).await
                 }
-                SetDataQuality { quality } => {
-                    self.ws.set_data_quality(&quality).await?;
-                    Ok(())
-                }
-                SetTimeZone { session, timezone } => {
-                    self.ws.set_timezone(&session, timezone).await?;
-                    Ok(())
-                }
-                CreateQuoteSession => {
-                    self.ws.create_quote_session().await?;
-                    Ok(())
-                }
-                DeleteQuoteSession => {
-                    self.ws.delete_quote_session().await?;
-                    Ok(())
-                }
-                SetQuoteFields => {
-                    self.ws.set_fields().await?;
-                    Ok(())
-                }
-                FastSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.fast_symbols(&symbols).await?;
-                    Ok(())
-                }
-                AddSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.add_symbols(&symbols).await?;
-                    Ok(())
-                }
-                RemoveSymbols { symbols } => {
-                    let symbols: Vec<_> = symbols.into_iter().map(|s| s.as_str()).collect();
-                    self.ws.remove_symbols(&symbols).await?;
-                    Ok(())
-                }
-                CreateChartSession { session } => {
-                    self.ws.create_chart_session(&session).await?;
-                    Ok(())
-                }
-                DeleteChartSession { session } => {
-                    self.ws.delete_chart_session(&session).await?;
-                    Ok(())
-                }
-                RequestMoreData {
-                    session,
-                    series_id,
-                    bar_count,
-                } => {
+                Command::SetDataQuality(quality) => self.ws.set_data_quality(&quality.inner).await,
+                Command::SetTimeZone(timezone) => {
                     self.ws
-                        .request_more_data(&session, &series_id, bar_count)
-                        .await?;
-                    Ok(())
+                        .set_timezone(&timezone.chart_session, timezone.timezone)
+                        .await
                 }
-                RequestMoreTickMarks {
-                    session,
-                    series_id,
-                    bar_count,
-                } => {
+                Command::CreateChartSession(session) => {
+                    self.ws.create_chart_session(&session.inner).await
+                }
+                Command::DeleteChartSession(session) => {
+                    self.ws.delete_chart_session(&session.inner).await
+                }
+                Command::RequestMoreData(request) => {
                     self.ws
-                        .request_more_tickmarks(&session, &series_id, bar_count)
-                        .await?;
-                    Ok(())
+                        .request_more_data(&request.chart_session, &request.series_id, request.num)
+                        .await
                 }
-                CreateStudy {
-                    session,
-                    study_id,
-                    series_id,
-                    indicator,
-                } => {
+                Command::RequestMoreTickmarks(request) => {
                     self.ws
-                        .create_study(&session, &study_id, &series_id, indicator)
-                        .await?;
-                    Ok(())
-                }
-                ModifyStudy {
-                    session,
-                    study_id,
-                    series_id,
-                    indicator,
-                } => {
-                    self.ws
-                        .modify_study(&session, &study_id, &series_id, indicator)
-                        .await?;
-                    Ok(())
-                }
-                RemoveStudy {
-                    session,
-                    study_id,
-                    series_id,
-                } => {
-                    let id = format!("{series_id}_{study_id}");
-                    self.ws.remove_study(&session, &id).await?;
-                    Ok(())
-                }
-                SetStudy {
-                    study_options,
-                    session,
-                    series_id,
-                } => {
-                    self.ws
-                        .set_study(study_options, &session, &series_id)
-                        .await?;
-                    Ok(())
-                }
-                CreateSeries {
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config,
-                } => {
-                    self.ws
-                        .create_series(
-                            &session,
-                            &series_id,
-                            &series_version,
-                            &series_symbol_id,
-                            config,
+                        .request_more_tickmarks(
+                            &request.chart_session,
+                            &request.series_id,
+                            request.num,
                         )
-                        .await?;
-                    Ok(())
+                        .await
                 }
-                ModifySeries {
-                    session,
-                    series_id,
-                    series_version,
-                    series_symbol_id,
-                    config,
-                } => {
+                Command::SendRawMessage(command_msg) => {
+                    self.ws.send_raw_message(&command_msg.inner).await
+                }
+                Command::DeleteQuoteSession(session) => {
+                    self.ws.delete_quote_session(&session.inner).await
+                }
+                Command::FastSymbols(quote_command_msg) => {
                     self.ws
-                        .modify_series(
-                            &session,
-                            &series_id,
-                            &series_version,
-                            &series_symbol_id,
-                            config,
+                        .fast_symbols(
+                            &quote_command_msg.quote_session,
+                            &quote_command_msg
+                                .symbols
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>(),
                         )
-                        .await?;
-                    Ok(())
+                        .await
                 }
-                RemoveSeries { session, series_id } => {
-                    self.ws.remove_series(&session, &series_id).await?;
-                    Ok(())
+                Command::SetQuoteFields(command_msg) => {
+                    self.ws.set_fields(&command_msg.inner).await
                 }
-                CreateReplaySession { session } => {
-                    self.ws.create_replay_session(&session).await?;
-                    Ok(())
-                }
-                DeleteReplaySession { session } => {
-                    self.ws.delete_replay_session(&session).await?;
-                    Ok(())
-                }
-                ResolveSymbol {
-                    session,
-                    symbol,
-                    exchange,
-                    opts,
-                    replay_session,
-                } => {
+                Command::AddQuoteSymbols(quote_command_msg) => {
                     self.ws
-                        .resolve_symbol(
-                            &session,
-                            &symbol,
-                            &exchange,
-                            opts,
-                            replay_session.as_deref(),
+                        .add_symbols(
+                            &quote_command_msg.quote_session,
+                            &quote_command_msg
+                                .symbols
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>(),
                         )
-                        .await?;
-                    Ok(())
+                        .await
                 }
-                SetReplayStep {
-                    session,
-                    series_id,
-                    step,
-                } => {
-                    self.ws.replay_step(&session, &series_id, step).await?;
-                    Ok(())
-                }
-                StartReplay {
-                    session,
-                    series_id,
-                    interval,
-                } => {
-                    self.ws.replay_start(&session, &series_id, interval).await?;
-                    Ok(())
-                }
-                StopReplay { session, series_id } => {
-                    self.ws.replay_stop(&session, &series_id).await?;
-                    Ok(())
-                }
-                ResetReplay {
-                    session,
-                    series_id,
-                    timestamp,
-                } => {
+                Command::RemoveQuoteSymbols(quote_command_msg) => {
                     self.ws
-                        .replay_reset(&session, &series_id, timestamp)
-                        .await?;
-                    Ok(())
+                        .remove_symbols(
+                            &quote_command_msg.quote_session,
+                            &quote_command_msg
+                                .symbols
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>(),
+                        )
+                        .await
                 }
-                SetReplay {
-                    symbol,
-                    options,
-                    chart_session,
-                    symbol_series_id,
-                } => {
+                Command::CreateChartSeries(chart_series_command_msg) => {
                     self.ws
-                        .set_replay(&symbol, options, &chart_session, &symbol_series_id)
-                        .await?;
-                    Ok(())
+                        .create_series()
+                        .chart_session(&chart_series_command_msg.chart_session)
+                        .series_identifier(&chart_series_command_msg.series_identifier)
+                        .series_id(&chart_series_command_msg.series_id)
+                        .symbol_series_id(&chart_series_command_msg.symbol_series_id)
+                        .interval(chart_series_command_msg.interval)
+                        .bar_count(chart_series_command_msg.bar_count)
+                        .maybe_range(chart_series_command_msg.range)
+                        .call()
+                        .await
                 }
-                SetMarket { options } => {
-                    self.ws.set_market(options).await?;
-                    Ok(())
+                Command::ModifyChartSeries(command) => {
+                    self.ws
+                        .modify_series()
+                        .chart_session(&command.chart_session)
+                        .series_identifier(&command.series_identifier)
+                        .series_id(&command.series_id)
+                        .symbol_series_id(&command.symbol_series_id)
+                        .interval(command.interval)
+                        .bar_count(command.bar_count)
+                        .maybe_range(command.range)
+                        .call()
+                        .await
                 }
+                Command::RemoveSeries(command) => {
+                    self.ws
+                        .remove_series(&command.chart_session, &command.id)
+                        .await
+                }
+                Command::ResolveSymbol(command) => {
+                    self.ws
+                        .resolve_symbol()
+                        .session(&command.session)
+                        .symbol_series_id(&command.symbol_series_id)
+                        .maybe_adjustment(command.adjustment)
+                        .maybe_currency(command.currency)
+                        .maybe_session_type(command.session_type)
+                        .maybe_replay_session(command.replay_session.as_deref())
+                        .instrument(&command.instrument)
+                        .call()
+                        .await
+                }
+                Command::CreateReplaySession(command_msg) => {
+                    self.ws.create_replay_session(&command_msg.inner).await
+                }
+                Command::DeleteReplaySession(command) => {
+                    self.ws.delete_replay_session(&command.inner).await
+                }
+                Command::AddReplaySeries(command) => {
+                    self.ws
+                        .add_replay_series()
+                        .maybe_adjustment(command.adjustment)
+                        .maybe_currency(command.currency)
+                        .maybe_session_type(command.session_type)
+                        .chart_session(&command.chart_session)
+                        .series_id(&command.series_id)
+                        .interval(command.interval)
+                        .instrument(&command.instrument)
+                        .call()
+                        .await
+                }
+                Command::ReplayStep(command) => {
+                    self.ws
+                        .replay_step(
+                            &command.chart_session,
+                            &command.series_id,
+                            command.step as u64,
+                        )
+                        .await
+                }
+                Command::ReplayStart(command) => {
+                    self.ws
+                        .replay_start(&command.chart_session, &command.series_id, command.interval)
+                        .await
+                }
+                Command::ReplayStop(command) => {
+                    self.ws
+                        .replay_stop(&command.chart_session, &command.id)
+                        .await
+                }
+                Command::ReplayReset(command) => {
+                    self.ws
+                        .replay_reset(
+                            &command.chart_session,
+                            &command.series_id,
+                            command.timestamp,
+                        )
+                        .await
+                }
+                Command::CreateStudy(command) => {
+                    self.ws
+                        .create_study()
+                        .chart_session(&command.chart_session)
+                        .study_ids(
+                            &command
+                                .study_ids
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .try_into()
+                                .unwrap(),
+                        )
+                        .chart_series_id(&command.chart_series_id)
+                        .study(command.study.clone())
+                        .call()
+                        .await
+                }
+                Command::ModifyStudy(command) => {
+                    self.ws
+                        .modify_study()
+                        .chart_session(&command.chart_session)
+                        .study_ids(
+                            &command
+                                .study_ids
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .try_into()
+                                .expect("Study IDs must be exactly 2"),
+                        )
+                        .chart_series_id(&command.chart_series_id)
+                        .study(command.study.clone())
+                        .call()
+                        .await
+                }
+                Command::RemoveStudy(session_termination_command_msg) => {
+                    self.ws
+                        .remove_study(
+                            &session_termination_command_msg.chart_session,
+                            &session_termination_command_msg.id,
+                        )
+                        .await
+                }
+                _ => Ok(()),
             }
         })
         .await;
@@ -881,13 +1092,32 @@ impl CommandRunner {
         result.unwrap_or_else(|_| Err(Error::Internal("Command timeout".into())))
     }
 
+    async fn evaluate_condition(&self, condition: &CommandCondition) -> bool {
+        match condition {
+            CommandCondition::SessionExists(session) => self
+                .command_queue
+                .session_tracker
+                .contains(session.as_str()),
+            CommandCondition::SymbolResolved(_symbol) => {
+                // This would require maintaining state of resolved symbols
+                true // Placeholder
+            }
+            CommandCondition::ConnectionHealthy => {
+                !self.ws.is_closed() && matches!(self.state.status, ConnectionStatus::Connected)
+            }
+            CommandCondition::QueueEmpty => self.command_queue.is_empty(),
+        }
+    }
+
     fn is_critical_command(&self, cmd: &Command) -> bool {
         matches!(
             cmd,
             Command::SetAuthToken { .. }
-                | Command::Delete
-                | Command::CreateQuoteSession
+                | Command::Close
+                | Command::Ping
+                | Command::CreateQuoteSession { .. }
                 | Command::CreateChartSession { .. }
+                | Command::CreateReplaySession { .. }
         )
     }
 
@@ -1048,25 +1278,12 @@ impl CommandRunner {
 
     fn log_stats(&mut self) {
         self.stats.total_uptime = self.start_time.elapsed();
-        let (priority_queued, normal_queued, dropped) = self.command_queue.stats();
-
         info!(
-            "CommandRunner Stats - Uptime: {:?}, Commands: {}/{} ({:.1}% success), Reconnects: {}/{}, Queue: P:{} N:{} D:{}, Avg Latency: {:?}",
-            self.stats.total_uptime,
-            self.stats.commands_processed,
-            self.stats.commands_processed + self.stats.commands_failed,
+            "Connection Stats: {:?}, Success Rate: {:.2}%, Uptime: {:?}",
+            self.stats,
             self.stats.success_rate() * 100.0,
-            self.stats.successful_reconnects,
-            self.stats.reconnect_attempts,
-            priority_queued,
-            normal_queued,
-            dropped,
-            self.stats.average_command_latency
+            self.stats.total_uptime
         );
-    }
-
-    fn log_final_stats(&self) {
-        info!("CommandRunner final stats: {:?}", self.stats);
     }
 
     #[instrument(skip(self))]
@@ -1079,7 +1296,7 @@ impl CommandRunner {
         // Stop reader task
         self.stop_reader_task().await;
 
-        let remaining_commands = self.command_queue.len();
+        let remaining_commands = self.command_queue.total_len();
         if remaining_commands > 0 {
             warn!(
                 "Dropping {} queued commands during cleanup",
@@ -1109,9 +1326,5 @@ impl CommandRunner {
 
     pub fn config(&self) -> &CommandRunnerConfig {
         &self.config
-    }
-
-    pub fn queue_stats(&self) -> (usize, usize, u64) {
-        self.command_queue.stats()
     }
 }

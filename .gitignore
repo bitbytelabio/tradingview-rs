@@ -21,3 +21,4 @@ _data
 tmp
 .DS_Store
 .idea
+*.csv

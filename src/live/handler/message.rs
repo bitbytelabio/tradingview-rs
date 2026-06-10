@@ -1,302 +1,127 @@
+use bon::Builder;
+use iso_currency::Currency;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use ustr::{Ustr, ustr};
+use ustr::Ustr;
 
 use crate::{
-    ChartOptions, DataPoint, Error, Interval, QuoteValue, Result, StudyOptions, StudyResponseData,
-    SymbolInfo, Timezone, pine_indicator::PineIndicator, websocket::SeriesInfo,
+    Interval, MarketAdjustment, SessionType, Timezone, options::Range, study::StudyConfiguration,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TradingViewResponse {
-    ChartData(SeriesInfo, Vec<DataPoint>),
-    QuoteData(QuoteValue),
-    StudyData(StudyOptions, StudyResponseData),
-    Error(Error, Vec<Value>),
-    SymbolInfo(SymbolInfo),
-    SeriesCompleted(Vec<Value>),
-    SeriesLoading(LoadingMsg),
-    QuoteCompleted(Vec<Value>),
-    ReplayOk(Vec<Value>),
-    ReplayPoint(Vec<Value>),
-    ReplayInstanceId(Vec<Value>),
-    ReplayResolutions(Vec<Value>),
-    ReplayDataEnd(Vec<Value>),
-    StudyLoading(LoadingMsg),
-    StudyCompleted(Vec<Value>),
-    UnknownEvent(Ustr, Vec<Value>),
+#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+pub enum CommandCondition {
+    SessionExists(Ustr),
+    SymbolResolved(Ustr),
+    ConnectionHealthy,
+    QueueEmpty,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Command {
-    Delete,
-    Ping,
-    SetAuthToken {
-        auth_token: Ustr,
-    },
-    SetLocals {
-        language: Ustr,
-        country: Ustr,
-    },
-    SetDataQuality {
-        quality: Ustr,
-    },
-    SetTimeZone {
-        session: Ustr,
-        timezone: Timezone,
-    },
-    CreateQuoteSession,
-    DeleteQuoteSession,
-    SetQuoteFields,
-    FastSymbols {
-        symbols: Vec<Ustr>,
-    },
-    AddSymbols {
-        symbols: Vec<Ustr>,
-    },
-    RemoveSymbols {
-        symbols: Vec<Ustr>,
-    },
-
-    CreateChartSession {
-        session: Ustr,
-    },
-    DeleteChartSession {
-        session: Ustr,
-    },
-    RequestMoreData {
-        session: Ustr,
-        series_id: Ustr,
-        bar_count: u64,
-    },
-    RequestMoreTickMarks {
-        session: Ustr,
-        series_id: Ustr,
-        bar_count: u64,
-    },
-
-    CreateStudy {
-        session: Ustr,
-        study_id: Ustr,
-        series_id: Ustr,
-        indicator: PineIndicator,
-    },
-    ModifyStudy {
-        session: Ustr,
-        study_id: Ustr,
-        series_id: Ustr,
-        indicator: PineIndicator,
-    },
-    RemoveStudy {
-        session: Ustr,
-        study_id: Ustr,
-        series_id: Ustr,
-    },
-    SetStudy {
-        study_options: StudyOptions,
-        session: Ustr,
-        series_id: Ustr,
-    },
-    CreateSeries {
-        session: Ustr,
-        series_id: Ustr,
-        series_version: Ustr,
-        series_symbol_id: Ustr,
-        config: ChartOptions,
-    },
-    ModifySeries {
-        session: Ustr,
-        series_id: Ustr,
-        series_version: Ustr,
-        series_symbol_id: Ustr,
-        config: ChartOptions,
-    },
-    RemoveSeries {
-        session: Ustr,
-        series_id: Ustr,
-    },
-    CreateReplaySession {
-        session: Ustr,
-    },
-    DeleteReplaySession {
-        session: Ustr,
-    },
-    ResolveSymbol {
-        session: Ustr,
-        symbol: Ustr,
-        exchange: Ustr,
-        opts: ChartOptions,
-        replay_session: Option<Ustr>,
-    },
-    SetReplayStep {
-        session: Ustr,
-        series_id: Ustr,
-        step: u64,
-    },
-    StartReplay {
-        session: Ustr,
-        series_id: Ustr,
-        interval: Interval,
-    },
-    StopReplay {
-        session: Ustr,
-        series_id: Ustr,
-    },
-    ResetReplay {
-        session: Ustr,
-        series_id: Ustr,
-        timestamp: i64,
-    },
-    SetReplay {
-        symbol: Ustr,
-        options: ChartOptions,
-        chart_session: Ustr,
-        symbol_series_id: Ustr,
-    },
-    SetMarket {
-        options: ChartOptions,
-    },
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct CommandMsg {
+    pub inner: Ustr,
 }
 
-impl Command {
-    /// Create AddSymbols command from string slice
-    pub fn add_symbols<S: AsRef<str>>(symbols: &[S]) -> Self {
-        Self::AddSymbols {
-            symbols: symbols.iter().map(|s| ustr(s.as_ref())).collect(),
-        }
-    }
-
-    /// Create AddSymbols command from a single symbol
-    pub fn add_symbol<S: AsRef<str>>(symbol: S) -> Self {
-        Self::AddSymbols {
-            symbols: vec![ustr(symbol.as_ref())],
-        }
-    }
-
-    /// Create RemoveSymbols command from string slice
-    pub fn remove_symbols<S: AsRef<str>>(symbols: &[S]) -> Self {
-        Self::RemoveSymbols {
-            symbols: symbols.iter().map(|s| ustr(s.as_ref())).collect(),
-        }
-    }
-
-    /// Create RemoveSymbols command from a single symbol
-    pub fn remove_symbol<S: AsRef<str>>(symbol: S) -> Self {
-        Self::RemoveSymbols {
-            symbols: vec![ustr(symbol.as_ref())],
-        }
-    }
-
-    /// Create SetMarket command with builder pattern
-    pub fn set_market(options: ChartOptions) -> Self {
-        Self::SetMarket { options }
-    }
-
-    /// Create Delete command
-    pub fn delete() -> Self {
-        Self::Delete
-    }
-
-    /// Create DeleteQuoteSession command
-    pub fn delete_quote_session() -> Self {
-        Self::DeleteQuoteSession
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[builder(on(Ustr, into))]
+pub struct QuoteCommandMsg {
+    pub quote_session: Ustr,
+    pub symbols: Vec<Ustr>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
-pub enum LoadingMsg {
-    Series(LoadingData),
-    Study(LoadingData),
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct AddReplaySeriesCommandMsg {
+    pub chart_session: Ustr,
+    pub series_id: Ustr,
+    pub instrument: Ustr, // e.g., "HOSE:FPT"
+    pub adjustment: Option<MarketAdjustment>,
+    pub session_type: Option<SessionType>,
+    pub currency: Option<Currency>,
+    pub interval: Interval,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LoadingType {
-    Series,
-    Study,
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct ReplayStepCommandMsg {
+    pub chart_session: Ustr,
+    pub series_id: Ustr,
+    pub step: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq, Hash)]
-pub struct LoadingData {
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct ReplayStartCommandMsg {
+    pub chart_session: Ustr,
+    pub series_id: Ustr,
+    pub interval: Interval,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct SessionTerminationCommandMsg {
+    pub chart_session: Ustr,
+    pub id: Ustr,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct ReplayResetCommandMsg {
+    pub chart_session: Ustr,
+    pub series_id: Ustr,
+    pub timestamp: i64, // Reset to this timestamp in seconds
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+#[builder(on(Ustr, into))]
+pub struct StudyCommandMsg {
+    pub chart_session: Ustr,
+    pub study_ids: [Ustr; 2],
+    pub chart_series_id: Ustr,
+    pub study: StudyConfiguration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct ChartSeriesCommandMsg {
+    pub chart_session: Ustr,
+    pub series_identifier: Ustr, // (sds_2)
+    pub series_id: Ustr,         // (s1)
+    pub symbol_series_id: Ustr,  // (sds_sym_2)
+    pub interval: Interval,
+    pub bar_count: u64,
+    pub range: Option<Range>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct ResolveSymbolCommandMsg {
     pub session: Ustr,
-    pub id1: Ustr,
-    pub id2: Ustr,
+    pub symbol_series_id: Ustr,
+    pub instrument: Ustr, // e.g., "HOSE:FPT"
+    pub adjustment: Option<MarketAdjustment>,
+    pub currency: Option<Currency>,
+    pub session_type: Option<SessionType>,
+    pub replay_session: Option<Ustr>,
 }
 
-impl LoadingMsg {
-    pub fn new(messages: &[Value]) -> Result<Self> {
-        const REQUIRED_FIELDS: usize = 3;
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct ChartDataRequestMsg {
+    pub chart_session: Ustr,
+    pub series_id: Ustr,
+    pub num: u64,
+}
 
-        if messages.len() < REQUIRED_FIELDS {
-            return Err(Error::Internal(Ustr::from(&format!(
-                "Loading message requires {} fields, got {}",
-                REQUIRED_FIELDS,
-                messages.len()
-            ))));
-        }
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct SetTimeZoneCommandMsg {
+    pub chart_session: Ustr,
+    pub timezone: Timezone, // e.g., "America/New_York"
+}
 
-        let session = Ustr::deserialize(&messages[0])?;
-        let id1 = Ustr::deserialize(&messages[1])?;
-        let id2 = Ustr::deserialize(&messages[2])?;
-
-        let data = LoadingData { session, id1, id2 };
-
-        // Auto-detect type based on ID format
-        let msg_type = Self::detect_type(&id1, &id2)?;
-
-        Ok(match msg_type {
-            LoadingType::Series => Self::Series(data),
-            LoadingType::Study => Self::Study(data),
-        })
-    }
-
-    fn detect_type(series_id1: &str, series_id2: &str) -> Result<LoadingType> {
-        // Check for series pattern: sds_* and s*
-        if series_id1.starts_with("sds_")
-            && series_id2.starts_with('s')
-            && !series_id2.contains("_st")
-        {
-            return Ok(LoadingType::Series);
-        }
-
-        // Check for study pattern: st* and *_st*
-        if series_id1.starts_with("st") && series_id2.contains("_st") {
-            return Ok(LoadingType::Study);
-        }
-
-        Err(Error::Internal(Ustr::from(&format!(
-            "Invalid series ID format: {series_id1} and {series_id2}"
-        ))))
-    }
-
-    pub fn session(&self) -> Ustr {
-        match self {
-            Self::Series(data) | Self::Study(data) => data.session,
-        }
-    }
-
-    pub fn id1(&self) -> Ustr {
-        match self {
-            Self::Series(data) | Self::Study(data) => data.id1,
-        }
-    }
-
-    pub fn id2(&self) -> Ustr {
-        match self {
-            Self::Series(data) | Self::Study(data) => data.id2,
-        }
-    }
-
-    pub fn data(&self) -> &LoadingData {
-        match self {
-            Self::Series(data) | Self::Study(data) => data,
-        }
-    }
-
-    pub fn is_series(&self) -> bool {
-        matches!(self, Self::Series(_))
-    }
-
-    pub fn is_study(&self) -> bool {
-        matches!(self, Self::Study(_))
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct SetLocaleCommandMsg {
+    pub language: Ustr, // e.g., "en"
+    pub country: Ustr,  // e.g., "US"
 }
