@@ -29,3 +29,19 @@ pub use iso_currency::{Country, Currency, CurrencySymbol};
 
 pub mod historical;
 pub mod live;
+
+// ---------------------------------------------------------------------------
+// New event-driven data loader modules
+// ---------------------------------------------------------------------------
+
+/// Generic market event types (Candle, Quote, Economic, News, etc.).
+pub mod events;
+
+/// Event sink abstraction + built-in sinks (channel, callback, kafka).
+pub mod sink;
+
+/// Data source abstraction + TradingView adapter.
+pub mod source;
+
+/// Event-driven data loader orchestrator.
+pub mod loader;
