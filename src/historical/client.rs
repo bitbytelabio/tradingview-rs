@@ -86,7 +86,12 @@ impl HistoricalClient {
         debug!(instrument = %instrument, "Symbol resolution requested");
 
         // 3. Create data series to start receiving chart data.
+        // The 7th argument carries the optional range spec (e.g.
+        // "r,{from}:{to}" for a unix-timestamp window, or presets like
+        // "12M"); when present, TradingView returns that window instead of
+        // the latest `bar_count` bars.
         let bar_count = request.num_bars.unwrap_or(100);
+        let range_arg = request.range.map(|r| r.to_string()).unwrap_or_default();
         ws.send(
             "create_series",
             &[
@@ -96,7 +101,7 @@ impl HistoricalClient {
                 Value::from(symbol_series_id.as_str()),
                 Value::from(request.interval.to_string()),
                 Value::from(bar_count),
-                Value::from(""),
+                Value::from(range_arg.as_str()),
             ],
         )
         .await?;
