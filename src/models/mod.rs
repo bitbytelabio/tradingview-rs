@@ -165,6 +165,11 @@ pub struct Symbol {
     pub market_type: String,
     #[serde(default)]
     pub exchange: String,
+    /// Data-feed prefix when it differs from the display exchange (e.g.
+    /// search shows `exchange: "NYSE Arca"` with `prefix: "AMEX"`; chart
+    /// requests must use `AMEX:SYMBOL`). Empty when identical.
+    #[serde(default)]
+    pub prefix: String,
     #[serde(default)]
     pub currency_code: String,
     #[serde(default, rename(deserialize = "provider_id"))]
