@@ -210,12 +210,12 @@ pub trait OHLCV {
 
 impl OHLCV for DataPoint {
     fn datetime(&self) -> DateTime<Utc> {
-        let timestamp = self.value[0] as i64;
-        DateTime::<Utc>::from_timestamp(timestamp, 0).expect("Invalid timestamp")
+        let ts = self.timestamp();
+        DateTime::<Utc>::from_timestamp(ts, 0).unwrap_or_default()
     }
 
     fn timestamp(&self) -> i64 {
-        self.value[0] as i64
+        self.value.first().copied().map(|v| v as i64).unwrap_or(0)
     }
 
     fn open(&self) -> f64 {
@@ -247,7 +247,7 @@ impl OHLCV for DataPoint {
     }
 
     fn volume(&self) -> f64 {
-        if self.value.len() < 5 {
+        if self.value.len() < 6 {
             return f64::NAN;
         }
         self.value[5]
