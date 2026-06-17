@@ -65,11 +65,7 @@ impl HistoricalClient {
         let series_id = "s1".to_string();
 
         // 1. Create chart session.
-        ws.send(
-            "chart_create_session",
-            &[Value::from(chart_session.as_str())],
-        )
-        .await?;
+        ws.create_chart_session(&chart_session).await?;
         debug!(session = %chart_session, "Chart session created");
 
         // 2. Resolve symbol within the session.

@@ -146,6 +146,37 @@ pub fn gen_id() -> Ustr {
     Ustr::from(s)
 }
 
+/// Extract `~h~<counter>` heartbeat echoes from a raw TradingView protocol
+/// text frame. Returns one echo string per heartbeat found (e.g. `"~h~42"`).
+///
+/// **Protocol requirement:** The server sends `~h~N` every ~25s and the client
+/// MUST echo the same bytes back. Echoing the *entire* raw text frame (which
+/// may also contain `~m~<len>~m~` JSON payloads with server→client methods
+/// like `du`, `qsd`) causes the server to parse those echoed frames as
+/// client→server messages — resulting in `"unsupported method: du"` or
+/// `"invalid_method: qsd"` critical errors.
+pub fn extract_heartbeat_echoes(raw: &str) -> Vec<String> {
+    // Find all `~h~<digits>` patterns and return each as a standalone
+    // heartbeat echo to send back.
+    let mut echoes = Vec::new();
+    let mut remaining = raw;
+    while let Some(pos) = remaining.find("~h~") {
+        let after_h = &remaining[pos + 3..];
+        let digits_end = after_h
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .count();
+        if digits_end > 0 {
+            let counter = &after_h[..digits_end];
+            echoes.push(format!("~h~{}", counter));
+            remaining = &after_h[digits_end..];
+        } else {
+            remaining = after_h;
+        }
+    }
+    echoes
+}
+
 pub fn parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {
     if message.is_empty() {
         return vec![];
@@ -778,5 +809,58 @@ mod tests {
         let client =
             build_request(Some("sessionid=test; sessionid_sign=sig;")).expect("with cookie");
         drop(client);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // extract_heartbeat_echoes
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn extract_heartbeat_single() {
+        let raw = "~m~150~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}~h~42";
+        let echoes = super::extract_heartbeat_echoes(raw);
+        assert_eq!(echoes, vec!["~h~42"]);
+    }
+
+    #[test]
+    fn extract_heartbeat_multiple() {
+        let raw = "~h~42~m~150~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}~h~43";
+        let echoes = super::extract_heartbeat_echoes(raw);
+        assert_eq!(echoes, vec!["~h~42", "~h~43"]);
+    }
+
+    #[test]
+    fn extract_heartbeat_none() {
+        let raw = "~m~150~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}";
+        let echoes = super::extract_heartbeat_echoes(raw);
+        assert!(echoes.is_empty());
+    }
+
+    #[test]
+    fn extract_heartbeat_interleaved() {
+        let raw = "~h~99~m~30~m~{\"m\":\"qsd\",\"p\":[\"qs_xxx\"]}~h~100";
+        let echoes = super::extract_heartbeat_echoes(raw);
+        assert_eq!(echoes, vec!["~h~99", "~h~100"]);
+    }
+
+    #[test]
+    fn extract_heartbeat_standalone() {
+        let raw = "~h~42";
+        let echoes = super::extract_heartbeat_echoes(raw);
+        assert_eq!(echoes, vec!["~h~42"]);
+    }
+
+    #[test]
+    fn extract_heartbeat_empty_string() {
+        let echoes = super::extract_heartbeat_echoes("");
+        assert!(echoes.is_empty());
+    }
+
+    #[test]
+    fn extract_heartbeat_consecutive() {
+        // Two consecutive heartbeats: ~h~10~h~20
+        let raw = "~h~10~h~20";
+        let echoes = super::extract_heartbeat_echoes(raw);
+        assert_eq!(echoes, vec!["~h~10", "~h~20"]);
     }
 }

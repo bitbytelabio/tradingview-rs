@@ -114,8 +114,12 @@ impl Command {
                         "Chart series parameters cannot be empty".into(),
                     ));
                 }
-                if msg.bar_count == 0 {
-                    return Err(Error::Internal("Bar count must be greater than 0".into()));
+                // bar_count == 0 is valid in range mode (7-arg form).
+                // In count mode (6-arg form), bar_count must be > 0.
+                if msg.range.is_none() && msg.bar_count == 0 {
+                    return Err(Error::Internal(
+                        "Bar count must be greater than 0 in count mode (range mode allows 0)".into(),
+                    ));
                 }
             }
             Command::BatchCommands(commands) => {

@@ -913,11 +913,32 @@ impl<T: Handler> WebSocketClient<T> {
 
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn create_chart_session(&self, session: &str) -> Result<()> {
-        self.send("chart_create_session", &payload!(session))
-            .await?;
+        // Protocol spec: chart_create_session takes 2 args: [session_id, ""]
+        // The 2nd arg is an empty string, consistent with protocol spec.
+        self.send(
+            "chart_create_session",
+            &payload!(session, ""),
+        )
+        .await?;
         Ok(())
     }
 
+    /// Create a chart data series.
+    ///
+    /// # Protocol (corrected)
+    ///
+    /// TradingView uses **two mutually exclusive modes**:
+    ///
+    /// **Count mode** — 6 args, for live streaming and N-bar lookback:
+    ///   `["cs_xxx", "sds_1", "s1", "sds_sym_1", "1D", 300]`
+    ///
+    /// **Range mode** — 7 args, for historical date-range fetch:
+    ///   `["cs_xxx", "sds_1", "s1", "sds_sym_1", "1D", 0, "r,from_unix:to_unix"]`
+    ///
+    /// **FIX**: The old code always sent 7 args, passing an empty string
+    /// `""` for the 7th in count mode. The server interprets 7 args as
+    /// range mode, fails on the empty range, and emits
+    /// `critical_error: "unsupported method: du"`.
     #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn create_series(
@@ -930,27 +951,37 @@ impl<T: Handler> WebSocketClient<T> {
         bar_count: u64,
         range: Option<Range>,
     ) -> Result<()> {
-        let range = match range {
-            Some(r) => r.to_string(),
-            None => Default::default(),
-        };
-        self.send(
-            "create_series",
-            &payload!(
+        // Count mode: 6 args (no range).
+        // Range mode: 7 args with `bar_count = 0` and `range = "r,from:to"`.
+        if let Some(r) = range {
+            let args = payload!(
                 chart_session,
                 series_identifier,
                 series_id,
                 symbol_series_id,
                 interval.to_string(),
-                bar_count,
-                range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
-            ),
-        )
-        .await?;
+                0u64, // bar_count MUST be 0 in range mode
+                r.to_string() // "r,1626220800:1628640000"
+            );
+            self.send("create_series", &args).await?;
+        } else {
+            let args: Vec<Value> = vec![
+                Value::from(chart_session),
+                Value::from(series_identifier),
+                Value::from(series_id),
+                Value::from(symbol_series_id),
+                Value::from(interval.to_string()),
+                Value::from(bar_count),
+            ];
+            self.send("create_series", &args).await?;
+        }
 
         Ok(())
     }
 
+    /// Modify an existing chart series (e.g., change timeframe).
+    ///
+    /// Same count/range mode distinction as [`create_series`].
     #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn modify_series(
@@ -963,23 +994,28 @@ impl<T: Handler> WebSocketClient<T> {
         bar_count: u64,
         range: Option<Range>,
     ) -> Result<()> {
-        let range = match range {
-            Some(r) => r.to_string(),
-            None => Default::default(),
-        };
-        self.send(
-            "modify_series",
-            &payload!(
+        if let Some(r) = range {
+            let args = payload!(
                 chart_session,
                 series_identifier,
                 series_id,
                 symbol_series_id,
                 interval.to_string(),
-                bar_count,
-                range // |r,1626220800:1628640000|1D|5d|1M|3M|6M|YTD|12M|60M|ALL|
-            ),
-        )
-        .await?;
+                0u64,
+                r.to_string()
+            );
+            self.send("modify_series", &args).await?;
+        } else {
+            let args: Vec<Value> = vec![
+                Value::from(chart_session),
+                Value::from(series_identifier),
+                Value::from(series_id),
+                Value::from(symbol_series_id),
+                Value::from(interval.to_string()),
+                Value::from(bar_count),
+            ];
+            self.send("modify_series", &args).await?;
+        }
 
         Ok(())
     }
@@ -1408,8 +1444,18 @@ impl<T: Handler> Socket for WebSocketClient<T> {
                     trace!("Received other message: {:?}", value);
                     if value.is_number() {
                         debug!("handling heartbeat message: {:?}", value);
-                        if let Err(e) = self.ping(raw).await {
-                            self.handle_error(e, ustr("ping_response")).await?;
+                        // FIX: Only echo ~h~<counter> back, never the entire
+                        // raw message. The raw text may also contain
+                        // ~m~<len>~m~ JSON frames with server→client methods
+                        // (du, qsd, etc.). Echoing those back would cause the
+                        // server to parse them as client→server messages,
+                        // triggering "unsupported method: du/qsd" errors.
+                        if let Message::Text(raw_text) = raw {
+                            for echo in crate::utils::extract_heartbeat_echoes(raw_text) {
+                                if let Err(e) = self.send_raw_message(&echo).await {
+                                    self.handle_error(e, ustr("heartbeat_echo")).await?;
+                                }
+                            }
                         }
                     } else if value.is_string() {
                         trace!("Received string message: {:?}", value);
