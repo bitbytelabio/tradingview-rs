@@ -23,11 +23,7 @@ use tracing::{debug, error, info, warn};
 
 use tradingview::{
     DataServer, Error,
-    live::{
-        handler::Handler,
-        models::TradingViewDataEvent,
-        websocket::WebSocketClient,
-    },
+    live::{handler::Handler, models::TradingViewDataEvent, websocket::WebSocketClient},
 };
 
 // =============================================================================

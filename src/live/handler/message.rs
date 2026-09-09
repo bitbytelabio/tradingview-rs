@@ -31,8 +31,8 @@ pub struct QuoteCommandMsg {
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
 #[builder(on(Ustr, into))]
 pub struct AddReplaySeriesCommandMsg {
-    pub chart_session: Ustr,
-    pub series_id: Ustr,
+    pub replay_session: Ustr,
+    pub request_id: Ustr,
     pub instrument: Ustr, // e.g., "HOSE:FPT"
     pub adjustment: Option<MarketAdjustment>,
     pub session_type: Option<SessionType>,
@@ -43,17 +43,24 @@ pub struct AddReplaySeriesCommandMsg {
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
 #[builder(on(Ustr, into))]
 pub struct ReplayStepCommandMsg {
-    pub chart_session: Ustr,
-    pub series_id: Ustr,
+    pub replay_session: Ustr,
+    pub request_id: Ustr,
     pub step: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
 #[builder(on(Ustr, into))]
 pub struct ReplayStartCommandMsg {
-    pub chart_session: Ustr,
-    pub series_id: Ustr,
-    pub interval: Interval,
+    pub replay_session: Ustr,
+    pub request_id: Ustr,
+    pub interval: u64, // Milliseconds
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
+#[builder(on(Ustr, into))]
+pub struct ReplayStopCommandMsg {
+    pub replay_session: Ustr,
+    pub request_id: Ustr,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
@@ -66,11 +73,10 @@ pub struct SessionTerminationCommandMsg {
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, Builder)]
 #[builder(on(Ustr, into))]
 pub struct ReplayResetCommandMsg {
-    pub chart_session: Ustr,
-    pub series_id: Ustr,
+    pub replay_session: Ustr,
+    pub request_id: Ustr,
     pub timestamp: i64, // Reset to this timestamp in seconds
 }
-
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[builder(on(Ustr, into))]
 pub struct StudyCommandMsg {

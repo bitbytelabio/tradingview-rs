@@ -1,6 +1,6 @@
 use crate::{
-    models::{pine_indicator::ScriptType, Interval, MarketAdjustment, SessionType},
     Error,
+    models::{Interval, MarketAdjustment, SessionType, pine_indicator::ScriptType},
 };
 use bon::Builder;
 use iso_currency::Currency;
@@ -32,6 +32,8 @@ use ustr::Ustr;
 /// Alternatively, pass an instrument string in `"EXCHANGE:SYMBOL"` format:
 ///
 /// ```rust
+/// use tradingview::ChartOptions;
+///
 /// let opts = ChartOptions::builder()
 ///     .instrument("BINANCE:BTCUSDT")
 ///     .build()

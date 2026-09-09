@@ -5,18 +5,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::MutexGuard};
 use tokio_tungstenite::{
+    MaybeTlsStream, WebSocketStream,
     tungstenite::{
         http::{HeaderMap, HeaderValue},
         protocol::Message,
     },
-    MaybeTlsStream, WebSocketStream,
 };
 use ustr::Ustr;
 
 use crate::{
+    Result, UA,
     error::{Error, TradingViewError},
     utils::format_packet,
-    Result, UA,
 };
 use std::sync::LazyLock;
 
@@ -171,8 +171,21 @@ impl fmt::Display for SocketServerInfo {
 pub enum SocketMessage<T> {
     SocketServerInfo(SocketServerInfo),
     SocketMessage(T),
+    Heartbeat(u64),
     Other(Value),
-    Unknown(Ustr),
+    Unknown(String),
+}
+
+impl<T> SocketMessage<T> {
+    pub fn heartbeat_echo(&self) -> Option<String> {
+        match self {
+            SocketMessage::Heartbeat(counter) => {
+                let payload = format!("~h~{counter}");
+                Some(format!("~m~{}~m~{payload}", payload.len()))
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Which TradingView data server tier to connect to.

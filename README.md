@@ -32,8 +32,8 @@ The library exposes **two usage tiers**:
 - [x] **User Authentication** — Login with username/password + TOTP 2FA support
 - [x] **Premium Features** — Access TradingView Pro/Premium/Expert data tiers
 - [ ] Fundamental data
-- [ ] Technical analysis signals
-- [ ] Invite-only indicators support
+- [x] **Technical analysis signals** — Retrieve scanner ratings across 8 timeframes (via get_technical_analysis)
+- [x] **Invite-only indicators support** — Access private Pine Script indicators (via get_private_indicators)
 - [ ] Public chat interactions
 - [ ] Screener integration
 - [ ] Economic calendar
@@ -384,7 +384,6 @@ For the project roadmap, see [ROADMAP.md](ROADMAP.md).
 - **Alpha Quality** — Breaking changes may occur between minor versions
 - **Premium Features** — Some features require TradingView Pro/Premium/Expert subscription
 - **Study Series Loading** — Some Pine Script study data series need fixes (see `TODO` in indicator code)
-- **Parse Round-Trip** — `SocketMessage` deserialization has known round-trip mismatches with the serde `untagged` enum (7 tests currently skipped)
 
 ## Roadmap
 

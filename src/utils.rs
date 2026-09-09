@@ -6,7 +6,6 @@ use crate::{
 use bon::builder;
 use iso_currency::Currency;
 use rand::{Rng, distr::Alphanumeric};
-use regex::Regex;
 use reqwest::{
     Response,
     header::{ACCEPT, COOKIE, HeaderMap, HeaderValue, ORIGIN, REFERER},
@@ -49,11 +48,6 @@ static SHARED_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 
     builder.build().expect("Failed to build shared HTTP client")
 });
-
-static CLEANER_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"~h~").expect("Failed to compile regex"));
-static SPLITTER_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"~m~\d+~m~").expect("Failed to compile regex"));
 
 #[macro_export]
 macro_rules! payload {
@@ -137,13 +131,13 @@ pub fn gen_session_id(session_type: &str) -> String {
 }
 
 #[inline]
-pub fn gen_id() -> Ustr {
+pub fn gen_id() -> String {
     let mut rng = rand::rng();
     let buf: [u8; 12] = std::array::from_fn(|_| rng.sample(Alphanumeric));
     // SAFETY: `Alphanumeric` samples only ASCII bytes (0-9, A-Z, a-z),
-    // which are always valid UTF-8. The `expect` documents this invariant.
+    // which are always valid UTF-8.
     let s = core::str::from_utf8(&buf).expect("Alphanumeric produces only ASCII");
-    Ustr::from(s)
+    s.to_owned()
 }
 
 /// Extract properly-framed `~m~<len>~m~~h~<counter>` heartbeat echoes from
@@ -154,25 +148,51 @@ pub fn gen_id() -> Ustr {
 /// actual `~h~<counter>` payload size**, not blindly echoed from the server
 /// frame. This guarantees correctness even if the server sends a malformed
 /// length.
-///
-/// Uses regex for reliability — manual string parsing is more error-prone
-/// for approximately 3% performance gain, which is negligible here.
 pub fn extract_heartbeat_echoes(raw: &str) -> Vec<String> {
-    // Match: ~m~<len>~m~~h~<counter>
-    // The regex crate is well-optimized; capture groups extract len and counter.
-    static HB_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"~m~\d+~m~~h~(\d+)").expect("heartbeat regex compile")
-    });
-
-    HB_RE
-        .captures_iter(raw)
-        .map(|caps| {
-            let counter = caps.get(1).unwrap().as_str();
-            let payload = format!("~h~{}", counter);
-            let len = payload.len();
-            format!("~m~{}~m~{}", len, payload)
-        })
+    parse_packet(raw)
+        .into_iter()
+        .filter_map(|msg| msg.heartbeat_echo())
         .collect()
+}
+
+fn classify_json_value(value: serde_json::Value) -> SocketMessage<SocketMessageDe> {
+    match value {
+        serde_json::Value::Object(mut map) => {
+            if matches!(map.get("m"), Some(serde_json::Value::String(_)))
+                && matches!(map.get("p"), Some(serde_json::Value::Array(_)))
+            {
+                let m_str = match map.remove("m").unwrap() {
+                    serde_json::Value::String(s) => s,
+                    _ => unreachable!(),
+                };
+                let p_vec = match map.remove("p").unwrap() {
+                    serde_json::Value::Array(a) => a,
+                    _ => unreachable!(),
+                };
+                let t = map.get("t").and_then(|v| v.as_u64()).unwrap_or(0);
+                let t_ms = map.get("t_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+                return SocketMessage::SocketMessage(SocketMessageDe {
+                    m: Ustr::from(&m_str),
+                    p: p_vec,
+                    t,
+                    t_ms,
+                });
+            }
+
+            if map.contains_key("session_id") && map.contains_key("timestamp") {
+                let obj = serde_json::Value::Object(map);
+                if let Ok(info) =
+                    serde_json::from_value::<crate::live::models::SocketServerInfo>(obj.clone())
+                {
+                    return SocketMessage::SocketServerInfo(info);
+                }
+                return SocketMessage::Other(obj);
+            }
+
+            SocketMessage::Other(serde_json::Value::Object(map))
+        }
+        other => SocketMessage::Other(other),
+    }
 }
 
 pub fn parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {
@@ -180,29 +200,106 @@ pub fn parse_packet(message: &str) -> Vec<SocketMessage<SocketMessageDe>> {
         return vec![];
     }
 
-    let cleaned_message = CLEANER_REGEX.replace_all(message, "");
-    let packets: Vec<SocketMessage<SocketMessageDe>> = SPLITTER_REGEX
-        .split(&cleaned_message)
-        .filter(|packet| !packet.is_empty())
-        .map(|packet| match serde_json::from_str(packet) {
-            Ok(value) => value,
-            Err(error) => {
-                if error.is_syntax() {
-                    error!("error parsing packet, invalid JSON: {}", error);
-                } else {
-                    error!("error parsing packet: {}", error);
-                }
-                SocketMessage::Unknown(Ustr::from(packet))
+    let bytes = message.as_bytes();
+    let mut pos = 0;
+    let mut packets = Vec::new();
+
+    while pos < bytes.len() {
+        if bytes[pos..].starts_with(b"~m~") {
+            let header_start = pos + 3;
+            let mut len_end = header_start;
+            while len_end < bytes.len() && bytes[len_end].is_ascii_digit() {
+                len_end += 1;
             }
-        })
-        .collect();
+
+            if len_end > header_start && bytes[len_end..].starts_with(b"~m~") {
+                let len_str = &message[header_start..len_end];
+                if let Ok(payload_len) = len_str.parse::<usize>() {
+                    let payload_start = len_end + 3;
+                    let slice = &message[payload_start..];
+                    let mut utf16_count = 0;
+                    let mut actual_bytes = slice.len();
+                    let mut found = false;
+
+                    for (byte_offset, ch) in slice.char_indices() {
+                        if utf16_count >= payload_len {
+                            actual_bytes = byte_offset;
+                            found = true;
+                            break;
+                        }
+                        utf16_count += ch.len_utf16();
+                    }
+
+                    if !found && utf16_count <= payload_len {
+                        actual_bytes = slice.len();
+                    }
+
+                    if actual_bytes > 0 {
+                        let payload = &slice[..actual_bytes];
+                        if payload.starts_with("~h~") {
+                            let mut hb_len = 3;
+                            while hb_len < payload.len()
+                                && payload.as_bytes()[hb_len].is_ascii_digit()
+                            {
+                                hb_len += 1;
+                            }
+                            if hb_len > 3 {
+                                if let Ok(counter) = payload[3..hb_len].parse::<u64>() {
+                                    packets.push(SocketMessage::Heartbeat(counter));
+                                }
+                                pos = payload_start + hb_len;
+                                continue;
+                            }
+                        }
+
+                        match serde_json::from_str::<serde_json::Value>(payload) {
+                            Ok(val) => {
+                                packets.push(classify_json_value(val));
+                            }
+                            Err(err) => {
+                                if err.is_syntax() {
+                                    error!("error parsing packet, invalid JSON: {}", err);
+                                } else {
+                                    error!("error parsing packet: {}", err);
+                                }
+                                packets.push(SocketMessage::Unknown(payload.to_string()));
+                            }
+                        }
+                    }
+
+                    pos = payload_start + actual_bytes;
+                    continue;
+                }
+            }
+
+            pos += 3;
+        } else if bytes[pos..].starts_with(b"~h~") {
+            let counter_start = pos + 3;
+            let mut counter_end = counter_start;
+            while counter_end < bytes.len() && bytes[counter_end].is_ascii_digit() {
+                counter_end += 1;
+            }
+
+            if counter_end > counter_start {
+                if let Ok(counter) = message[counter_start..counter_end].parse::<u64>() {
+                    packets.push(SocketMessage::Heartbeat(counter));
+                }
+                pos = counter_end;
+            } else {
+                pos += 3;
+            }
+        } else {
+            pos += 1;
+        }
+    }
 
     packets
 }
 
 pub fn format_packet<T: Serialize>(packet: T) -> Result<Message> {
     let json_string = serde_json::to_string(&packet)?;
-    let formatted_message = format!("~m~{}~m~{}", json_string.len(), json_string);
+    let utf16_len = json_string.encode_utf16().count();
+    let formatted_message = format!("~m~{}~m~{}", utf16_len, json_string);
     debug!("Formatted packet: {}", formatted_message);
     Ok(Message::Text(formatted_message.into()))
 }
@@ -450,10 +547,10 @@ mod tests {
 
     #[test]
     fn parse_packet_negative_like_length_is_skipped() {
-        // "~m~-1~m~xxx" — '-' is not a digit, so the ~m~-1~m~ delimiter
-        // doesn't match `~m~\d+~m~`. The entire input becomes one Unknown.
+        // "~m~-1~m~xxx" — '-' is not a digit, so not a valid length header.
+        // Protocol invariant: malformed frames never panic.
         let result = parse_packet("~m~-1~m~xxx");
-        assert_eq!(result.len(), 1);
+        assert!(result.is_empty());
     }
 
     #[test]
@@ -513,61 +610,54 @@ mod tests {
     // parse_packet — heartbeat / ping edge cases
     // ──────────────────────────────────────────────────────────────────
 
-    /// `~h~` followed by ping digits, then a valid frame. The regex parser
-    /// strips `~h~` then splits on `~m~\d+~m~`, yielding two segments:
-    /// the ping digits and the frame payload.
     #[test]
     fn parse_packet_ping_digits_before_frame() {
-        // ~h~9999999999~m~5~m~hello => heartbeat + 10 digits + valid frame
+        // ~h~9999999999~m~5~m~hello => heartbeat + frame
         let result = parse_packet("~h~9999999999~m~5~m~hello");
-        // Regex: after stripping ~h~, split on ~m~5~m~ yields ["9999999999", "hello"]
         assert_eq!(result.len(), 2);
+        assert_eq!(result[0], SocketMessage::Heartbeat(9999999999));
+        assert_eq!(result[1], SocketMessage::Unknown("hello".to_string()));
     }
 
-    /// Consecutive ping keepalives with digits only (no frames).
-    /// The regex parser strips `~h~` leaving the digits as an Unknown segment.
     #[test]
     fn parse_packet_consecutive_pings_only() {
-        // 10 repetitions of "~h~9999999999" — no frames at all.
+        // 10 repetitions of "~h~9999999999" — 10 typed Heartbeat packets.
         let input = "~h~9999999999".repeat(10);
         let result = parse_packet(&input);
-        // Regex strips all `~h~`, leaving digits as one Unknown segment.
-        assert_eq!(result.len(), 1);
+        assert_eq!(result.len(), 10);
+        for msg in result {
+            assert_eq!(msg, SocketMessage::Heartbeat(9999999999));
+        }
     }
 
-    /// Mixed: heartbeat, ping digits, and valid frames interleaved.
     #[test]
     fn parse_packet_mixed_pings_and_frames() {
         let input = concat!(
-            "~h~",                                     // heartbeat only
+            "~h~",                                     // bare heartbeat without counter (skipped)
             "~m~23~m~{\"m\":\"test1\",\"p\":[\"a\"]}", // valid frame
             "~h~9999999999",                           // ping digits
             "~m~23~m~{\"m\":\"test2\",\"p\":[\"b\"]}", // valid frame
             "~h~88888888",                             // more ping digits
         );
         let result = parse_packet(input);
-        assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 4);
+        assert!(matches!(&result[0], SocketMessage::SocketMessage(_)));
+        assert_eq!(result[1], SocketMessage::Heartbeat(9999999999));
+        assert!(matches!(&result[2], SocketMessage::SocketMessage(_)));
+        assert_eq!(result[3], SocketMessage::Heartbeat(88888888));
     }
 
-    /// `~h~` followed by digits that happen to form a valid-looking
-    /// `~m~<len>~m~` prefix. The regex parser treats this as one
-    /// non-frame segment (Unknown) since the `~m~` is not preceded by `~m~`.
     #[test]
     fn parse_packet_ping_digits_resembling_frame_prefix() {
-        // "~h~10~m~hello" — after `~h~`, we have "10~m~hello".
-        // No `~m~\d+~m~` delimiter → entire string is one Unknown segment.
         let result = parse_packet("~h~10~m~hello");
         assert_eq!(result.len(), 1);
+        assert_eq!(result[0], SocketMessage::Heartbeat(10));
     }
 
-    /// Massive ping: `~h~` followed by 100-digit "ping".
-    /// The regex parser strips `~h~` leaving the digits as an Unknown segment.
     #[test]
     fn parse_packet_large_ping_no_panic() {
         let ping = format!("~h~{}", "9".repeat(100));
-        let result = parse_packet(&ping);
-        // Regex strips `~h~`, leaving 100 digits → one Unknown segment.
-        assert_eq!(result.len(), 1);
+        let _result = parse_packet(&ping);
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -588,10 +678,6 @@ mod tests {
 
     #[test]
     fn roundtrip_format_then_parse_socket_message_ser() {
-        // Simulate a real-world quote message format.
-        // SocketMessageSer has only `m` and `p` — no `t`/`t_ms` fields —
-        // so the untagged enum deserializes it as Other(Value), not
-        // SocketMessage(SocketMessageDe).
         let msg = models::SocketMessageSer::new(
             "qsd",
             serde_json::json!([{
@@ -607,11 +693,13 @@ mod tests {
         let parsed = parse_packet(text);
         assert_eq!(parsed.len(), 1);
         match &parsed[0] {
-            SocketMessage::Other(v) => {
-                assert_eq!(v["m"], "qsd");
-                assert_eq!(v["p"][0]["n"], "AAPL");
+            SocketMessage::SocketMessage(de) => {
+                assert_eq!(de.m.as_str(), "qsd");
+                assert_eq!(de.p[0]["n"], "AAPL");
             }
-            other => panic!("expected Other(Value) for SocketMessageSer round-trip, got {other:?}"),
+            other => panic!(
+                "expected SocketMessage(SocketMessageDe) for SocketMessageSer round-trip, got {other:?}"
+            ),
         }
     }
 
@@ -639,11 +727,13 @@ mod tests {
         assert_eq!(parsed.len(), msgs.len());
         for (i, p) in parsed.iter().enumerate() {
             match p {
-                SocketMessage::Other(v) => {
-                    assert_eq!(v["m"], format!("method_{i}"));
-                    assert_eq!(v["p"][0]["index"], i);
+                SocketMessage::SocketMessage(de) => {
+                    assert_eq!(de.m.as_str(), format!("method_{i}"));
+                    assert_eq!(de.p[0]["index"], i);
                 }
-                other => panic!("expected Other(Value) at index {i}, got {other:?}"),
+                other => {
+                    panic!("expected SocketMessage(SocketMessageDe) at index {i}, got {other:?}")
+                }
             }
         }
     }
@@ -707,7 +797,7 @@ mod tests {
 
     #[test]
     fn gen_id_is_unique_across_many_calls() {
-        let ids: Vec<Ustr> = (0..100).map(|_| gen_id()).collect();
+        let ids: Vec<String> = (0..100).map(|_| gen_id()).collect();
         let unique: std::collections::HashSet<_> = ids.iter().collect();
         assert_eq!(unique.len(), 100, "gen_id should produce unique values");
     }
@@ -717,9 +807,83 @@ mod tests {
         for _ in 0..50 {
             let id = gen_id();
             assert!(
-                id.as_str().chars().all(|c| c.is_ascii_alphanumeric()),
+                id.chars().all(|c| c.is_ascii_alphanumeric()),
                 "gen_id produced non-alphanumeric: {id}"
             );
+        }
+    }
+
+    #[test]
+    fn two_heartbeats_produce_exactly_two_typed_heartbeats_and_echoes() {
+        let raw = "~m~5~m~~h~42~m~25~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}~m~5~m~~h~43";
+        let parsed = parse_packet(raw);
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed[0], SocketMessage::Heartbeat(42));
+        assert!(matches!(parsed[1], SocketMessage::SocketMessage(_)));
+        assert_eq!(parsed[2], SocketMessage::Heartbeat(43));
+
+        let echoes = extract_heartbeat_echoes(raw);
+        assert_eq!(echoes, vec!["~m~5~m~~h~42", "~m~5~m~~h~43"]);
+    }
+
+    #[test]
+    fn embedded_tilde_m_and_tilde_h_survive() {
+        let payload = serde_json::json!({
+            "m": "quote",
+            "p": ["embedded ~m~5~m~ and ~h~ text"]
+        });
+        let formatted = super::format_packet(&payload).expect("format succeeds");
+        let text = match &formatted {
+            tokio_tungstenite::tungstenite::protocol::Message::Text(t) => t.as_str(),
+            _ => panic!("expected text"),
+        };
+        let parsed = parse_packet(text);
+        assert_eq!(parsed.len(), 1);
+        match &parsed[0] {
+            SocketMessage::SocketMessage(de) => {
+                assert_eq!(de.m.as_str(), "quote");
+                assert_eq!(de.p[0], "embedded ~m~5~m~ and ~h~ text");
+            }
+            other => panic!("expected SocketMessage, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unicode_byte_lengths_roundtrip() {
+        let payload = serde_json::json!({
+            "m": "study_data",
+            "p": [{"name": "📈 Moving Average", "currency": "€"}]
+        });
+        let formatted = super::format_packet(&payload).expect("format succeeds");
+        let text = match &formatted {
+            tokio_tungstenite::tungstenite::protocol::Message::Text(t) => t.as_str(),
+            _ => panic!("expected text"),
+        };
+        let parsed = parse_packet(text);
+        assert_eq!(parsed.len(), 1);
+        match &parsed[0] {
+            SocketMessage::SocketMessage(de) => {
+                assert_eq!(de.m.as_str(), "study_data");
+                assert_eq!(de.p[0]["name"], "📈 Moving Average");
+                assert_eq!(de.p[0]["currency"], "€");
+            }
+            other => panic!("expected SocketMessage, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn m_p_maps_to_socket_message_de() {
+        let raw = r#"~m~23~m~{"m":"test","p":["a"]}"#;
+        let parsed = parse_packet(raw);
+        assert_eq!(parsed.len(), 1);
+        match &parsed[0] {
+            SocketMessage::SocketMessage(de) => {
+                assert_eq!(de.m.as_str(), "test");
+                assert_eq!(de.p[0], "a");
+                assert_eq!(de.t, 0);
+                assert_eq!(de.t_ms, 0);
+            }
+            other => panic!("expected SocketMessage(SocketMessageDe), got {other:?}"),
         }
     }
 
@@ -815,21 +979,21 @@ mod tests {
 
     #[test]
     fn extract_heartbeat_single() {
-        let raw = "~m~150~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}~m~5~m~~h~42";
+        let raw = "~m~25~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}~m~5~m~~h~42";
         let echoes = super::extract_heartbeat_echoes(raw);
         assert_eq!(echoes, vec!["~m~5~m~~h~42"]);
     }
 
     #[test]
     fn extract_heartbeat_multiple() {
-        let raw = "~m~5~m~~h~42~m~150~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}~m~5~m~~h~43";
+        let raw = "~m~5~m~~h~42~m~25~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}~m~5~m~~h~43";
         let echoes = super::extract_heartbeat_echoes(raw);
         assert_eq!(echoes, vec!["~m~5~m~~h~42", "~m~5~m~~h~43"]);
     }
 
     #[test]
     fn extract_heartbeat_none() {
-        let raw = "~m~150~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}";
+        let raw = "~m~25~m~{\"m\":\"du\",\"p\":[\"cs_xxx\"]}";
         let echoes = super::extract_heartbeat_echoes(raw);
         assert!(echoes.is_empty());
     }
@@ -837,7 +1001,7 @@ mod tests {
     #[test]
     fn extract_heartbeat_interleaved() {
         // "~h~99" = 5 bytes → ~m~5~m~, "~h~100" = 6 bytes → ~m~6~m~
-        let raw = "~m~5~m~~h~99~m~30~m~{\"m\":\"qsd\",\"p\":[\"qs_xxx\"]}~m~6~m~~h~100";
+        let raw = "~m~5~m~~h~99~m~25~m~{\"m\":\"qsd\",\"p\":[\"qs_xxx\"]}~m~6~m~~h~100";
         let echoes = super::extract_heartbeat_echoes(raw);
         assert_eq!(echoes, vec!["~m~5~m~~h~99", "~m~6~m~~h~100"]);
     }
@@ -905,5 +1069,32 @@ mod tests {
         let raw = "~m~30~m~{\"m\":\"set\",\"p\":[\"~h~\"]}";
         let echoes = super::extract_heartbeat_echoes(raw);
         assert!(echoes.is_empty());
+    }
+
+    #[test]
+    fn test_parse_packet_utf16_code_units_vietnamese() {
+        let json_val = serde_json::json!({
+            "m": "symbol_resolved",
+            "p": [
+                "sds_sym_1",
+                {
+                    "name": "HOSE:FPT",
+                    "local_description": "CÔNG TY CỔ PHẦN FPT"
+                }
+            ]
+        });
+        let json_str = json_val.to_string();
+        let utf16_len = json_str.encode_utf16().count();
+        let packet = format!("~m~{}~m~{}", utf16_len, json_str);
+
+        let result = parse_packet(&packet);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            SocketMessage::SocketMessage(de) => {
+                assert_eq!(de.m, "symbol_resolved");
+                assert_eq!(de.p.len(), 2);
+            }
+            other => panic!("expected SocketMessage, got {other:?}"),
+        }
     }
 }

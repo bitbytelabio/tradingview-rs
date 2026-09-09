@@ -169,10 +169,7 @@ impl HistoricalClient {
 
             // Each task gets its own HistoricalClient so concurrent
             // WebSocket connections don't interfere.
-            let client = HistoricalClient::new(
-                self.auth_token.clone(),
-                self.server,
-            );
+            let client = HistoricalClient::new(self.auth_token.clone(), self.server);
 
             join_set.spawn(async move {
                 let _permit = permit.acquire().await;
@@ -252,7 +249,10 @@ mod tests {
     fn test_batch_config_defaults() {
         let config = BatchConfig::default();
         assert_eq!(config.max_concurrency, 4);
-        assert_eq!(config.per_symbol_timeout, std::time::Duration::from_secs(30));
+        assert_eq!(
+            config.per_symbol_timeout,
+            std::time::Duration::from_secs(30)
+        );
     }
 
     #[test]

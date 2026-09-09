@@ -1,3 +1,7 @@
+pub use crate::models::{
+    Period, PeriodRecommendation, TechnicalAnalysis, TechnicalAnalysisPeriod,
+    TechnicalAnalysisRecommendation, TechnicalAnalysisRecommendations,
+};
 use crate::{
     ChartDrawing, Country, CryptoCentralization, EconomicCategory, EconomicSource,
     FuturesProductType, MarketType, Result, StockSector, Symbol, SymbolSearchResponse, UserCookies,
@@ -546,4 +550,372 @@ pub async fn get_indicator_metadata(
     Err(Error::Internal(Ustr::from(&format!(
         "Failed to retrieve metadata for Pine script ID: {pinescript_id}, Version: {pinescript_version}"
     ))))
+}
+
+pub(crate) const TA_SCAN_URL: &str = "https://scanner.tradingview.com/global/scan";
+
+pub(crate) const TA_COLUMNS: [&str; 24] = [
+    "Recommend.Other|1",
+    "Recommend.All|1",
+    "Recommend.MA|1",
+    "Recommend.Other|5",
+    "Recommend.All|5",
+    "Recommend.MA|5",
+    "Recommend.Other|15",
+    "Recommend.All|15",
+    "Recommend.MA|15",
+    "Recommend.Other|60",
+    "Recommend.All|60",
+    "Recommend.MA|60",
+    "Recommend.Other|240",
+    "Recommend.All|240",
+    "Recommend.MA|240",
+    "Recommend.Other",
+    "Recommend.All",
+    "Recommend.MA",
+    "Recommend.Other|1W",
+    "Recommend.All|1W",
+    "Recommend.MA|1W",
+    "Recommend.Other|1M",
+    "Recommend.All|1M",
+    "Recommend.MA|1M",
+];
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub(crate) struct ScanSymbols<'a> {
+    pub tickers: Vec<&'a str>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub(crate) struct ScanRequest<'a> {
+    pub symbols: ScanSymbols<'a>,
+    pub columns: &'static [&'static str],
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ScanResponseRow {
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub s: String,
+    pub d: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ScanResponse {
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub total_count: Option<u64>,
+    #[serde(default)]
+    pub data: Vec<ScanResponseRow>,
+}
+
+#[inline]
+pub(crate) fn normalize_recommendation(val: f64) -> f64 {
+    let rounded = (val * 1000.0).round() / 500.0;
+    if rounded == 0.0 { 0.0 } else { rounded }
+}
+
+pub(crate) fn parse_technical_analysis_scan_response(
+    scan_resp: &ScanResponse,
+) -> Result<TechnicalAnalysis> {
+    if scan_resp.data.is_empty() {
+        return Err(Error::NoScanDataFound);
+    }
+
+    let row = &scan_resp.data[0];
+    if row.d.len() < 24 {
+        return Err(Error::JsonParse(Ustr::from(&format!(
+            "Insufficient columns in scan data: expected at least 24, got {}",
+            row.d.len()
+        ))));
+    }
+
+    let mut values = [0.0f64; 24];
+    for (i, val_json) in row.d[..24].iter().enumerate() {
+        let num = match val_json {
+            serde_json::Value::Number(n) => n.as_f64().ok_or_else(|| {
+                Error::JsonParse(Ustr::from(&format!(
+                    "Invalid number format at column index {i}"
+                )))
+            })?,
+            serde_json::Value::Null => {
+                return Err(Error::JsonParse(Ustr::from(&format!(
+                    "Null value at column index {i}"
+                ))));
+            }
+            _ => {
+                return Err(Error::JsonParse(Ustr::from(&format!(
+                    "Non-numeric value at column index {i}"
+                ))));
+            }
+        };
+
+        if !num.is_finite() {
+            return Err(Error::JsonParse(Ustr::from(&format!(
+                "Non-finite number at column index {i}"
+            ))));
+        }
+
+        values[i] = normalize_recommendation(num);
+    }
+
+    let make_rec = |offset: usize| TechnicalAnalysisRecommendations {
+        other: values[offset],
+        all: values[offset + 1],
+        ma: values[offset + 2],
+    };
+
+    Ok(TechnicalAnalysis {
+        period_1m: make_rec(0),
+        period_5m: make_rec(3),
+        period_15m: make_rec(6),
+        period_1h: make_rec(9),
+        period_4h: make_rec(12),
+        period_1d: make_rec(15),
+        period_1w: make_rec(18),
+        period_1m_month: make_rec(21),
+    })
+}
+
+pub(crate) fn parse_technical_analysis_response(body: &str) -> Result<TechnicalAnalysis> {
+    let scan_resp: ScanResponse = serde_json::from_str(body)?;
+    parse_technical_analysis_scan_response(&scan_resp)
+}
+
+/// Retrieves technical analysis recommendations for the specified symbol.
+///
+/// Sends a request to TradingView's global scanner (`https://scanner.tradingview.com/global/scan`)
+/// requesting recommendations across 8 standard timeframes (1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)
+/// for oscillators (`Other`), moving averages (`MA`), and summary (`All`).
+///
+/// # Arguments
+///
+/// * `symbol` - Symbol identifier, e.g. `"AMEX:SPY"` or `"BINANCE:BTCUSDT"`.
+///
+/// # Errors
+///
+/// Returns [`Error::NoScanDataFound`] if the scanner returns no rows for the symbol,
+/// or [`Error::JsonParse`] if the response row is short, malformed, or contains non-finite values.
+#[tracing::instrument]
+pub async fn get_technical_analysis(symbol: &str) -> Result<TechnicalAnalysis> {
+    let client = http_client();
+    let req = ScanRequest {
+        symbols: ScanSymbols {
+            tickers: vec![symbol],
+        },
+        columns: &TA_COLUMNS,
+    };
+
+    let resp = client
+        .post(TA_SCAN_URL)
+        .json(&req)
+        .send()
+        .await
+        .map_err(|e| {
+            Error::Request(Ustr::from(&format!(
+                "Failed to send technical analysis request: {e}"
+            )))
+        })?;
+
+    if !resp.status().is_success() {
+        return Err(Error::Request(Ustr::from(&format!(
+            "Technical analysis request failed with status: {}",
+            resp.status()
+        ))));
+    }
+
+    let text = resp.text().await.map_err(|e| {
+        Error::Request(Ustr::from(&format!(
+            "Failed to read technical analysis response body: {e}"
+        )))
+    })?;
+
+    parse_technical_analysis_response(&text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scan_request_body_serialization() {
+        let req = ScanRequest {
+            symbols: ScanSymbols {
+                tickers: vec!["AMEX:SPY"],
+            },
+            columns: &TA_COLUMNS,
+        };
+        let json_val = serde_json::to_value(&req).expect("serialize scan request");
+        assert_eq!(
+            json_val["symbols"]["tickers"],
+            serde_json::json!(["AMEX:SPY"])
+        );
+        let cols = json_val["columns"].as_array().expect("columns is array");
+        assert_eq!(cols.len(), 24);
+        assert_eq!(cols[0], "Recommend.Other|1");
+        assert_eq!(cols[1], "Recommend.All|1");
+        assert_eq!(cols[2], "Recommend.MA|1");
+        assert_eq!(cols[15], "Recommend.Other");
+        assert_eq!(cols[16], "Recommend.All");
+        assert_eq!(cols[17], "Recommend.MA");
+        assert_eq!(cols[21], "Recommend.Other|1M");
+        assert_eq!(cols[22], "Recommend.All|1M");
+        assert_eq!(cols[23], "Recommend.MA|1M");
+    }
+
+    #[test]
+    fn test_technical_analysis_mapping_stable_column_order() {
+        let d_values: Vec<f64> = (0..24).map(|i| (i as f64) * 0.05).collect();
+        let json_payload = serde_json::json!({
+            "totalCount": 1,
+            "data": [{
+                "s": "AMEX:SPY",
+                "d": d_values
+            }]
+        })
+        .to_string();
+
+        let ta = parse_technical_analysis_response(&json_payload).expect("parse valid payload");
+
+        let expected = |i: usize| normalize_recommendation((i as f64) * 0.05);
+
+        assert_eq!(ta.period_1m.other, expected(0));
+        assert_eq!(ta.period_1m.all, expected(1));
+        assert_eq!(ta.period_1m.ma, expected(2));
+
+        assert_eq!(ta.period_5m.other, expected(3));
+        assert_eq!(ta.period_5m.all, expected(4));
+        assert_eq!(ta.period_5m.ma, expected(5));
+
+        assert_eq!(ta.period_15m.other, expected(6));
+        assert_eq!(ta.period_15m.all, expected(7));
+        assert_eq!(ta.period_15m.ma, expected(8));
+
+        assert_eq!(ta.period_1h.other, expected(9));
+        assert_eq!(ta.period_1h.all, expected(10));
+        assert_eq!(ta.period_1h.ma, expected(11));
+
+        assert_eq!(ta.period_4h.other, expected(12));
+        assert_eq!(ta.period_4h.all, expected(13));
+        assert_eq!(ta.period_4h.ma, expected(14));
+
+        assert_eq!(ta.period_1d.other, expected(15));
+        assert_eq!(ta.period_1d.all, expected(16));
+        assert_eq!(ta.period_1d.ma, expected(17));
+
+        assert_eq!(ta.period_1w.other, expected(18));
+        assert_eq!(ta.period_1w.all, expected(19));
+        assert_eq!(ta.period_1w.ma, expected(20));
+
+        assert_eq!(ta.period_1m_month.other, expected(21));
+        assert_eq!(ta.period_1m_month.all, expected(22));
+        assert_eq!(ta.period_1m_month.ma, expected(23));
+
+        assert_eq!(*ta.get(TechnicalAnalysisPeriod::Minute1), ta.period_1m);
+        assert_eq!(*ta.period(Period::Day1), ta.period_1d);
+        assert_eq!(ta[TechnicalAnalysisPeriod::Day1], ta.period_1d);
+        assert_eq!(ta["1D"], ta.period_1d);
+        assert_eq!(ta.get_by_str("1W"), Some(&ta.period_1w));
+        assert_eq!(ta.get_by_str("invalid"), None);
+    }
+
+    #[test]
+    fn test_technical_analysis_normalization_matches_reference() {
+        assert_eq!(normalize_recommendation(0.1234), 0.246);
+        assert_eq!(normalize_recommendation(-0.1234), -0.246);
+        assert_eq!(normalize_recommendation(0.5), 1.0);
+        assert_eq!(normalize_recommendation(-0.5), -1.0);
+        assert_eq!(normalize_recommendation(1.0), 2.0);
+        assert_eq!(normalize_recommendation(-1.0), -2.0);
+        assert_eq!(normalize_recommendation(0.0), 0.0);
+        assert_eq!(normalize_recommendation(-0.0001), 0.0);
+        assert_eq!(normalize_recommendation(0.0001), 0.0);
+    }
+
+    #[test]
+    fn test_technical_analysis_missing_row_fails() {
+        let json_empty_data = serde_json::json!({
+            "totalCount": 0,
+            "data": []
+        })
+        .to_string();
+        let res = parse_technical_analysis_response(&json_empty_data);
+        match res {
+            Err(Error::NoScanDataFound) => {}
+            other => panic!("expected NoScanDataFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_technical_analysis_short_row_fails() {
+        let json_short = serde_json::json!({
+            "data": [{
+                "s": "AMEX:SPY",
+                "d": [0.1, 0.2, 0.3]
+            }]
+        })
+        .to_string();
+        let res = parse_technical_analysis_response(&json_short);
+        match res {
+            Err(Error::JsonParse(_)) => {}
+            other => panic!("expected JsonParse, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_technical_analysis_null_value_fails() {
+        let mut d_values: Vec<serde_json::Value> = (0..24)
+            .map(|i| serde_json::Value::from(i as f64 * 0.1))
+            .collect();
+        d_values[5] = serde_json::Value::Null;
+        let json_null = serde_json::json!({
+            "data": [{
+                "s": "AMEX:SPY",
+                "d": d_values
+            }]
+        })
+        .to_string();
+        let res = parse_technical_analysis_response(&json_null);
+        match res {
+            Err(Error::JsonParse(_)) => {}
+            other => panic!("expected JsonParse, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_technical_analysis_non_finite_value_fails() {
+        let mut d_values: Vec<serde_json::Value> = (0..24)
+            .map(|i| serde_json::Value::from(i as f64 * 0.1))
+            .collect();
+        d_values[10] = serde_json::json!("NaN");
+        let json_non_numeric = serde_json::json!({
+            "data": [{
+                "s": "AMEX:SPY",
+                "d": d_values
+            }]
+        })
+        .to_string();
+        let res = parse_technical_analysis_response(&json_non_numeric);
+        match res {
+            Err(Error::JsonParse(_)) => {}
+            other => panic!("expected JsonParse, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_technical_analysis_public_reexport() {
+        use crate::client::misc::{
+            Period, TechnicalAnalysis, TechnicalAnalysisRecommendation, get_technical_analysis,
+        };
+        use crate::{Period as RootPeriod, TechnicalAnalysis as RootTA};
+
+        let rec = TechnicalAnalysisRecommendation::default();
+        assert_eq!(rec.all, 0.0);
+        let ta = TechnicalAnalysis::default();
+        assert_eq!(ta.period_1m.all, 0.0);
+        let _root_ta = RootTA::default();
+        assert_eq!(Period::Minute1.as_str(), "1");
+        assert_eq!(RootPeriod::Minute1.as_str(), "1");
+        let _fn_ptr = get_technical_analysis;
+    }
 }

@@ -52,8 +52,6 @@ pub trait HandlerFactory: Send + Sync + 'static {
     fn create(&self, command_tx: CommandTx) -> Self::Handler;
 }
 
-
-
 // =============================================================================
 // Tests
 // =============================================================================
@@ -183,5 +181,4 @@ mod tests {
         // Verify we can use Arc<dyn Handler>
         let _arc: std::sync::Arc<dyn Handler> = std::sync::Arc::new(handler);
     }
-
 }

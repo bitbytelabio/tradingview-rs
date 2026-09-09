@@ -41,31 +41,33 @@ This document outlines the planned development trajectory for `tradingview-rs`. 
 
 > **Goal:** Technical analysis signals, invite-only indicators, and advanced workflows.
 
-| Task | Priority |
-|------|----------|
-| Technical analysis signal computation (RSI, MACD, Bollinger bands, moving averages on client side) | 🟡 |
-| Invite-only / private Pine Script indicator support | 🟡 |
-| Multi-timeframe analysis (concurrent subscriptions across intervals) | 🟡 |
-| `StudyConfiguration` builder ergonomics — validate inputs before sending to TV | 🟢 |
-| Indicator catalog caching (`get_builtin_indicators`) with TTL | 🟢 |
-| Streaming indicator values as `MarketEvent::Indicator` | 🟡 |
-| WebSocket connection pooling for multi-symbol subscriptions | 🟢 |
-| `ChartDrawing` CRUD — create, update, delete drawings via API | ⚪ |
+| Status | Task | Priority |
+|--------|------|----------|
+| ✅ | Technical analysis signals (`get_technical_analysis` scanner ratings across 8 timeframes) | 🟡 |
+| ✅ | Invite-only / private Pine Script indicator support (`get_private_indicators`) | 🟡 |
+| ⬜ | Technical analysis signal computation (RSI, MACD, Bollinger bands, moving averages on client side) | 🟡 |
+| ⬜ | Multi-timeframe analysis (concurrent subscriptions across intervals) | 🟡 |
+| ⬜ | `StudyConfiguration` builder ergonomics — validate inputs before sending to TV | 🟢 |
+| ⬜ | Indicator catalog caching (`get_builtin_indicators`) with TTL | 🟢 |
+| ⬜ | Streaming indicator values as `MarketEvent::Indicator` | 🟡 |
+| ⬜ | WebSocket connection pooling for multi-symbol subscriptions | 🟢 |
+| ⬜ | `ChartDrawing` CRUD — create, update, delete drawings via API | ⚪ |
 
 ## v0.5.0 — Performance & Observability
 
 > **Goal:** Production-grade performance, metrics, and debugging tools.
 
-| Task | Priority |
-|------|----------|
-| Zero-copy deserialization for `SocketMessageDe` (avoid `serde_json::Value` where possible) | 🟡 |
-| `tracing` spans on every major operation (source fetch, sink accept, fan-out) | 🟡 |
-| Prometheus metrics: message count, latency percentiles, error rate, channel depth | 🟡 |
-| `CommandRunner` stats exposed as public API (`ConnectionStats`, `CommandQueueStats`) | 🟢 |
-| Circuit breaker metrics (open/closed state, failure count, last trip time) | 🟢 |
-| Benchmark suite: `criterion` benches for `HistoricalClient`, `SocketMessage` parse, fan-out throughput | 🟡 |
-| Fuzz testing for `SocketMessage` deserialization | 🟢 |
-| `DataLoader` integration tests with mock source/sink | 🟡 |
+| Status | Task | Priority |
+|--------|------|----------|
+| ✅ | Zero-copy length-prefixed packet parsing for WebSocket messages | 🟡 |
+| ⬜ | Zero-copy deserialization for `SocketMessageDe` (avoid `serde_json::Value` where possible) | 🟡 |
+| ⬜ | `tracing` spans on every major operation (source fetch, sink accept, fan-out) | 🟡 |
+| ⬜ | Prometheus metrics: message count, latency percentiles, error rate, channel depth | 🟡 |
+| ⬜ | `CommandRunner` stats exposed as public API (`ConnectionStats`, `CommandQueueStats`) | 🟢 |
+| ⬜ | Circuit breaker metrics (open/closed state, failure count, last trip time) | 🟢 |
+| ⬜ | Benchmark suite: `criterion` benches for `HistoricalClient`, `SocketMessage` parse, fan-out throughput | 🟡 |
+| ⬜ | Fuzz testing for `SocketMessage` deserialization | 🟢 |
+| ⬜ | `DataLoader` integration tests with mock source/sink | 🟡 |
 
 ## v1.0.0 — Stable API
 

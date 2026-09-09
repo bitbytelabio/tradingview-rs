@@ -915,11 +915,8 @@ impl<T: Handler> WebSocketClient<T> {
     pub async fn create_chart_session(&self, session: &str) -> Result<()> {
         // Protocol spec: chart_create_session takes 2 args: [session_id, ""]
         // The 2nd arg is an empty string, consistent with protocol spec.
-        self.send(
-            "chart_create_session",
-            &payload!(session, ""),
-        )
-        .await?;
+        self.send("chart_create_session", &payload!(session, ""))
+            .await?;
         Ok(())
     }
 
@@ -960,8 +957,8 @@ impl<T: Handler> WebSocketClient<T> {
                 series_id,
                 symbol_series_id,
                 interval.to_string(),
-                0u64, // bar_count MUST be 0 in range mode
-                r.to_string() // "r,1626220800:1628640000"
+                0u64,          // bar_count MUST be 0 in range mode
+                r.to_string()  // "r,1626220800:1628640000"
             );
             self.send("create_series", &args).await?;
         } else {
@@ -1095,8 +1092,8 @@ impl<T: Handler> WebSocketClient<T> {
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn create_replay_session(&self, session: &str) -> Result<()> {
-        self.send("replay_create_session", &payload!(session))
+    pub async fn create_replay_session(&self, replay_session: &str) -> Result<()> {
+        self.send("replay_create_session", &payload!(replay_session))
             .await?;
         Ok(())
     }
@@ -1105,80 +1102,73 @@ impl<T: Handler> WebSocketClient<T> {
     #[builder]
     pub async fn add_replay_series(
         &self,
-        chart_session: &str,
-        series_id: &str,
+        replay_session: &str,
+        request_id: &str,
         instrument: &str, // e.g., "HOSE:FPT"
         adjustment: Option<MarketAdjustment>,
         session_type: Option<SessionType>,
         currency: Option<Currency>,
         interval: Interval,
     ) -> Result<()> {
-        self.send(
-            "replay_add_series",
-            &payload!(
-                chart_session,
-                series_id,
-                symbol_init()
-                    .instrument(instrument)
-                    .maybe_adjustment(adjustment)
-                    .maybe_currency(currency)
-                    .maybe_session_type(session_type)
-                    .call()?,
-                interval.to_string()
-            ),
-        )
-        .await?;
+        let sym_init = symbol_init()
+            .instrument(instrument)
+            .maybe_adjustment(adjustment)
+            .maybe_currency(currency)
+            .maybe_session_type(session_type)
+            .call()?;
+        let payloads =
+            build_add_replay_series_payload(replay_session, request_id, sym_init, interval);
+        self.send("replay_add_series", &payloads).await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn delete_replay_session(&self, session: &str) -> Result<()> {
-        self.send("replay_delete_session", &payload!(session))
+    pub async fn delete_replay_session(&self, replay_session: &str) -> Result<()> {
+        self.send("replay_delete_session", &payload!(replay_session))
             .await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn replay_step(&self, session: &str, series_id: &str, step: u64) -> Result<()> {
-        self.send("replay_step", &payload!(session, series_id, step))
-            .await?;
+    pub async fn replay_step(
+        &self,
+        replay_session: &str,
+        request_id: &str,
+        step: u64,
+    ) -> Result<()> {
+        let payloads = build_replay_step_payload(replay_session, request_id, step);
+        self.send("replay_step", &payloads).await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn replay_start(
         &self,
-        chart_session: &str,
-        series_id: &str,
-        interval: Interval,
+        replay_session: &str,
+        request_id: &str,
+        interval: u64,
     ) -> Result<()> {
-        self.send(
-            "replay_start",
-            &payload!(chart_session, series_id, interval.to_string()),
-        )
-        .await?;
+        let payloads = build_replay_start_payload(replay_session, request_id, interval);
+        self.send("replay_start", &payloads).await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    pub async fn replay_stop(&self, chart_session: &str, series_id: &str) -> Result<()> {
-        self.send("replay_stop", &payload!(chart_session, series_id))
-            .await?;
+    pub async fn replay_stop(&self, replay_session: &str, request_id: &str) -> Result<()> {
+        let payloads = build_replay_stop_payload(replay_session, request_id);
+        self.send("replay_stop", &payloads).await?;
         Ok(())
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn replay_reset(
         &self,
-        chart_session: &str,
-        series_id: &str,
+        replay_session: &str,
+        request_id: &str,
         timestamp: i64,
     ) -> Result<()> {
-        self.send(
-            "replay_reset",
-            &payload!(chart_session, series_id, timestamp),
-        )
-        .await?;
+        let payloads = build_replay_reset_payload(replay_session, request_id, timestamp);
+        self.send("replay_reset", &payloads).await?;
         Ok(())
     }
 
@@ -1219,27 +1209,14 @@ impl<T: Handler> WebSocketClient<T> {
         &self,
         chart_session: &str,
         study_ids: &[&str; 2],
-        chart_series_id: &str,
         study: StudyConfiguration,
     ) -> Result<()> {
-        let mut payloads: Vec<Value> = vec![
-            Value::from(chart_session),
-            Value::from(study_ids[0]),
-            Value::from(study_ids[1]),
-            Value::from(chart_series_id),
-        ];
-
-        match study {
-            StudyConfiguration::Pine(pine_indicator) => {
-                payloads.push(Value::from(pine_indicator.script_type.to_string()));
-                payloads.push(pine_indicator.to_study_inputs()?);
-            }
-            StudyConfiguration::Builtin(study_name, study_config) => {
-                payloads.push(Value::from(study_name));
-                payloads.push(json!(study_config));
-            }
-        }
-
+        let inputs = match study {
+            StudyConfiguration::Pine(pine_indicator) => pine_indicator.to_study_inputs()?,
+            StudyConfiguration::Builtin(_study_name, study_config) => json!(study_config),
+        };
+        let payloads =
+            build_modify_study_payload(chart_session, study_ids[0], study_ids[1], inputs);
         self.send("modify_study", &payloads).await?;
         Ok(())
     }
@@ -1424,7 +1401,7 @@ impl<T: Handler> Socket for WebSocketClient<T> {
     async fn handle_parsed_messages(
         &self,
         messages: Vec<SocketMessage<SocketMessageDe>>,
-        raw: &Message,
+        _raw: &Message,
     ) -> Result<()> {
         for message in messages {
             match message {
@@ -1440,26 +1417,19 @@ impl<T: Handler> Socket for WebSocketClient<T> {
                         self.handle_error(e, ustr("handle_message_data")).await?;
                     }
                 }
+                SocketMessage::Heartbeat(counter) => {
+                    debug!("handling heartbeat message: {counter}");
+                    let echo = message.heartbeat_echo().unwrap_or_else(|| {
+                        let h = format!("~h~{counter}");
+                        format!("~m~{}~m~{h}", h.len())
+                    });
+                    if let Err(e) = self.send_raw_message(&echo).await {
+                        self.handle_error(e, ustr("heartbeat_echo")).await?;
+                    }
+                }
                 SocketMessage::Other(value) => {
                     trace!("Received other message: {:?}", value);
-                    if value.is_number() {
-                        debug!("handling heartbeat message: {:?}", value);
-                        // FIX: Only echo ~h~<counter> back, never the entire
-                        // raw message. The raw text may also contain
-                        // ~m~<len>~m~ JSON frames with server→client methods
-                        // (du, qsd, etc.). Echoing those back would cause the
-                        // server to parse them as client→server messages,
-                        // triggering "unsupported method: du/qsd" errors.
-                        if let Message::Text(raw_text) = raw {
-                            for echo in crate::utils::extract_heartbeat_echoes(raw_text) {
-                                if let Err(e) = self.send_raw_message(&echo).await {
-                                    self.handle_error(e, ustr("heartbeat_echo")).await?;
-                                }
-                            }
-                        }
-                    } else if value.is_string() {
-                        trace!("Received string message: {:?}", value);
-                    } else if let Ok(server_info) = SocketServerInfo::deserialize(&value) {
+                    if let Ok(server_info) = SocketServerInfo::deserialize(&value) {
                         info!("{}", server_info);
                     } else {
                         warn!("Received unrecognized message: {:?}", value);
@@ -1475,8 +1445,7 @@ impl<T: Handler> Socket for WebSocketClient<T> {
 
     #[tracing::instrument(skip(self), level = "trace")]
     async fn handle_message_data(&self, message: SocketMessageDe) -> Result<()> {
-        let event = TradingViewDataEvent::from(message.m);
-        self.handler.handle_events(event, &message.p);
+        dispatch_message_data(&self.handler, message);
         Ok(())
     }
 
@@ -1543,5 +1512,229 @@ impl<T: Handler> Socket for WebSocketClient<T> {
                 }
             }
         }
+    }
+}
+
+/// Route a decoded socket message through the handler's event and quote callbacks.
+pub fn dispatch_message_data<H: Handler>(handler: &H, message: SocketMessageDe) {
+    let event = TradingViewDataEvent::from(message.m);
+    handler.handle_events(event, &message.p);
+    if event == TradingViewDataEvent::OnQuoteData {
+        handler.handle_quote_data(&message.p);
+    }
+}
+
+/// Build offline payload array for `modify_study`.
+///
+/// Returns `[chart_session, study_id, study_sub_id, inputs]`.
+pub fn build_modify_study_payload(
+    chart_session: &str,
+    study_id: &str,
+    study_sub_id: &str,
+    inputs: Value,
+) -> Vec<Value> {
+    vec![
+        Value::from(chart_session),
+        Value::from(study_id),
+        Value::from(study_sub_id),
+        inputs,
+    ]
+}
+
+/// Build offline payload array for `replay_start`.
+///
+/// Returns `[replay_session, request_id, interval_ms]`.
+pub fn build_replay_start_payload(
+    replay_session: &str,
+    request_id: &str,
+    interval_ms: u64,
+) -> Vec<Value> {
+    vec![
+        Value::from(replay_session),
+        Value::from(request_id),
+        Value::from(interval_ms),
+    ]
+}
+
+/// Build offline payload array for `replay_step`.
+///
+/// Returns `[replay_session, request_id, step]`.
+pub fn build_replay_step_payload(replay_session: &str, request_id: &str, step: u64) -> Vec<Value> {
+    vec![
+        Value::from(replay_session),
+        Value::from(request_id),
+        Value::from(step),
+    ]
+}
+
+/// Build offline payload array for `replay_stop`.
+///
+/// Returns `[replay_session, request_id]`.
+pub fn build_replay_stop_payload(replay_session: &str, request_id: &str) -> Vec<Value> {
+    vec![Value::from(replay_session), Value::from(request_id)]
+}
+
+/// Build offline payload array for `replay_reset`.
+///
+/// Returns `[replay_session, request_id, timestamp]`.
+pub fn build_replay_reset_payload(
+    replay_session: &str,
+    request_id: &str,
+    timestamp: i64,
+) -> Vec<Value> {
+    vec![
+        Value::from(replay_session),
+        Value::from(request_id),
+        Value::from(timestamp),
+    ]
+}
+
+/// Build offline payload array for `replay_add_series`.
+///
+/// Returns `[replay_session, request_id, symbol_init, timeframe]`.
+pub fn build_add_replay_series_payload(
+    replay_session: &str,
+    request_id: &str,
+    symbol_init: String,
+    interval: Interval,
+) -> Vec<Value> {
+    vec![
+        Value::from(replay_session),
+        Value::from(request_id),
+        Value::from(symbol_init),
+        Value::from(interval.to_string()),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    struct MockHandler {
+        event_called: AtomicBool,
+        quote_called: AtomicBool,
+        quote_count: AtomicUsize,
+    }
+
+    impl MockHandler {
+        fn new() -> Self {
+            Self {
+                event_called: AtomicBool::new(false),
+                quote_called: AtomicBool::new(false),
+                quote_count: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl Handler for MockHandler {
+        fn handle_events(&self, _event: TradingViewDataEvent, _message: &[Value]) {
+            self.event_called.store(true, Ordering::SeqCst);
+        }
+        fn handle_quote_data(&self, _message: &[Value]) {
+            self.quote_called.store(true, Ordering::SeqCst);
+            self.quote_count.fetch_add(1, Ordering::SeqCst);
+        }
+        fn handle_series_data(&self, _event: TradingViewDataEvent, _messages: &[Value]) {}
+        fn notify_error(&self, _error: Error, _message: &[Value]) {}
+    }
+
+    #[test]
+    fn test_modify_study_payload_has_4_args() {
+        let inputs = serde_json::json!({ "text": "//@version=5\nindicator('Test')" });
+        let payload = build_modify_study_payload("cs_123", "st6", "st1", inputs.clone());
+
+        assert_eq!(
+            payload.len(),
+            4,
+            "modify_study payload length must be exactly 4"
+        );
+        assert_eq!(payload[0], Value::from("cs_123"));
+        assert_eq!(payload[1], Value::from("st6"));
+        assert_eq!(payload[2], Value::from("st1"));
+        assert_eq!(payload[3], inputs);
+    }
+
+    #[test]
+    fn test_replay_start_payload_interval_is_numeric_millis() {
+        let payload = build_replay_start_payload("rs_100", "req_replay_1", 250);
+
+        assert_eq!(payload.len(), 3, "replay_start payload length must be 3");
+        assert_eq!(payload[0], Value::from("rs_100"));
+        assert_eq!(payload[1], Value::from("req_replay_1"));
+        assert!(
+            payload[2].is_number(),
+            "third argument must be numeric milliseconds"
+        );
+        assert_eq!(payload[2].as_u64(), Some(250));
+    }
+
+    #[test]
+    fn test_replay_other_payloads() {
+        let step_payload = build_replay_step_payload("rs_100", "req_step_1", 5);
+        assert_eq!(step_payload.len(), 3);
+        assert_eq!(step_payload[2], Value::from(5u64));
+
+        let stop_payload = build_replay_stop_payload("rs_100", "req_stop_1");
+        assert_eq!(stop_payload.len(), 2);
+        assert_eq!(stop_payload[0], Value::from("rs_100"));
+        assert_eq!(stop_payload[1], Value::from("req_stop_1"));
+
+        let reset_payload = build_replay_reset_payload("rs_100", "req_reset_1", 1_700_000_000);
+        assert_eq!(reset_payload.len(), 3);
+        assert_eq!(reset_payload[2], Value::from(1_700_000_000i64));
+
+        let add_payload = build_add_replay_series_payload(
+            "rs_100",
+            "req_add_1",
+            "={\"symbol\":\"NASDAQ:AAPL\"}".to_string(),
+            Interval::OneDay,
+        );
+        assert_eq!(add_payload.len(), 4);
+        assert_eq!(add_payload[3], Value::from("1D"));
+    }
+
+    #[test]
+    fn test_heartbeat_echo_framed_format() {
+        let msg = SocketMessage::<SocketMessageDe>::Heartbeat(42);
+        assert_eq!(msg.heartbeat_echo(), Some("~m~5~m~~h~42".to_string()));
+    }
+
+    #[test]
+    fn test_quote_data_handler_routing() {
+        let handler = MockHandler::new();
+        let quote_msg = SocketMessageDe {
+            m: ustr::ustr("qsd"),
+            p: vec![
+                serde_json::json!("quote_session_1"),
+                serde_json::json!({"s": "ok"}),
+            ],
+            t: 0,
+            t_ms: 0,
+        };
+
+        dispatch_message_data(&handler, quote_msg);
+        assert!(
+            handler.event_called.load(Ordering::SeqCst),
+            "handle_events must be called"
+        );
+        assert!(
+            handler.quote_called.load(Ordering::SeqCst),
+            "handle_quote_data must be called for qsd"
+        );
+        assert_eq!(handler.quote_count.load(Ordering::SeqCst), 1);
+
+        let non_quote_msg = SocketMessageDe {
+            m: ustr::ustr("timescale_update"),
+            p: vec![serde_json::json!("cs_1")],
+            t: 0,
+            t_ms: 0,
+        };
+        dispatch_message_data(&handler, non_quote_msg);
+        assert_eq!(
+            handler.quote_count.load(Ordering::SeqCst),
+            1,
+            "quote_data should not be called for non-qsd"
+        );
     }
 }

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Technical Analysis scanner API (`get_technical_analysis`, `TechnicalAnalysis`, `Period`, `TechnicalAnalysisRecommendations`)
 - Event-driven `DataLoader` with source → fan-out → sinks architecture
 - `DataSource` trait with TradingView WebSocket adapter (`source::tradingview`)
 - `EventSink` trait with three built-in sinks: `ChannelSink`, `CallbackSink`, `KafkaSink`
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub project setup script (`scripts/gh_setup.sh`)
 
 ### Changed
+- `Symbol::id()` now prefers non-empty `prefix` (e.g. `AMEX:SPY`), falling back to `exchange`
 - README: added architecture diagram, module table, feature table, roadmap link
 - README: updated Installation section with crates.io + feature flag table
 - README: updated Examples section with all current examples
@@ -35,12 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `live/models.rs`: documented `TradingViewDataEvent`, `SocketMessageSer`, `SocketMessageDe`, `SocketServerInfo`, `DataServer`
 - `live/handler/command.rs`: documented `CommandPriority`, `Command`, `ConnectionStatus`, `CommandRunner`
 
+### Performance
+- Zero-copy structural length-prefixed WebSocket packet parser replacing regex cleaner and splitter
+- `gen_id()` returns `String` without permanently interning into global `Ustr` hash map
+- Replaced 100ms sleep polling in `HistoricalClient::retrieve` with `tokio::sync::Notify`
+- Fan-out optimization in `DataLoader` moving events into final sink and cloning only for preceding active sinks
+
 ### Fixed
+- Protocol wire payloads for `modify_study` (4 args) and `replay_*` commands (request ID, milliseconds interval, replay session)
 - 7 broken intra-doc links in module-level docs (now zero `cargo doc` warnings)
 - Duplicate `EconomicCategory` definition in models/mod.rs
-
-### Known Issues
-- 7 `parse_packet` / `SocketMessage` round-trip test failures (pre-existing, tracked in v0.2.0)
 
 ## [0.1.2] — 2025
 

@@ -61,6 +61,11 @@ impl MarketSymbol for Symbol {
     fn exchange(&self) -> &str {
         &self.exchange
     }
+
+    fn id(&self) -> String {
+        Symbol::id(self)
+    }
+
     fn new<S: Into<String>>(symbol: S, exchange: S) -> Self {
         Self {
             symbol: symbol.into(),
@@ -185,17 +190,28 @@ pub struct Symbol {
 #[bon::bon]
 impl Symbol {
     #[builder]
-    pub fn new<S: Into<String>>(symbol: S, exchange: S, currency: Option<Currency>) -> Self {
+    pub fn new<S: Into<String>>(
+        symbol: S,
+        exchange: S,
+        currency: Option<Currency>,
+        prefix: Option<S>,
+    ) -> Self {
         Self {
             symbol: symbol.into(),
             exchange: exchange.into(),
             currency_code: currency.map(|c| c.to_string()).unwrap_or_default(),
+            prefix: prefix.map(|p| p.into()).unwrap_or_default(),
             ..Default::default()
         }
     }
 
     pub fn id(&self) -> String {
-        format!("{}:{}", self.exchange, self.symbol)
+        let prefix = if !self.prefix.is_empty() {
+            &self.prefix
+        } else {
+            &self.exchange
+        };
+        format!("{}:{}", prefix, self.symbol)
     }
 }
 
@@ -1296,7 +1312,6 @@ impl Display for EconomicSource {
     }
 }
 
-
 impl Display for EconomicCategory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
@@ -1312,5 +1327,223 @@ impl Display for EconomicCategory {
             EconomicCategory::Housing => write!(f, "hse"),
             EconomicCategory::Taxes => write!(f, "txs"),
         }
+    }
+}
+
+/// Technical analysis recommendation scores for oscillators, summary, and moving averages.
+///
+/// Values are normalized to the range `[-1.0, 1.0]`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub struct TechnicalAnalysisRecommendations {
+    /// Oscillator-based recommendation score (`Recommend.Other`).
+    #[serde(rename = "Other")]
+    pub other: f64,
+    /// Overall summary recommendation score (`Recommend.All`).
+    #[serde(rename = "All")]
+    pub all: f64,
+    /// Moving average recommendation score (`Recommend.MA`).
+    #[serde(rename = "MA")]
+    pub ma: f64,
+}
+
+/// Alias for [`TechnicalAnalysisRecommendations`].
+pub type TechnicalAnalysisRecommendation = TechnicalAnalysisRecommendations;
+/// Alias for [`TechnicalAnalysisRecommendations`].
+pub type PeriodRecommendation = TechnicalAnalysisRecommendations;
+
+/// The eight standard time periods supported by TradingView's technical analysis scanner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TechnicalAnalysisPeriod {
+    /// 1 minute (`"1"`).
+    #[serde(rename = "1")]
+    Minute1,
+    /// 5 minutes (`"5"`).
+    #[serde(rename = "5")]
+    Minute5,
+    /// 15 minutes (`"15"`).
+    #[serde(rename = "15")]
+    Minute15,
+    /// 1 hour / 60 minutes (`"60"`).
+    #[serde(rename = "60")]
+    Hour1,
+    /// 4 hours / 240 minutes (`"240"`).
+    #[serde(rename = "240")]
+    Hour4,
+    /// 1 day (`"1D"`).
+    #[serde(rename = "1D")]
+    Day1,
+    /// 1 week (`"1W"`).
+    #[serde(rename = "1W")]
+    Week1,
+    /// 1 month (`"1M"`).
+    #[serde(rename = "1M")]
+    Month1,
+}
+
+impl TechnicalAnalysisPeriod {
+    /// All eight periods in the fixed scanner evaluation order.
+    pub const ALL: [Self; 8] = [
+        Self::Minute1,
+        Self::Minute5,
+        Self::Minute15,
+        Self::Hour1,
+        Self::Hour4,
+        Self::Day1,
+        Self::Week1,
+        Self::Month1,
+    ];
+
+    /// String identifier matching the TradingView scanner column suffix.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Minute1 => "1",
+            Self::Minute5 => "5",
+            Self::Minute15 => "15",
+            Self::Hour1 => "60",
+            Self::Hour4 => "240",
+            Self::Day1 => "1D",
+            Self::Week1 => "1W",
+            Self::Month1 => "1M",
+        }
+    }
+}
+
+/// Alias for [`TechnicalAnalysisPeriod`].
+pub type Period = TechnicalAnalysisPeriod;
+
+impl Display for TechnicalAnalysisPeriod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Technical analysis ratings across all eight reference periods.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub struct TechnicalAnalysis {
+    /// 1-minute ratings.
+    #[serde(rename = "1")]
+    pub period_1m: TechnicalAnalysisRecommendations,
+    /// 5-minute ratings.
+    #[serde(rename = "5")]
+    pub period_5m: TechnicalAnalysisRecommendations,
+    /// 15-minute ratings.
+    #[serde(rename = "15")]
+    pub period_15m: TechnicalAnalysisRecommendations,
+    /// 1-hour / 60-minute ratings.
+    #[serde(rename = "60")]
+    pub period_1h: TechnicalAnalysisRecommendations,
+    /// 4-hour / 240-minute ratings.
+    #[serde(rename = "240")]
+    pub period_4h: TechnicalAnalysisRecommendations,
+    /// 1-day ratings.
+    #[serde(rename = "1D")]
+    pub period_1d: TechnicalAnalysisRecommendations,
+    /// 1-week ratings.
+    #[serde(rename = "1W")]
+    pub period_1w: TechnicalAnalysisRecommendations,
+    /// 1-month ratings.
+    #[serde(rename = "1M")]
+    pub period_1m_month: TechnicalAnalysisRecommendations,
+}
+
+impl TechnicalAnalysis {
+    /// Get recommendation scores for a specific period.
+    pub fn get(&self, period: TechnicalAnalysisPeriod) -> &TechnicalAnalysisRecommendations {
+        match period {
+            TechnicalAnalysisPeriod::Minute1 => &self.period_1m,
+            TechnicalAnalysisPeriod::Minute5 => &self.period_5m,
+            TechnicalAnalysisPeriod::Minute15 => &self.period_15m,
+            TechnicalAnalysisPeriod::Hour1 => &self.period_1h,
+            TechnicalAnalysisPeriod::Hour4 => &self.period_4h,
+            TechnicalAnalysisPeriod::Day1 => &self.period_1d,
+            TechnicalAnalysisPeriod::Week1 => &self.period_1w,
+            TechnicalAnalysisPeriod::Month1 => &self.period_1m_month,
+        }
+    }
+
+    /// Get recommendation scores for a specific period (alias for [`TechnicalAnalysis::get`]).
+    pub fn period(&self, period: TechnicalAnalysisPeriod) -> &TechnicalAnalysisRecommendations {
+        self.get(period)
+    }
+
+    /// Get recommendation scores by period string slice (`"1"`, `"5"`, `"15"`, `"60"`, `"240"`, `"1D"`, `"1W"`, `"1M"`).
+    pub fn get_by_str(&self, period: &str) -> Option<&TechnicalAnalysisRecommendations> {
+        match period {
+            "1" => Some(&self.period_1m),
+            "5" => Some(&self.period_5m),
+            "15" => Some(&self.period_15m),
+            "60" => Some(&self.period_1h),
+            "240" => Some(&self.period_4h),
+            "1D" => Some(&self.period_1d),
+            "1W" => Some(&self.period_1w),
+            "1M" => Some(&self.period_1m_month),
+            _ => None,
+        }
+    }
+}
+
+impl std::ops::Index<TechnicalAnalysisPeriod> for TechnicalAnalysis {
+    type Output = TechnicalAnalysisRecommendations;
+
+    fn index(&self, period: TechnicalAnalysisPeriod) -> &Self::Output {
+        self.get(period)
+    }
+}
+
+impl std::ops::Index<&str> for TechnicalAnalysis {
+    type Output = TechnicalAnalysisRecommendations;
+
+    fn index(&self, period: &str) -> &Self::Output {
+        self.get_by_str(period)
+            .unwrap_or_else(|| panic!("invalid period: {period}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_symbol_id_prefers_prefix_over_exchange() {
+        let sym_prefixed = Symbol {
+            symbol: "SPY".to_string(),
+            exchange: "NYSE Arca".to_string(),
+            prefix: "AMEX".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(sym_prefixed.id(), "AMEX:SPY");
+        assert_eq!(MarketSymbol::id(&sym_prefixed), "AMEX:SPY");
+
+        let sym_empty_prefix = Symbol {
+            symbol: "BTCUSDT".to_string(),
+            exchange: "BINANCE".to_string(),
+            prefix: "".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(sym_empty_prefix.id(), "BINANCE:BTCUSDT");
+        assert_eq!(MarketSymbol::id(&sym_empty_prefix), "BINANCE:BTCUSDT");
+    }
+
+    #[test]
+    fn test_symbol_builder_with_prefix() {
+        let sym = Symbol::builder()
+            .symbol("SPY")
+            .exchange("NYSE Arca")
+            .prefix("AMEX")
+            .build();
+        assert_eq!(sym.id(), "AMEX:SPY");
+
+        let sym_default = Symbol::builder()
+            .symbol("BTCUSDT")
+            .exchange("BINANCE")
+            .build();
+        assert_eq!(sym_default.id(), "BINANCE:BTCUSDT");
+    }
+
+    #[test]
+    fn test_period_properties() {
+        assert_eq!(TechnicalAnalysisPeriod::ALL.len(), 8);
+        assert_eq!(Period::Day1.as_str(), "1D");
+        assert_eq!(format!("{}", Period::Month1), "1M");
     }
 }
