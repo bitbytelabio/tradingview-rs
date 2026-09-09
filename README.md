@@ -271,39 +271,42 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
-### Fundamental Data & Study Fetch
+
+### Full Fundamental Data With One Stock Code
 
 ```rust
-use tradingview::{
-    Interval,
-    fundamental::{fetch_fundamental_registry, get_fundamental_data},
-    live::models::DataServer,
-    models::FinancialPeriod,
-};
+use tradingview::fundamental::{FullFundamentalResult, fetch_full_fundamentals};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Fetch current date-versioned fundamental registry
-    let registry = fetch_fundamental_registry().await?;
-    println!("Registry date: {} ({} studies)", registry.date, registry.len());
+    // Bare tickers are resolved through TradingView's ranked stock search.
+    // Canonical values such as "HOSE:FPT" or "TWSE:2330" are also accepted.
+    let result: FullFundamentalResult = fetch_full_fundamentals("AAPL").await?;
 
-    // 2. Fetch specific metric (e.g. Total Revenue Annual) for NASDAQ:AAPL
-    let result = get_fundamental_data(
-        &registry,
-        "total_revenue",
-        Some(&FinancialPeriod::FiscalYear),
-        "AAPL",
-        "NASDAQ",
-        Interval::OneDay,
-        100,
-        None,
-        DataServer::Data,
-    )
-    .await?;
+    println!("{}: {} studies", result.canonical_id(), result.total_studies());
+    println!(
+        "success={}, empty={}, errors={}",
+        result.success_count(),
+        result.empty_count(),
+        result.error_count()
+    );
 
-    println!("Received {} data points for {}", result.len(), result.symbol_info.name);
+    // Optional lossless long-form CSV export from the returned struct.
+    result.write_csv("AAPL_fundamentals.csv")?;
     Ok(())
 }
+```
+
+The returned `FullFundamentalResult` owns the resolved stock metadata, registry date/schema
+version, and every metric result as `Success(Vec<DataPoint>)`, `Empty`, or `Error(String)`.
+The full stock catalog excludes crypto-only `STD;CryptoFund_*` studies.
+
+Run the example with one stock code:
+
+```bash
+cargo run --example full_fundamental_fetch -- AAPL
+cargo run --example full_fundamental_fetch -- HOSE:FPT
+cargo run --example full_fundamental_fetch -- TWSE:2330
 ```
 
 ### Economic Calendar
@@ -346,14 +349,15 @@ The [`examples/`](examples/) directory contains runnable examples for every majo
 | [`user.rs`](examples/user.rs) | User authentication and session management |
 | [`search.rs`](examples/search.rs) | Symbol search and filtering |
 | [`misc.rs`](examples/misc.rs) | Miscellaneous utility functions |
+| [`full_fundamental_fetch.rs`](examples/full_fundamental_fetch.rs) | Fetch full fundamental Pine studies catalog from one stock code and export to CSV |
 
-| [`full_fundamental_fetch.rs`](examples/full_fundamental_fetch.rs) | Fetch full fundamental Pine studies catalog and export to CSV |
 Run an example:
 
 ```bash
 cargo run --example historical_data_fetch
 cargo run --example live_quote
 cargo run --example channel_consumer
+cargo run --example full_fundamental_fetch -- AAPL
 ```
 
 ## Prerequisites

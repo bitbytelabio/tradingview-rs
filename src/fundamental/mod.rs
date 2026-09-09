@@ -61,8 +61,8 @@
 pub mod entry;
 pub mod fetch;
 pub mod filter;
+pub mod full;
 pub mod registry;
-
 #[cfg(test)]
 mod tests;
 
@@ -72,6 +72,10 @@ pub use fetch::{
     fetch_fundamental_registry_with_client,
 };
 pub use filter::FundamentalRegistryFilter;
+pub use full::{
+    FullFundamentalConfig, FullFundamentalEntryResult, FullFundamentalResult,
+    FundamentalEntryStatus, fetch_full_fundamentals, fetch_full_fundamentals_with_config,
+};
 pub use registry::FundamentalRegistry;
 
 /// Retrieves fundamental data points for a symbol using a registered study or canonical identifier.
