@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Fundamental Pine study catalog & date-versioned registry (`tradingview::fundamental::{fetch_fundamental_registry, FundamentalRegistry, FundamentalRegistryEntry, get_fundamental_data}`)
+- High-level one-shot study retrieval client (`tradingview::study::{StudyClient, StudyRequest, StudyResult}`) modeled after `HistoricalClient`
+- Global economic calendar API client (`tradingview::client::fin_calendar::{get_economic_calendar, EconomicCalendarRequest, EconomicCalendarEvent, EconomicImportance}`)
+- Runnable example for full fundamental catalog retrieval and lossless long-form CSV export (`examples/full_fundamental_fetch.rs`)
 - Technical Analysis scanner API (`get_technical_analysis`, `TechnicalAnalysis`, `Period`, `TechnicalAnalysisRecommendations`)
 - Event-driven `DataLoader` with source → fan-out → sinks architecture
 - `DataSource` trait with TradingView WebSocket adapter (`source::tradingview`)

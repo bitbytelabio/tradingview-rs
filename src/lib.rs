@@ -27,8 +27,10 @@ pub use error::Error;
 // Re-exporting some commonly used types
 pub use iso_currency::{Country, Currency, CurrencySymbol};
 
+pub mod fundamental;
 pub mod historical;
 pub mod live;
+pub mod study;
 
 // ---------------------------------------------------------------------------
 // New event-driven data loader modules

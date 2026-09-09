@@ -47,6 +47,7 @@ pub struct PineInfo {
 #[serde(default, rename_all = "camelCase")]
 pub struct PineInfoExtra {
     pub financial_period: Option<FinancialPeriod>,
+    #[serde(alias = "fund_id")]
     pub fund_id: Option<Ustr>,
     pub fundamental_category: Option<Ustr>,
     pub is_auto: bool,

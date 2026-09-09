@@ -31,12 +31,12 @@ The library exposes **two usage tiers**:
 - [x] **News Integration** — Access TradingView news and headlines
 - [x] **User Authentication** — Login with username/password + TOTP 2FA support
 - [x] **Premium Features** — Access TradingView Pro/Premium/Expert data tiers
-- [ ] Fundamental data
+- [x] **Fundamental data** — Built-in Pine study catalog & date-versioned registry (`tradingview::fundamental`)
 - [x] **Technical analysis signals** — Retrieve scanner ratings across 8 timeframes (via get_technical_analysis)
 - [x] **Invite-only indicators support** — Access private Pine Script indicators (via get_private_indicators)
 - [ ] Public chat interactions
 - [ ] Screener integration
-- [ ] Economic calendar
+- [x] **Economic calendar** — Global macroeconomic events endpoint (`tradingview::client::fin_calendar`)
 - [ ] Vectorized data conversion
 
 ## Installation
@@ -271,6 +271,66 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+### Fundamental Data & Study Fetch
+
+```rust
+use tradingview::{
+    Interval,
+    fundamental::{fetch_fundamental_registry, get_fundamental_data},
+    live::models::DataServer,
+    models::FinancialPeriod,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Fetch current date-versioned fundamental registry
+    let registry = fetch_fundamental_registry().await?;
+    println!("Registry date: {} ({} studies)", registry.date, registry.len());
+
+    // 2. Fetch specific metric (e.g. Total Revenue Annual) for NASDAQ:AAPL
+    let result = get_fundamental_data(
+        &registry,
+        "total_revenue",
+        Some(&FinancialPeriod::FiscalYear),
+        "AAPL",
+        "NASDAQ",
+        Interval::OneDay,
+        100,
+        None,
+        DataServer::Data,
+    )
+    .await?;
+
+    println!("Received {} data points for {}", result.len(), result.symbol_info.name);
+    Ok(())
+}
+```
+
+### Economic Calendar
+
+```rust
+use chrono::{Duration, Utc};
+use tradingview::client::fin_calendar::{
+    EconomicCalendarRequest, EconomicImportance, get_economic_calendar,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let now = Utc::now();
+    let request = EconomicCalendarRequest::builder()
+        .from(now)
+        .to(now + Duration::days(7))
+        .countries(vec!["US".to_string(), "DE".to_string()])
+        .min_importance(EconomicImportance::Medium)
+        .build();
+
+    let events = get_economic_calendar(&request).await?;
+    for event in events {
+        println!("{}: {} (importance: {:?})", event.date, event.title, event.importance_level());
+    }
+    Ok(())
+}
+```
 
 ## Examples
 
@@ -287,6 +347,7 @@ The [`examples/`](examples/) directory contains runnable examples for every majo
 | [`search.rs`](examples/search.rs) | Symbol search and filtering |
 | [`misc.rs`](examples/misc.rs) | Miscellaneous utility functions |
 
+| [`full_fundamental_fetch.rs`](examples/full_fundamental_fetch.rs) | Fetch full fundamental Pine studies catalog and export to CSV |
 Run an example:
 
 ```bash
