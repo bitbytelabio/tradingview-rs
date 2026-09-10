@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let symbols_raw = env::var("TV_SYMBOLS").unwrap_or_else(|_| "AAPL:NASDAQ;FPT:HOSE".to_string());
 
     let mut symbols: Vec<(String, String)> = Vec::new();
-    for pair_str in symbols_raw.split(|c| c == ',' || c == ';') {
+    for pair_str in symbols_raw.split([',', ';']) {
         let parts: Vec<&str> = pair_str.splitn(2, ':').collect();
         match parts.as_slice() {
             [sym, exch] => symbols.push((sym.to_string(), exch.to_string())),

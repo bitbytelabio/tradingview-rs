@@ -16,7 +16,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_symbol() {
-        let res = list_symbols().call().await.unwrap();
+        let res = list_symbols()
+            .market_type(MarketType::Bonds)
+            .call()
+            .await
+            .unwrap();
 
         println!("{:#?}", res[0]);
         assert!(!res.is_empty());
@@ -53,5 +57,23 @@ mod tests {
         let token = get_quote_token(&cookies).await;
         // Must return error cause we are not logged in
         assert!(token.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_technical_analysis() {
+        let ta = get_technical_analysis("NASDAQ:AAPL").await.unwrap();
+        println!("NASDAQ:AAPL 1D TA: {:#?}", ta["1D"]);
+        assert!(ta.period_1d.all.is_finite());
+        assert!(ta.period_1d.other.is_finite());
+        assert!(ta.period_1d.ma.is_finite());
+    }
+
+    #[tokio::test]
+    async fn test_get_technical_analysis_taiwan() {
+        let ta = get_technical_analysis("TWSE:2330").await.unwrap();
+        println!("TWSE:2330 1D TA: {:#?}", ta["1D"]);
+        assert!(ta.period_1d.all.is_finite());
+        assert!(ta.period_1d.other.is_finite());
+        assert!(ta.period_1d.ma.is_finite());
     }
 }

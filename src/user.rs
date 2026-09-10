@@ -71,15 +71,18 @@ impl UserCookies {
 
         let response: Value = response.json().await?;
 
-        let user: UserCookies;
-
         if response["error"] == *"" {
             debug!("User data: {:#?}", response);
             warn!("2FA is not enabled for this account");
             info!("User is logged in successfully");
             let login_resp: LoginUserResponse = serde_json::from_value(response)?;
 
-            user = login_resp.user;
+            Ok(UserCookies {
+                session: session.unwrap_or_default(),
+                session_signature: signature.unwrap_or_default(),
+                device_token: device_token.unwrap_or_default(),
+                ..login_resp.user
+            })
         } else if response["error"] == *"2FA_required" {
             if totp_secret.is_none() {
                 error!("2FA is enabled for this account, but no TOTP secret was provided");
@@ -124,27 +127,18 @@ impl UserCookies {
             info!("User is logged in successfully");
             let login_resp: LoginUserResponse = serde_json::from_value(body)?;
 
-            user = login_resp.user;
-
-            return Ok(UserCookies {
+            Ok(UserCookies {
                 session: session.unwrap_or_default(),
                 session_signature: signature.unwrap_or_default(),
                 device_token: device_token.unwrap_or_default(),
-                ..user
-            });
+                ..login_resp.user
+            })
         } else {
             error!("unable to login, username or password is invalid");
-            return Err(Error::Login {
+            Err(Error::Login {
                 source: LoginError::InvalidCredentials,
-            });
+            })
         }
-
-        Ok(UserCookies {
-            session: session.unwrap_or_default(),
-            session_signature: signature.unwrap_or_default(),
-            device_token: device_token.unwrap_or_default(),
-            ..user
-        })
     }
 
     async fn handle_mfa(totp_secret: &str, session: &str, signature: &str) -> Result<Response> {

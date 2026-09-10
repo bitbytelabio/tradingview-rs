@@ -1,25 +1,24 @@
-//! Benchmarks for `PriceIterable::to_vec()` — comparing the fixed borrow-based
-//! `ChartHistoricalData` implementation against the `Vec<DataPoint>` baseline.
+//! Criterion benchmarks for `tradingview-rs` performance baselines and regressions.
 //!
-//! The old implementation of `ChartHistoricalData::to_vec()` called
-//! `self.data.to_vec()`, which cloned the entire `Vec<DataPoint>` (O(n)
-//! allocation + O(n) clone).  The fix replaces it with `self.data.iter()`,
-//! which borrows references with zero allocations.
-//!
-//! Sizes: 1,000 / 10,000 / 100,000 bars.
-//! Each benchmark iterates all OHLCV fields to simulate realistic downstream
-//! consumption.
+//! Covers:
+//! - `PriceIterable::to_vec()`: zero-allocation borrowed iteration vs clone-and-iterate.
+//! - `Utils/gen_id`: random alphanumeric session ID generation throughput.
+//! - `HttpClient`: shared `LazyLock` client acquisition vs legacy per-call client creation.
+//! - `Utils/parse_packet`: realistic frame batches (1, 5, 20 packets) alongside fixture-scale (1K, 10K).
+//! - `Utils/format_packet`: packet serialization & framing (`SocketMessageSer`).
+//! - `WebSocket/write-path-channel`: burst mpsc send throughput with a shared runtime outside iteration.
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use serde_json::json;
 use std::hint::black_box;
-use tradingview::chart::{ChartHistoricalData, ChartOptions, DataPoint, OHLCV, PriceIterable};
+use tradingview::chart::{ChartHistoricalData, ChartOptions, DataPoint, PriceIterable};
+use tradingview::live::models::SocketMessageSer;
 use tradingview::utils::gen_id;
-use tradingview::utils::parse_packet;
 #[allow(deprecated)]
 use tradingview::utils::{build_request, http_client};
+use tradingview::utils::{format_packet, parse_packet};
 use tradingview::websocket::SeriesInfo;
 use ustr::Ustr;
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -78,7 +77,7 @@ fn iterate_all_fields(data: &impl PriceIterable<Item = DataPoint>) {
 // Benchmark groups
 // ---------------------------------------------------------------------------
 
-/// `Vec<DataPoint>` — the baseline (always used `iter()` — no clone).
+/// `Vec<DataPoint>` direct baseline: zero-allocation borrowed iteration over all OHLCV fields.
 fn bench_vec_direct(c: &mut Criterion) {
     let sizes = [1_000usize, 10_000, 100_000];
     let mut group = c.benchmark_group("PriceIterable/Vec-direct-baseline");
@@ -92,7 +91,7 @@ fn bench_vec_direct(c: &mut Criterion) {
     group.finish();
 }
 
-/// `ChartHistoricalData` — the **fixed** implementation (`self.data.iter()`).
+/// `ChartHistoricalData` fixed implementation: zero-allocation borrowed iteration (`self.data.iter()`).
 fn bench_chart_fixed(c: &mut Criterion) {
     let sizes = [1_000usize, 10_000, 100_000];
     let mut group = c.benchmark_group("PriceIterable/ChartHistorical-fixed");
@@ -106,9 +105,9 @@ fn bench_chart_fixed(c: &mut Criterion) {
     group.finish();
 }
 
-/// Simulates the **old** clone-based path: clone the underlying `Vec<DataPoint>`,
-/// then iterate over all OHLCV fields.  This shows what the old
-/// `ChartHistoricalData::to_vec()` was doing internally before the fix.
+/// Simulates the old clone-based `ChartHistoricalData::to_vec()` path:
+/// clone the entire `Vec<DataPoint>` first, then iterate over all OHLCV fields
+/// using the exact same `iterate_all_fields` workload for equivalent comparison.
 fn bench_old_clone_based(c: &mut Criterion) {
     let sizes = [1_000usize, 10_000, 100_000];
     let mut group = c.benchmark_group("PriceIterable/OLD-clone-then-iterate");
@@ -117,16 +116,8 @@ fn bench_old_clone_based(c: &mut Criterion) {
         let candles = make_candles(n);
         group.bench_with_input(BenchmarkId::new("clone+iterate", n), &candles, |b, data| {
             b.iter(|| {
-                // Old behaviour: clone the entire Vec, then iterate.
-                let cloned: Vec<DataPoint> = data.iter().cloned().collect();
-                for dp in &cloned {
-                    black_box(dp.open());
-                    black_box(dp.high());
-                    black_box(dp.low());
-                    black_box(dp.close());
-                    black_box(dp.volume());
-                    black_box(dp.timestamp());
-                }
+                let cloned: Vec<DataPoint> = data.clone();
+                iterate_all_fields(&cloned);
                 black_box(cloned);
             });
         });
@@ -204,56 +195,82 @@ fn build_packets(n: usize) -> String {
     buf
 }
 
-/// Benchmark `parse_packet()` at 1K, 10K, and 100K packet counts.
+/// Benchmark `parse_packet()` across both realistic packet batches (1, 5, 20)
+/// and large fixture-scale counts (1K, 10K).
 fn bench_parse_packet(c: &mut Criterion) {
-    let sizes = [1_000usize, 10_000, 100_000];
-    let mut group = c.benchmark_group("Utils/parse_packet");
-
-    for &n in &sizes {
-        group.throughput(Throughput::Elements(n as u64));
+    // Realistic small batches typical of live WebSocket message arrivals
+    let realistic_sizes = [1usize, 5, 20];
+    let mut realistic_group = c.benchmark_group("Utils/parse_packet/realistic");
+    for &n in &realistic_sizes {
         let data = build_packets(n);
-        group.bench_with_input(BenchmarkId::new("parse", n), &data, |b, data| {
+        realistic_group.throughput(Throughput::Bytes(data.len() as u64));
+        realistic_group.bench_with_input(BenchmarkId::new("packets", n), &data, |b, data| {
             b.iter(|| black_box(parse_packet(data)));
         });
     }
+    realistic_group.finish();
+
+    // Fixture-scale counts simulating large historical or replay backfills
+    let fixture_sizes = [1_000usize, 10_000];
+    let mut fixture_group = c.benchmark_group("Utils/parse_packet/fixture_scale");
+    for &n in &fixture_sizes {
+        let data = build_packets(n);
+        fixture_group.throughput(Throughput::Bytes(data.len() as u64));
+        fixture_group.bench_with_input(BenchmarkId::new("packets", n), &data, |b, data| {
+            b.iter(|| black_box(parse_packet(data)));
+        });
+    }
+    fixture_group.finish();
+}
+
+/// Benchmark `format_packet()` serialization and framing throughput using `SocketMessageSer`.
+fn bench_format_packet(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Utils/format_packet");
+    group.throughput(Throughput::Elements(1));
+
+    let heartbeat_json_cmd = SocketMessageSer::new("~h~5", json!([]));
+    group.bench_function("heartbeat_json_cmd", |b| {
+        b.iter(|| black_box(format_packet(&heartbeat_json_cmd).unwrap()));
+    });
+
+    let quote_sub = SocketMessageSer::new(
+        "quote_add_symbols",
+        json!(["qs_session_1", "BINANCE:BTCUSDT", "NASDAQ:AAPL"]),
+    );
+    group.bench_function("command_payload", |b| {
+        b.iter(|| black_box(format_packet(&quote_sub).unwrap()));
+    });
 
     group.finish();
 }
 
 /// Benchmark WebSocket write-path throughput using an mpsc channel.
 ///
-/// Simulates a command burst: N messages are queued concurrently into the
-/// channel, and a dummy receiver drains them.  This measures the raw
-/// channel send throughput without network I/O.
+/// Keeps a single shared Tokio runtime outside `b.iter()` to measure pure channel
+/// send throughput without runtime instantiation overhead inside the timing loop.
 fn bench_ws_write_path(c: &mut Criterion) {
     use tokio::runtime::Runtime;
     use tokio::sync::mpsc;
 
-    let rt = Runtime::new().unwrap();
+    let rt = Runtime::new().expect("create tokio runtime for bench");
     let sizes = [100usize, 1_000, 10_000];
 
     let mut group = c.benchmark_group("WebSocket/write-path-channel");
     for &n in &sizes {
         group.throughput(Throughput::Elements(n as u64));
-        group.bench_with_input(
-            criterion::BenchmarkId::new("send_n_messages", n),
-            &n,
-            |b, &n| {
-                b.iter(|| {
-                    rt.block_on(async {
-                        let (tx, mut rx) = mpsc::channel::<String>(1024);
-                        // Spawn a dummy consumer to prevent channel backpressure.
-                        let consumer =
-                            tokio::spawn(async move { while rx.recv().await.is_some() {} });
-                        for i in 0..n {
-                            let _ = tx.send(format!("msg_{i}")).await;
-                        }
-                        drop(tx);
-                        let _ = consumer.await;
-                    });
+        group.bench_with_input(BenchmarkId::new("send_n_messages", n), &n, |b, &n| {
+            b.iter(|| {
+                rt.block_on(async {
+                    let (tx, mut rx) = mpsc::channel::<String>(1024);
+                    let consumer = tokio::spawn(async move { while rx.recv().await.is_some() {} });
+                    for i in 0..n {
+                        let _ = tx.send(format!("msg_{i}")).await;
+                    }
+                    drop(tx);
+                    let _ = consumer.await;
                 });
-            },
-        );
+            });
+        });
     }
     group.finish();
 }
@@ -266,6 +283,7 @@ criterion_group!(
     bench_gen_id,
     bench_http_client,
     bench_parse_packet,
+    bench_format_packet,
     bench_ws_write_path,
 );
 criterion_main!(benches);

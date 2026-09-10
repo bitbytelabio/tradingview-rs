@@ -65,7 +65,7 @@ pub enum Command {
     AddReplaySeries(AddReplaySeriesCommandMsg),
     ReplayStep(ReplayStepCommandMsg),
     ReplayStart(ReplayStartCommandMsg),
-    ReplayStop(SessionTerminationCommandMsg),
+    ReplayStop(ReplayStopCommandMsg),
     ReplayReset(ReplayResetCommandMsg),
 
     /// Study Commands
@@ -114,8 +114,13 @@ impl Command {
                         "Chart series parameters cannot be empty".into(),
                     ));
                 }
-                if msg.bar_count == 0 {
-                    return Err(Error::Internal("Bar count must be greater than 0".into()));
+                // bar_count == 0 is valid in range mode (7-arg form).
+                // In count mode (6-arg form), bar_count must be > 0.
+                if msg.range.is_none() && msg.bar_count == 0 {
+                    return Err(Error::Internal(
+                        "Bar count must be greater than 0 in count mode (range mode allows 0)"
+                            .into(),
+                    ));
                 }
             }
             Command::BatchCommands(commands) => {
@@ -128,6 +133,31 @@ impl Command {
                 for cmd in commands {
                     cmd.validate()?;
                 }
+            }
+            Command::AddReplaySeries(msg) => {
+                if msg.replay_session.is_empty() || msg.request_id.is_empty() {
+                    return Err(Error::Internal("Replay parameters cannot be empty".into()));
+                }
+            }
+            Command::ReplayStep(msg) => {
+                if msg.replay_session.is_empty() || msg.request_id.is_empty() {
+                    return Err(Error::Internal("Replay parameters cannot be empty".into()));
+                }
+            }
+            Command::ReplayStart(msg) => {
+                if msg.replay_session.is_empty() || msg.request_id.is_empty() {
+                    return Err(Error::Internal("Replay parameters cannot be empty".into()));
+                }
+            }
+            Command::ReplayStop(msg) => {
+                if msg.replay_session.is_empty() || msg.request_id.is_empty() {
+                    return Err(Error::Internal("Replay parameters cannot be empty".into()));
+                }
+            }
+            Command::ReplayReset(msg)
+                if msg.replay_session.is_empty() || msg.request_id.is_empty() =>
+            {
+                return Err(Error::Internal("Replay parameters cannot be empty".into()));
             }
             _ => {}
         }
@@ -172,6 +202,12 @@ impl Command {
                 Some(&msg.chart_session)
             }
             Command::RemoveSeries(msg) | Command::RemoveStudy(msg) => Some(&msg.chart_session),
+            Command::DeleteReplaySession(msg) => Some(&msg.inner),
+            Command::AddReplaySeries(msg) => Some(&msg.replay_session),
+            Command::ReplayStep(msg) => Some(&msg.replay_session),
+            Command::ReplayStart(msg) => Some(&msg.replay_session),
+            Command::ReplayStop(msg) => Some(&msg.replay_session),
+            Command::ReplayReset(msg) => Some(&msg.replay_session),
             _ => None,
         }
     }
@@ -330,12 +366,12 @@ impl CommandQueue {
         cmd.validate()?;
 
         // Check if command requires existing session
-        if let Some(session) = cmd.requires_session() {
-            if !self.session_tracker.contains(session) {
-                return Err(Error::Internal(
-                    format!("Session '{}' does not exist", session).into(),
-                ));
-            }
+        if let Some(session) = cmd.requires_session()
+            && !self.session_tracker.contains(session)
+        {
+            return Err(Error::Internal(
+                format!("Session '{}' does not exist", session).into(),
+            ));
         }
 
         // Track session creation/deletion
@@ -379,13 +415,13 @@ impl CommandQueue {
     }
 
     fn drop_lowest_priority(&mut self) -> bool {
-        if let Some(_) = self.low_queue.pop_front() {
+        if self.low_queue.pop_front().is_some() {
             return true;
         }
-        if let Some(_) = self.normal_queue.pop_front() {
+        if self.normal_queue.pop_front().is_some() {
             return true;
         }
-        if let Some(_) = self.high_queue.pop_front() {
+        if self.high_queue.pop_front().is_some() {
             return true;
         }
         false
@@ -662,11 +698,11 @@ impl<T: Handler> CommandRunner<T> {
             }
 
             // Handle disconnection state
-            if self.state.status == ConnectionStatus::Disconnected {
-                if let Err(e) = self.handle_reconnection(&mut backoff).await {
-                    error!("Reconnection failed: {}", e);
-                    break;
-                }
+            if self.state.status == ConnectionStatus::Disconnected
+                && let Err(e) = self.handle_reconnection(&mut backoff).await
+            {
+                error!("Reconnection failed: {}", e);
+                break;
             }
         }
 
@@ -683,12 +719,12 @@ impl<T: Handler> CommandRunner<T> {
         }
 
         // Check if connection has been unhealthy for too long
-        if let Some(time_since_success) = self.state.time_since_last_success() {
-            if time_since_success > self.config.health_check_timeout {
-                return Err(Error::Internal(
-                    format!("No successful operations for {time_since_success:?}").into(),
-                ));
-            }
+        if let Some(time_since_success) = self.state.time_since_last_success()
+            && time_since_success > self.config.health_check_timeout
+        {
+            return Err(Error::Internal(
+                format!("No successful operations for {time_since_success:?}").into(),
+            ));
         }
 
         // Actively test the connection with a ping
@@ -1002,40 +1038,44 @@ impl<T: Handler> CommandRunner<T> {
                 Command::AddReplaySeries(command) => {
                     self.ws
                         .add_replay_series()
-                        .maybe_adjustment(command.adjustment)
-                        .maybe_currency(command.currency)
-                        .maybe_session_type(command.session_type)
-                        .chart_session(&command.chart_session)
-                        .series_id(&command.series_id)
-                        .interval(command.interval)
+                        .replay_session(&command.replay_session)
+                        .request_id(&command.request_id)
                         .instrument(&command.instrument)
+                        .maybe_adjustment(command.adjustment)
+                        .maybe_session_type(command.session_type)
+                        .maybe_currency(command.currency)
+                        .interval(command.interval)
                         .call()
                         .await
                 }
                 Command::ReplayStep(command) => {
                     self.ws
                         .replay_step(
-                            &command.chart_session,
-                            &command.series_id,
+                            &command.replay_session,
+                            &command.request_id,
                             command.step as u64,
                         )
                         .await
                 }
                 Command::ReplayStart(command) => {
                     self.ws
-                        .replay_start(&command.chart_session, &command.series_id, command.interval)
+                        .replay_start(
+                            &command.replay_session,
+                            &command.request_id,
+                            command.interval,
+                        )
                         .await
                 }
                 Command::ReplayStop(command) => {
                     self.ws
-                        .replay_stop(&command.chart_session, &command.id)
+                        .replay_stop(&command.replay_session, &command.request_id)
                         .await
                 }
                 Command::ReplayReset(command) => {
                     self.ws
                         .replay_reset(
-                            &command.chart_session,
-                            &command.series_id,
+                            &command.replay_session,
+                            &command.request_id,
                             command.timestamp,
                         )
                         .await
@@ -1071,7 +1111,6 @@ impl<T: Handler> CommandRunner<T> {
                                 .try_into()
                                 .expect("Study IDs must be exactly 2"),
                         )
-                        .chart_series_id(&command.chart_series_id)
                         .study(command.study.clone())
                         .call()
                         .await
@@ -1326,5 +1365,85 @@ impl<T: Handler> CommandRunner<T> {
 
     pub fn config(&self) -> &CommandRunnerConfig {
         &self.config
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ustr::ustr;
+
+    #[test]
+    fn test_replay_commands_validation() {
+        let valid_start = Command::ReplayStart(ReplayStartCommandMsg {
+            replay_session: ustr("rs_123"),
+            request_id: ustr("req_1"),
+            interval: 500,
+        });
+        assert!(valid_start.validate().is_ok());
+
+        let invalid_start = Command::ReplayStart(ReplayStartCommandMsg {
+            replay_session: ustr(""),
+            request_id: ustr("req_1"),
+            interval: 500,
+        });
+        assert!(invalid_start.validate().is_err());
+
+        let invalid_start_id = Command::ReplayStart(ReplayStartCommandMsg {
+            replay_session: ustr("rs_123"),
+            request_id: ustr(""),
+            interval: 500,
+        });
+        assert!(invalid_start_id.validate().is_err());
+
+        let valid_step = Command::ReplayStep(ReplayStepCommandMsg {
+            replay_session: ustr("rs_123"),
+            request_id: ustr("req_2"),
+            step: 5,
+        });
+        assert!(valid_step.validate().is_ok());
+
+        let valid_stop = Command::ReplayStop(ReplayStopCommandMsg {
+            replay_session: ustr("rs_123"),
+            request_id: ustr("req_3"),
+        });
+        assert!(valid_stop.validate().is_ok());
+
+        let valid_reset = Command::ReplayReset(ReplayResetCommandMsg {
+            replay_session: ustr("rs_123"),
+            request_id: ustr("req_4"),
+            timestamp: 1_700_000_000,
+        });
+        assert!(valid_reset.validate().is_ok());
+    }
+
+    #[test]
+    fn test_replay_commands_requires_session() {
+        let cmd_start = Command::ReplayStart(ReplayStartCommandMsg {
+            replay_session: ustr("rs_my_session"),
+            request_id: ustr("req_1"),
+            interval: 1000,
+        });
+        assert_eq!(cmd_start.requires_session(), Some("rs_my_session"));
+
+        let cmd_step = Command::ReplayStep(ReplayStepCommandMsg {
+            replay_session: ustr("rs_my_session"),
+            request_id: ustr("req_2"),
+            step: 1,
+        });
+        assert_eq!(cmd_step.requires_session(), Some("rs_my_session"));
+
+        let cmd_stop = Command::ReplayStop(ReplayStopCommandMsg {
+            replay_session: ustr("rs_my_session"),
+            request_id: ustr("req_3"),
+        });
+        assert_eq!(cmd_stop.requires_session(), Some("rs_my_session"));
+
+        let cmd_reset = Command::ReplayReset(ReplayResetCommandMsg {
+            replay_session: ustr("rs_my_session"),
+            request_id: ustr("req_4"),
+            timestamp: 1_700_000_000,
+        });
+        assert_eq!(cmd_reset.requires_session(), Some("rs_my_session"));
     }
 }

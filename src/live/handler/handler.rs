@@ -52,8 +52,6 @@ pub trait HandlerFactory: Send + Sync + 'static {
     fn create(&self, command_tx: CommandTx) -> Self::Handler;
 }
 
-
-
 // =============================================================================
 // Tests
 // =============================================================================
@@ -80,8 +78,8 @@ mod tests {
 
     #[test]
     fn test_default_capacity_is_reasonable() {
-        assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY >= 64);
-        assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY <= 4096);
+        const { assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY >= 64) };
+        const { assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY <= 4096) };
     }
 
     #[tokio::test]
@@ -183,5 +181,4 @@ mod tests {
         // Verify we can use Arc<dyn Handler>
         let _arc: std::sync::Arc<dyn Handler> = std::sync::Arc::new(handler);
     }
-
 }

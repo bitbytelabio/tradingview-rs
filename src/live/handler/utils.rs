@@ -89,8 +89,8 @@ macro_rules! study_cmd {
 #[macro_export]
 macro_rules! replay_series_cmd {
     (
-        session: $session:expr,
-        series_id: $series_id:expr,
+        replay_session: $replay_session:expr,
+        request_id: $request_id:expr,
         instrument: $instrument:expr,
         interval: $interval:expr
         $(, adjustment: $adjustment:expr)?
@@ -98,8 +98,8 @@ macro_rules! replay_series_cmd {
         $(, session_type: $session_type:expr)?
     ) => {
         AddReplaySeriesCommandMsg {
-            chart_session: ustr::ustr($session),
-            series_id: ustr::ustr($series_id),
+            replay_session: ustr::ustr($replay_session),
+            request_id: ustr::ustr($request_id),
             instrument: ustr::ustr($instrument),
             interval: $interval,
             adjustment: None $(.or(Some($adjustment)))?,
@@ -140,4 +140,48 @@ macro_rules! timezone_cmd {
             timezone: $timezone,
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::live::handler::message::AddReplaySeriesCommandMsg;
+    use crate::models::{Interval, MarketAdjustment, SessionType};
+    use iso_currency::Currency;
+    use ustr::ustr;
+
+    #[test]
+    fn test_replay_series_cmd_expansion() {
+        let cmd = replay_series_cmd!(
+            replay_session: "rep_123",
+            request_id: "req_456",
+            instrument: "BINANCE:BTCUSDT",
+            interval: Interval::OneMinute,
+            adjustment: MarketAdjustment::Splits,
+            currency: Currency::USD,
+            session_type: SessionType::Regular
+        );
+
+        assert_eq!(cmd.replay_session, ustr("rep_123"));
+        assert_eq!(cmd.request_id, ustr("req_456"));
+        assert_eq!(cmd.instrument, ustr("BINANCE:BTCUSDT"));
+        assert_eq!(cmd.interval, Interval::OneMinute);
+        assert!(matches!(cmd.adjustment, Some(MarketAdjustment::Splits)));
+        assert_eq!(cmd.currency, Some(Currency::USD));
+        assert_eq!(cmd.session_type, Some(SessionType::Regular));
+
+        let cmd_minimal = replay_series_cmd!(
+            replay_session: "rep_789",
+            request_id: "req_012",
+            instrument: "HOSE:FPT",
+            interval: Interval::OneDay
+        );
+
+        assert_eq!(cmd_minimal.replay_session, ustr("rep_789"));
+        assert_eq!(cmd_minimal.request_id, ustr("req_012"));
+        assert_eq!(cmd_minimal.instrument, ustr("HOSE:FPT"));
+        assert_eq!(cmd_minimal.interval, Interval::OneDay);
+        assert!(cmd_minimal.adjustment.is_none());
+        assert_eq!(cmd_minimal.currency, None);
+        assert_eq!(cmd_minimal.session_type, None);
+    }
 }

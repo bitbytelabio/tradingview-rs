@@ -110,6 +110,10 @@ pub struct CandleData {
     pub low: f64,
     pub close: f64,
     pub volume: f64,
+    /// Data source that produced this candle (e.g. `"yahoo"`, `"binance"`).
+    /// `None` for real-time streaming candles where the source is implicit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub datasource: Option<Ustr>,
 }
 
 impl CandleData {
@@ -134,6 +138,33 @@ impl CandleData {
             low,
             close,
             volume,
+            datasource: None,
+        }
+    }
+
+    /// Create a new candle with an explicit data source.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_datasource(
+        timestamp: i64,
+        symbol: impl Into<Ustr>,
+        interval: impl Into<Ustr>,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+        datasource: impl Into<Ustr>,
+    ) -> Self {
+        Self {
+            timestamp,
+            symbol: symbol.into(),
+            interval: interval.into(),
+            open,
+            high,
+            low,
+            close,
+            volume,
+            datasource: Some(datasource.into()),
         }
     }
 

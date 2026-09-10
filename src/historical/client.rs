@@ -1,17 +1,19 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
+
+use serde::Deserialize;
+use serde_json::Value;
 
 use crate::{
     DataPoint, DataServer, Error, Result, SymbolInfo,
+    chart::options::Range,
     historical::{HistoricalRequest, HistoricalResult, state::HistoricalState},
     live::handler::{CommandTx, Handler, HandlerFactory},
     live::models::TradingViewDataEvent,
     live::websocket::WebSocketClient,
     utils::symbol_init,
 };
-use serde_json::Value;
-use tracing::error;
 
 /// High-level client for fetching historical TradingView chart data.
 pub struct HistoricalClient {
@@ -41,7 +43,7 @@ impl HistoricalClient {
 
         let (cmd_tx, _cmd_rx) =
             tokio::sync::mpsc::channel::<crate::live::handler::command::Command>(16);
-        let factory = HistoricalDataHandlerFactory::new(state.clone());
+        let factory = HistoricalDataHandlerFactory::new(Arc::clone(&state));
         let handler = factory.create(cmd_tx);
 
         let ws = WebSocketClient::builder()
@@ -65,11 +67,7 @@ impl HistoricalClient {
         let series_id = "s1".to_string();
 
         // 1. Create chart session.
-        ws.send(
-            "chart_create_session",
-            &[Value::from(chart_session.as_str())],
-        )
-        .await?;
+        ws.create_chart_session(&chart_session).await?;
         debug!(session = %chart_session, "Chart session created");
 
         // 2. Resolve symbol within the session.
@@ -86,23 +84,22 @@ impl HistoricalClient {
         debug!(instrument = %instrument, "Symbol resolution requested");
 
         // 3. Create data series to start receiving chart data.
-        let bar_count = request.num_bars.unwrap_or(100);
-        ws.send(
-            "create_series",
-            &[
-                Value::from(chart_session.as_str()),
-                Value::from(series_identifier.as_str()),
-                Value::from(series_id.as_str()),
-                Value::from(symbol_series_id.as_str()),
-                Value::from(request.interval.to_string()),
-                Value::from(bar_count),
-                Value::from(""),
-            ],
-        )
-        .await?;
+        // In count mode, exactly 6 arguments are sent (no range).
+        // In range mode, exactly 7 arguments are sent with bar_count = 0.
+        let create_series_args = build_create_series_args(
+            &chart_session,
+            &series_identifier,
+            &series_id,
+            &symbol_series_id,
+            request.interval,
+            request.num_bars,
+            request.range,
+        );
+        ws.send("create_series", &create_series_args).await?;
         debug!(
             interval = ?request.interval,
-            bars = bar_count,
+            bars = request.num_bars,
+            range = ?request.range,
             "Data series created"
         );
 
@@ -129,6 +126,13 @@ impl HistoricalClient {
 
         match result {
             Ok(_) => {
+                if state_guard.errored {
+                    let msg = state_guard
+                        .error_message
+                        .take()
+                        .unwrap_or_else(|| "Historical data retrieval failed".to_string());
+                    return Err(Error::Internal(msg.into()));
+                }
                 let symbol_info = state_guard
                     .symbol_info
                     .take()
@@ -146,14 +150,67 @@ impl HistoricalClient {
         }
     }
 
-    async fn wait_for_completion(state: &Arc<Mutex<HistoricalState>>) {
-        loop {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    pub(crate) async fn wait_for_completion(state: &Arc<Mutex<HistoricalState>>) {
+        let notify = {
             let guard = state.lock().unwrap();
-            if guard.completed || guard.errored {
-                break;
+            guard.notify.clone()
+        };
+        loop {
+            // Register as waiter before checking predicate to avoid lost wakeups.
+            let notified = notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
+            {
+                let guard = state.lock().unwrap();
+                if guard.completed || guard.errored {
+                    break;
+                }
             }
+
+            notified.await;
         }
+    }
+}
+
+/// Builds the argument list for TradingView's `create_series` WebSocket message.
+///
+/// In count mode (`range` is `None`), the message must have exactly 6 arguments:
+/// `[chart_session, series_identifier, series_id, symbol_series_id, interval, bar_count]`.
+///
+/// In range mode (`range` is `Some`), the message must have exactly 7 arguments:
+/// `[chart_session, series_identifier, series_id, symbol_series_id, interval, 0, range]`.
+/// Providing 7 arguments with an empty range causes the server to fail with
+/// `critical_error: "unsupported method: du"`.
+pub(crate) fn build_create_series_args(
+    chart_session: &str,
+    series_identifier: &str,
+    series_id: &str,
+    symbol_series_id: &str,
+    interval: crate::Interval,
+    num_bars: Option<u64>,
+    range: Option<Range>,
+) -> Vec<Value> {
+    if let Some(r) = range {
+        vec![
+            Value::from(chart_session),
+            Value::from(series_identifier),
+            Value::from(series_id),
+            Value::from(symbol_series_id),
+            Value::from(interval.to_string()),
+            Value::from(0u64), // bar_count MUST be 0 in range mode
+            Value::from(r.to_string()),
+        ]
+    } else {
+        let bar_count = num_bars.unwrap_or(100);
+        vec![
+            Value::from(chart_session),
+            Value::from(series_identifier),
+            Value::from(series_id),
+            Value::from(symbol_series_id),
+            Value::from(interval.to_string()),
+            Value::from(bar_count),
+        ]
     }
 }
 
@@ -170,14 +227,13 @@ pub struct HistoricalDataHandler {
     #[allow(dead_code)]
     cmd_tx: CommandTx,
 }
-
 impl Handler for HistoricalDataHandler {
     fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]) {
         match event {
             TradingViewDataEvent::OnSymbolResolved => {
                 // resolve_symbol response: [session, symbol_series_id, SymbolInfo]
                 if let Some(sym_info) = message.get(2)
-                    && let Ok(info) = serde_json::from_value::<SymbolInfo>(sym_info.clone())
+                    && let Ok(info) = SymbolInfo::deserialize(sym_info)
                 {
                     debug!(name = %info.name, "Symbol resolved");
                     self.state.lock().unwrap().record_symbol_info(info);
@@ -190,17 +246,15 @@ impl Handler for HistoricalDataHandler {
                 if let Some(obj) = message[1].as_object() {
                     for (_key, series_val) in obj {
                         if let Some(s_arr) = series_val.get("s").and_then(|v| v.as_array()) {
-                            let points: Vec<DataPoint> = s_arr
-                                .iter()
-                                .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                                .collect();
+                            let mut points = Vec::with_capacity(s_arr.len());
+                            for v in s_arr {
+                                if let Ok(point) = DataPoint::deserialize(v) {
+                                    points.push(point);
+                                }
+                            }
                             if !points.is_empty() {
                                 let mut state = self.state.lock().unwrap();
-                                state.data.extend(points);
-                                state.total_bars += s_arr.len();
-                                if state.first_data_at.is_none() {
-                                    state.first_data_at = Some(Instant::now());
-                                }
+                                state.record_points(points, s_arr.len());
                             }
                         }
                     }
@@ -256,5 +310,278 @@ impl HandlerFactory for HistoricalDataHandlerFactory {
             state: Arc::clone(&self.state),
             cmd_tx: command_tx,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Interval;
+    use crate::chart::options::Range;
+    use crate::error::TradingViewError;
+
+    #[test]
+    fn test_create_series_args_count_mode_default_bars() {
+        let args = build_create_series_args(
+            "cs_test",
+            "sds_1",
+            "s1",
+            "sds_sym_1",
+            Interval::OneDay,
+            None,
+            None,
+        );
+        assert_eq!(
+            args.len(),
+            6,
+            "Count mode without range must have exactly 6 arguments"
+        );
+        assert_eq!(args[0], Value::from("cs_test"));
+        assert_eq!(args[1], Value::from("sds_1"));
+        assert_eq!(args[2], Value::from("s1"));
+        assert_eq!(args[3], Value::from("sds_sym_1"));
+        assert_eq!(args[4], Value::from("1D"));
+        assert_eq!(
+            args[5],
+            Value::from(100u64),
+            "Default bar count must be 100"
+        );
+    }
+
+    #[test]
+    fn test_create_series_args_count_mode_custom_bars() {
+        let args = build_create_series_args(
+            "cs_test",
+            "sds_1",
+            "s1",
+            "sds_sym_1",
+            Interval::FiveMinutes,
+            Some(500),
+            None,
+        );
+        assert_eq!(
+            args.len(),
+            6,
+            "Count mode without range must have exactly 6 arguments"
+        );
+        assert_eq!(args[4], Value::from("5"));
+        assert_eq!(args[5], Value::from(500u64));
+    }
+
+    #[test]
+    fn test_create_series_args_range_mode_from_to() {
+        let range = Range::FromTo(1626220800, 1628640000);
+        let args = build_create_series_args(
+            "cs_test",
+            "sds_1",
+            "s1",
+            "sds_sym_1",
+            Interval::OneDay,
+            Some(500), // even if num_bars is provided, range mode must zero it
+            Some(range),
+        );
+        assert_eq!(args.len(), 7, "Range mode must have exactly 7 arguments");
+        assert_eq!(args[0], Value::from("cs_test"));
+        assert_eq!(args[1], Value::from("sds_1"));
+        assert_eq!(args[2], Value::from("s1"));
+        assert_eq!(args[3], Value::from("sds_sym_1"));
+        assert_eq!(args[4], Value::from("1D"));
+        assert_eq!(
+            args[5],
+            Value::from(0u64),
+            "Bar count in range mode must be 0"
+        );
+        assert_eq!(args[6], Value::from(range.to_string()));
+    }
+
+    #[test]
+    fn test_create_series_args_range_mode_preset() {
+        let range = Range::OneDay;
+        let args = build_create_series_args(
+            "cs_test",
+            "sds_1",
+            "s1",
+            "sds_sym_1",
+            Interval::OneMinute,
+            None,
+            Some(range),
+        );
+        assert_eq!(args.len(), 7, "Range mode must have exactly 7 arguments");
+        assert_eq!(
+            args[5],
+            Value::from(0u64),
+            "Bar count in range mode must be 0"
+        );
+        assert_eq!(args[6], Value::from(range.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_completion_wakes_immediately_on_complete() {
+        let state = Arc::new(Mutex::new(HistoricalState::new()));
+        let state_clone = Arc::clone(&state);
+
+        let wait_handle = tokio::spawn(async move {
+            HistoricalClient::wait_for_completion(&state_clone).await;
+        });
+
+        tokio::task::yield_now().await;
+
+        let start = std::time::Instant::now();
+        state.lock().unwrap().complete();
+
+        let timeout_result =
+            tokio::time::timeout(std::time::Duration::from_millis(50), wait_handle).await;
+        assert!(
+            timeout_result.is_ok(),
+            "wait_for_completion must wake without polling"
+        );
+        assert!(start.elapsed() < std::time::Duration::from_millis(50));
+        assert!(state.lock().unwrap().completed);
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_completion_wakes_immediately_on_fail() {
+        let state = Arc::new(Mutex::new(HistoricalState::new()));
+        let state_clone = Arc::clone(&state);
+
+        let wait_handle = tokio::spawn(async move {
+            HistoricalClient::wait_for_completion(&state_clone).await;
+        });
+
+        tokio::task::yield_now().await;
+
+        let start = std::time::Instant::now();
+        state.lock().unwrap().fail("simulated error".into());
+
+        let timeout_result =
+            tokio::time::timeout(std::time::Duration::from_millis(50), wait_handle).await;
+        assert!(
+            timeout_result.is_ok(),
+            "wait_for_completion must wake immediately on failure"
+        );
+        assert!(start.elapsed() < std::time::Duration::from_millis(50));
+        let guard = state.lock().unwrap();
+        assert!(guard.errored);
+        assert_eq!(guard.error_message.as_deref(), Some("simulated error"));
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_completion_lost_wakeup_safe_pre_completed() {
+        let state = Arc::new(Mutex::new(HistoricalState::new()));
+
+        // Complete state BEFORE calling wait_for_completion
+        state.lock().unwrap().complete();
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            HistoricalClient::wait_for_completion(&state),
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "wait_for_completion must return immediately if already completed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_completion_lost_wakeup_safe_pre_errored() {
+        let state = Arc::new(Mutex::new(HistoricalState::new()));
+
+        // Fail state BEFORE calling wait_for_completion
+        state.lock().unwrap().fail("early failure".into());
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            HistoricalClient::wait_for_completion(&state),
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "wait_for_completion must return immediately if already errored"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handler_signals_series_completed() {
+        let state = Arc::new(Mutex::new(HistoricalState::new()));
+        let factory = HistoricalDataHandlerFactory::new(Arc::clone(&state));
+        let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel(4);
+        let handler = factory.create(cmd_tx);
+
+        let state_clone = Arc::clone(&state);
+        let wait_handle = tokio::spawn(async move {
+            HistoricalClient::wait_for_completion(&state_clone).await;
+        });
+
+        tokio::task::yield_now().await;
+
+        handler.handle_events(TradingViewDataEvent::OnSeriesCompleted, &[]);
+
+        let timeout_result =
+            tokio::time::timeout(std::time::Duration::from_millis(50), wait_handle).await;
+        assert!(
+            timeout_result.is_ok(),
+            "handler must signal completion immediately to waiters"
+        );
+        assert!(state.lock().unwrap().completed);
+    }
+
+    #[tokio::test]
+    async fn test_handler_signals_protocol_error() {
+        let state = Arc::new(Mutex::new(HistoricalState::new()));
+        let factory = HistoricalDataHandlerFactory::new(Arc::clone(&state));
+        let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel(4);
+        let handler = factory.create(cmd_tx);
+
+        let state_clone = Arc::clone(&state);
+        let wait_handle = tokio::spawn(async move {
+            HistoricalClient::wait_for_completion(&state_clone).await;
+        });
+
+        tokio::task::yield_now().await;
+
+        handler.handle_events(
+            TradingViewDataEvent::OnError(TradingViewError::SeriesError),
+            &[],
+        );
+
+        let timeout_result =
+            tokio::time::timeout(std::time::Duration::from_millis(50), wait_handle).await;
+        assert!(
+            timeout_result.is_ok(),
+            "handler must signal error immediately to waiters"
+        );
+        assert!(state.lock().unwrap().errored);
+    }
+
+    #[test]
+    fn test_handler_parses_chart_data_without_cloning() {
+        let state = Arc::new(Mutex::new(HistoricalState::new()));
+        let factory = HistoricalDataHandlerFactory::new(Arc::clone(&state));
+        let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel(4);
+        let handler = factory.create(cmd_tx);
+
+        let chart_data_payload = serde_json::json!([
+            "session_id",
+            {
+                "s1": {
+                    "s": [
+                        { "i": 100, "v": [100.0, 105.0, 99.0, 104.0, 1000.0] },
+                        { "i": 101, "v": [104.0, 106.0, 103.0, 105.5, 1200.0] }
+                    ]
+                }
+            }
+        ]);
+
+        let msg_slice = chart_data_payload.as_array().unwrap();
+        handler.handle_events(TradingViewDataEvent::OnChartData, msg_slice);
+
+        let guard = state.lock().unwrap();
+        assert_eq!(guard.data.len(), 2);
+        assert_eq!(guard.total_bars, 2);
+        assert_eq!(guard.data[0].index, 100);
+        assert_eq!(guard.data[1].index, 101);
     }
 }

@@ -217,7 +217,10 @@ impl<S: DataSource> DataLoader<S> {
 // Background tasks
 // ---------------------------------------------------------------------------
 
-/// Fan-out: reads from `source_rx` and sends clones to every `sink_tx`.
+/// Fan-out: reads from `source_rx` and sends batches to every `sink_tx`.
+///
+/// Optimizes allocation: zero clones for single-sink loaders, and N-1 clones
+/// for N sinks by moving into the last active sender while preserving error semantics.
 async fn fan_out_task(
     mut source_rx: mpsc::Receiver<Vec<MarketEvent>>,
     sink_txs: Vec<mpsc::Sender<Vec<MarketEvent>>>,
@@ -236,7 +239,43 @@ async fn fan_out_task(
             result = source_rx.recv() => {
                 match result {
                     Some(events) => {
-                        for (i, tx) in sink_txs.iter().enumerate() {
+                        if sink_txs.is_empty() {
+                            continue;
+                        }
+
+                        if !config.continue_on_sink_error {
+                            for (i, tx) in sink_txs.iter().enumerate() {
+                                if tx.is_closed() {
+                                    return Err(crate::Error::Internal(ustr::ustr(
+                                        &format!("sink channel {i} closed")
+                                    )));
+                                }
+                            }
+                        }
+
+                        let active_indices: Vec<usize> = sink_txs
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, tx)| if !tx.is_closed() { Some(i) } else { None })
+                            .collect();
+
+                        if active_indices.is_empty() {
+                            if config.continue_on_sink_error {
+                                for i in 0..sink_txs.len() {
+                                    warn!(sink_index = i, "sink channel dropped");
+                                }
+                                continue;
+                            } else {
+                                return Err(crate::Error::Internal(ustr::ustr("all sink channels closed")));
+                            }
+                        }
+
+                        let (&last_idx, head_indices) = active_indices
+                            .split_last()
+                            .expect("active_indices is not empty");
+
+                        for &i in head_indices {
+                            let tx = &sink_txs[i];
                             if let Err(e) = tx.send(events.clone()).await {
                                 if config.continue_on_sink_error {
                                     warn!(sink_index = i, error = %e, "sink channel dropped");
@@ -244,6 +283,25 @@ async fn fan_out_task(
                                     return Err(crate::Error::Internal(ustr::ustr(
                                         &format!("sink channel {i} closed: {e}")
                                     )));
+                                }
+                            }
+                        }
+
+                        let last_tx = &sink_txs[last_idx];
+                        if let Err(e) = last_tx.send(events).await {
+                            if config.continue_on_sink_error {
+                                warn!(sink_index = last_idx, error = %e, "sink channel dropped");
+                            } else {
+                                return Err(crate::Error::Internal(ustr::ustr(
+                                    &format!("sink channel {last_idx} closed: {e}")
+                                )));
+                            }
+                        }
+
+                        if config.continue_on_sink_error {
+                            for (i, tx) in sink_txs.iter().enumerate() {
+                                if tx.is_closed() {
+                                    warn!(sink_index = i, "sink channel dropped");
                                 }
                             }
                         }
@@ -398,5 +456,161 @@ impl<S: DataSource> DataLoaderBuilder<S> {
 impl<S: DataSource> Default for DataLoaderBuilder<S> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::CandleData;
+
+    fn test_candle(ts: i64) -> MarketEvent {
+        MarketEvent::Candle(CandleData::new(
+            ts,
+            "AAPL",
+            "1D",
+            150.0,
+            155.0,
+            149.0,
+            153.0,
+            1_000_000.0,
+        ))
+    }
+
+    #[tokio::test]
+    async fn test_fanout_single_sink_avoids_cloning() {
+        let (source_tx, source_rx) = mpsc::channel(16);
+        let (sink_tx, mut sink_rx) = mpsc::channel(16);
+        let cancel = CancellationToken::new();
+
+        let handle = tokio::spawn(fan_out_task(
+            source_rx,
+            vec![sink_tx],
+            LoaderConfig::default(),
+            cancel.clone(),
+        ));
+
+        let batch = vec![test_candle(1000)];
+        let original_ptr = batch.as_ptr();
+        source_tx.send(batch).await.unwrap();
+        drop(source_tx);
+
+        let received = sink_rx.recv().await.expect("received event batch");
+        assert_eq!(received.len(), 1);
+        assert_eq!(
+            received.as_ptr(),
+            original_ptr,
+            "single sink must move the batch buffer without cloning"
+        );
+
+        handle.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_fanout_identical_observable_events_one_two_three_sinks() {
+        for sink_count in 1..=3 {
+            let (source_tx, source_rx) = mpsc::channel(16);
+            let mut sink_rxs = Vec::new();
+            let mut sink_txs = Vec::new();
+            for _ in 0..sink_count {
+                let (tx, rx) = mpsc::channel(16);
+                sink_txs.push(tx);
+                sink_rxs.push(rx);
+            }
+            let cancel = CancellationToken::new();
+
+            let handle = tokio::spawn(fan_out_task(
+                source_rx,
+                sink_txs,
+                LoaderConfig::default(),
+                cancel.clone(),
+            ));
+
+            let batch = vec![test_candle(1000), test_candle(2000)];
+            source_tx.send(batch.clone()).await.unwrap();
+            drop(source_tx);
+
+            for (sink_idx, rx) in sink_rxs.iter_mut().enumerate() {
+                let received = rx.recv().await.expect("sink received batch");
+                assert_eq!(
+                    received, batch,
+                    "sink {sink_idx}/{sink_count} must receive identical observable events"
+                );
+            }
+
+            handle.await.unwrap().unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_fanout_trailing_closed_sink_fails_fast_when_continue_false() {
+        let (source_tx, source_rx) = mpsc::channel(16);
+        let (sink_tx_active, mut sink_rx_active) = mpsc::channel(16);
+        let (sink_tx_closed, sink_rx_closed) = mpsc::channel(16);
+        drop(sink_rx_closed); // Close the trailing sink channel
+
+        let cancel = CancellationToken::new();
+        let handle = tokio::spawn(fan_out_task(
+            source_rx,
+            vec![sink_tx_active, sink_tx_closed],
+            LoaderConfig {
+                continue_on_sink_error: false,
+                ..Default::default()
+            },
+            cancel.clone(),
+        ));
+
+        let batch = vec![test_candle(1000)];
+        source_tx.send(batch).await.unwrap();
+        drop(source_tx);
+
+        let task_result = handle.await.unwrap();
+        assert!(
+            task_result.is_err(),
+            "expected error due to closed trailing sink when continue_on_sink_error is false"
+        );
+        // The active sink should not have received events because pre-detection caught the closed sink before dispatch
+        assert!(sink_rx_active.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_fanout_trailing_closed_sink_continues_when_continue_true() {
+        let (source_tx, source_rx) = mpsc::channel(16);
+        let (sink_tx_active, mut sink_rx_active) = mpsc::channel(16);
+        let (sink_tx_closed, sink_rx_closed) = mpsc::channel(16);
+        drop(sink_rx_closed); // Close the trailing sink channel
+
+        let cancel = CancellationToken::new();
+        let handle = tokio::spawn(fan_out_task(
+            source_rx,
+            vec![sink_tx_active, sink_tx_closed],
+            LoaderConfig {
+                continue_on_sink_error: true,
+                ..Default::default()
+            },
+            cancel.clone(),
+        ));
+
+        let batch = vec![test_candle(1000)];
+        let original_ptr = batch.as_ptr();
+        source_tx.send(batch).await.unwrap();
+        drop(source_tx);
+
+        let task_result = handle.await.unwrap();
+        assert!(
+            task_result.is_ok(),
+            "expected success when continue_on_sink_error is true"
+        );
+
+        let received = sink_rx_active
+            .recv()
+            .await
+            .expect("active sink received batch");
+        assert_eq!(received.len(), 1);
+        assert_eq!(
+            received.as_ptr(),
+            original_ptr,
+            "single remaining active sink must move the batch buffer without cloning"
+        );
     }
 }
