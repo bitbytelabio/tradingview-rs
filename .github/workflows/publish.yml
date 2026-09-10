@@ -86,16 +86,16 @@ jobs:
         run: |
           set -euo pipefail
           cargo package -p tradingview-rs --locked
-          mkdir -p release-assets
-          cp target/package/*.crate release-assets/
-          (cd release-assets && sha256sum *.crate > SHA256SUMS)
-          cat release-assets/SHA256SUMS
+          mkdir -p target/release-assets
+          cp target/package/*.crate target/release-assets/
+          (cd target/release-assets && sha256sum *.crate > SHA256SUMS)
+          cat target/release-assets/SHA256SUMS
 
       - name: Upload release assets
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-assets
-          path: release-assets/
+          path: target/release-assets/
           retention-days: 7
 
       - name: Authenticate to crates.io (Trusted Publishing)
