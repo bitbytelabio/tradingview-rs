@@ -571,13 +571,13 @@ impl<T: Handler> WebSocketClient<T> {
 
         // Check if circuit breaker should be reset
         let opened_at = self.circuit_breaker_opened_at.read().await;
-        if let Some(time) = *opened_at {
-            if time.elapsed() > Duration::from_secs(300) {
-                // 5 minutes
-                self.circuit_breaker_open.store(false, Ordering::Relaxed);
-                info!("Circuit breaker reset after timeout");
-                return false;
-            }
+        if let Some(time) = *opened_at
+            && time.elapsed() > Duration::from_secs(300)
+        {
+            // 5 minutes
+            self.circuit_breaker_open.store(false, Ordering::Relaxed);
+            info!("Circuit breaker reset after timeout");
+            return false;
         }
 
         true
@@ -854,7 +854,7 @@ impl<T: Handler> WebSocketClient<T> {
     #[tracing::instrument(skip(self), level = "debug")]
     pub async fn set_fields(&self, quote_session: &str) -> Result<()> {
         let mut quote_fields = payload![quote_session];
-        quote_fields.extend(ALL_QUOTE_FIELDS.iter().copied().map(|s| Value::from(s)));
+        quote_fields.extend(ALL_QUOTE_FIELDS.iter().copied().map(Value::from));
         self.send("quote_set_fields", &quote_fields).await?;
         Ok(())
     }
@@ -978,7 +978,7 @@ impl<T: Handler> WebSocketClient<T> {
 
     /// Modify an existing chart series (e.g., change timeframe).
     ///
-    /// Same count/range mode distinction as [`create_series`].
+    /// Same count/range mode distinction as [`Self::create_series`].
     #[tracing::instrument(skip(self), level = "debug")]
     #[builder]
     pub async fn modify_series(
@@ -1349,11 +1349,11 @@ impl<T: Handler> Socket for WebSocketClient<T> {
 
                 // Periodic ping
                 _ = ping_interval.tick() => {
-                    if !self.is_closed() {
-                        if let Err(e) = self.try_ping().await {
-                            warn!("Periodic ping failed: {}", e);
-                            self.handle_error(e, ustr("periodic_ping")).await?;
-                        }
+                    if !self.is_closed()
+                        && let Err(e) = self.try_ping().await
+                    {
+                        warn!("Periodic ping failed: {}", e);
+                        self.handle_error(e, ustr("periodic_ping")).await?;
                     }
                 }
 

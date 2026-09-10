@@ -1,6 +1,6 @@
 //! TradingView study and fundamental data retrieval.
 //!
-//! Provides a clean, high-level API modeled after [`HistoricalClient`] for fetching
+//! Provides a clean, high-level API modeled after [`crate::historical::HistoricalClient`] for fetching
 //! TradingView indicator studies (both built-in and Pine Script studies) over WebSocket.
 //!
 //! # Architecture
@@ -20,7 +20,7 @@
 //! use tradingview::chart::study::StudyConfiguration;
 //! use tradingview::study::{StudyClient, StudyRequest};
 //! use tradingview::models::pine_indicator::{PineIndicator, ScriptType};
-//! use tradingview::websocket::DataServer;
+//! use tradingview::DataServer;
 //!
 //! # async fn run() -> tradingview::Result<()> {
 //! let client = StudyClient::new("unauthorized_user_token", DataServer::Data);
@@ -34,7 +34,7 @@
 //!     .exchange("NASDAQ")
 //!     .interval(Interval::OneDay)
 //!     .base_bar_count(100)
-//!     .study(StudyConfiguration::Pine(indicator))
+//!     .study(StudyConfiguration::Pine(Box::new(indicator)))
 //!     .build();
 //!
 //! let result = client.retrieve(request).await?;

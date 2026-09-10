@@ -1023,7 +1023,7 @@ async fn fetch_single_study(
         .exchange(exchange)
         .interval(Interval::OneDay)
         .base_bar_count(num_bars)
-        .study(StudyConfiguration::Pine(indicator))
+        .study(StudyConfiguration::Pine(Box::new(indicator)))
         .timeout(timeout)
         .build();
 

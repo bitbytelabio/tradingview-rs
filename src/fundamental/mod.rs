@@ -111,7 +111,9 @@ pub async fn get_fundamental_data(
         .exchange(exchange)
         .interval(interval)
         .base_bar_count(num_bars)
-        .study(crate::chart::study::StudyConfiguration::Pine(indicator))
+        .study(crate::chart::study::StudyConfiguration::Pine(Box::new(
+            indicator,
+        )))
         .build();
 
     client.retrieve(request).await

@@ -2,7 +2,7 @@
 
 This document outlines the planned development trajectory for `tradingview-rs`. Milestones are organized by version and tagged with priority (🔴 critical, 🟡 high, 🟢 medium, ⚪ low).
 
-## v0.2.0 — Pipeline & Polish (current)
+## v0.2.0 — Pipeline & Polish
 
 > **Goal:** Ship the event-driven pipeline, improve developer experience, and harden existing features.
 
@@ -16,26 +16,26 @@ This document outlines the planned development trajectory for `tradingview-rs`. 
 | ✅ | Module-level docs for all public modules | 🟡 |
 | ✅ | README overhaul with architecture diagram and module table | 🟡 |
 | ✅ | ROADMAP.md (this file) | 🟡 |
-| ⬜ | `BoundedChannel` with backpressure in all sink channels | 🟡 |
+| ✅ | Bounded channel backpressure support in sink and loader channels | 🟡 |
 | ⬜ | Graceful shutdown with in-flight batch draining | 🟡 |
 | ⬜ | Rate-limit-aware request throttling in `HistoricalClient` | 🟡 |
-| ⬜ | CI: add `cargo doc` lint to CI pipeline (deny warnings) | 🟢 |
-| ⬜ | Publish v0.2.0 to crates.io | 🔴 |
+| ✅ | CI: add `cargo doc` lint to CI pipeline (deny warnings) | 🟢 |
+| ✅ | Publish v0.2.0 to crates.io | 🔴 |
 
-## v0.3.0 — Data Coverage
+## v0.3.0 — Data Coverage (current)
 
-> **Goal:** Expand the data surface to cover fundamental data, economic calendar, and screener.
+> **Goal:** Expand the data surface to cover fundamental data, economic calendar, and scanner APIs.
 
-| Task | Priority |
-|------|----------|
-| Fundamental data retrieval (income statement, balance sheet, cash flow) | 🔴 |
-| Economic calendar events (earnings, dividends, macro releases) | 🔴 |
-| Symbol screener integration (filter by sector, market cap, P/E, etc.) | 🟡 |
-| `FinancialPeriod` deserialization hardening (handle edge cases from TV) | 🟡 |
-| Normalize all data types into `MarketEvent` variants | 🟡 |
-| Add `FundamentalEvent`, `EconomicEvent`, `ScreenerEvent` to `MarketEvent` | 🟡 |
-| Pagination support for symbol search results | 🟢 |
-| `MarketStatus` endpoint (holiday calendar per exchange) | 🟢 |
+| Status | Task | Priority |
+|--------|------|----------|
+| ✅ | Fundamental data retrieval (one-shot `fetch_full_fundamentals`, `StudyClient`, registry, CSV export) | 🔴 |
+| ✅ | Economic calendar events (`get_economic_calendar`, earnings, dividends, macro releases) | 🔴 |
+| ⬜ | Symbol screener integration (filter by sector, market cap, P/E, etc.) | 🟡 |
+| ✅ | `FinancialPeriod` deserialization hardening (handle edge cases from TV) | 🟡 |
+| ⬜ | Normalize all data types into `MarketEvent` variants | 🟡 |
+| ⬜ | Add `FundamentalEvent`, `EconomicEvent`, `ScreenerEvent` to `MarketEvent` | 🟡 |
+| ⬜ | Pagination support for symbol search results | 🟢 |
+| ⬜ | `MarketStatus` endpoint (holiday calendar per exchange) | 🟢 |
 
 ## v0.4.0 — Advanced Features
 

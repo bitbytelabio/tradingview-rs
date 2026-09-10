@@ -154,10 +154,10 @@ impl Command {
                     return Err(Error::Internal("Replay parameters cannot be empty".into()));
                 }
             }
-            Command::ReplayReset(msg) => {
-                if msg.replay_session.is_empty() || msg.request_id.is_empty() {
-                    return Err(Error::Internal("Replay parameters cannot be empty".into()));
-                }
+            Command::ReplayReset(msg)
+                if msg.replay_session.is_empty() || msg.request_id.is_empty() =>
+            {
+                return Err(Error::Internal("Replay parameters cannot be empty".into()));
             }
             _ => {}
         }
@@ -366,12 +366,12 @@ impl CommandQueue {
         cmd.validate()?;
 
         // Check if command requires existing session
-        if let Some(session) = cmd.requires_session() {
-            if !self.session_tracker.contains(session) {
-                return Err(Error::Internal(
-                    format!("Session '{}' does not exist", session).into(),
-                ));
-            }
+        if let Some(session) = cmd.requires_session()
+            && !self.session_tracker.contains(session)
+        {
+            return Err(Error::Internal(
+                format!("Session '{}' does not exist", session).into(),
+            ));
         }
 
         // Track session creation/deletion
@@ -415,13 +415,13 @@ impl CommandQueue {
     }
 
     fn drop_lowest_priority(&mut self) -> bool {
-        if let Some(_) = self.low_queue.pop_front() {
+        if self.low_queue.pop_front().is_some() {
             return true;
         }
-        if let Some(_) = self.normal_queue.pop_front() {
+        if self.normal_queue.pop_front().is_some() {
             return true;
         }
-        if let Some(_) = self.high_queue.pop_front() {
+        if self.high_queue.pop_front().is_some() {
             return true;
         }
         false
@@ -698,11 +698,11 @@ impl<T: Handler> CommandRunner<T> {
             }
 
             // Handle disconnection state
-            if self.state.status == ConnectionStatus::Disconnected {
-                if let Err(e) = self.handle_reconnection(&mut backoff).await {
-                    error!("Reconnection failed: {}", e);
-                    break;
-                }
+            if self.state.status == ConnectionStatus::Disconnected
+                && let Err(e) = self.handle_reconnection(&mut backoff).await
+            {
+                error!("Reconnection failed: {}", e);
+                break;
             }
         }
 
@@ -719,12 +719,12 @@ impl<T: Handler> CommandRunner<T> {
         }
 
         // Check if connection has been unhealthy for too long
-        if let Some(time_since_success) = self.state.time_since_last_success() {
-            if time_since_success > self.config.health_check_timeout {
-                return Err(Error::Internal(
-                    format!("No successful operations for {time_since_success:?}").into(),
-                ));
-            }
+        if let Some(time_since_success) = self.state.time_since_last_success()
+            && time_since_success > self.config.health_check_timeout
+        {
+            return Err(Error::Internal(
+                format!("No successful operations for {time_since_success:?}").into(),
+            ));
         }
 
         // Actively test the connection with a ping

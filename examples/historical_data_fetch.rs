@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut wtr = csv::Writer::from_path(&output_path)?;
 
     // Header row
-    wtr.write_record(&["datetime", "open", "high", "low", "close", "volume"])?;
+    wtr.write_record(["datetime", "open", "high", "low", "close", "volume"])?;
 
     for dp in data {
         let dt = dp.datetime();

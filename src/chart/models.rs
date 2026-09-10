@@ -34,7 +34,7 @@ impl std::fmt::Display for ChartType {
 pub enum SeriesDataResponse {
     String(Ustr),
     ChartResponseData(ChartResponseData),
-    SymbolInfo(SymbolInfo),
+    SymbolInfo(Box<SymbolInfo>),
     StudyResponseData(StudyResponseData),
     JsonValue(Value),
 }

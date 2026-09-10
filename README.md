@@ -14,7 +14,7 @@ The library exposes **two usage tiers**:
 - **High-level** — An event-driven [`DataLoader`](https://docs.rs/tradingview-rs/latest/tradingview/loader/struct.DataLoader.html) that connects a source to multiple sinks with backpressure and graceful shutdown.
 - **Low-level** — Direct access to HTTP clients, WebSocket sessions, and raw message parsing for full control.
 
-⚠️ **Alpha Stage**: This library is currently in **alpha** stage and not ready for production use. Breaking changes may occur between versions.
+**Status**: `tradingview-rs` is a stable community data source library under active development. Note that it is an unofficial integration subject to upstream TradingView changes; review version notes and test against your workload before deploying to production.
 
 ## Features
 
@@ -46,7 +46,7 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 # From crates.io (recommended):
-tradingview-rs = "0.1"
+tradingview-rs = "0.3"
 
 # Or from the Git repository:
 tradingview-rs = { git = "https://github.com/bitbytelabio/tradingview-rs.git", branch = "main" }
@@ -64,7 +64,7 @@ Example with optional features:
 
 ```toml
 [dependencies]
-tradingview-rs = { version = "0.1", default-features = false, features = ["native-tls", "user"] }
+tradingview-rs = { version = "0.3", default-features = false, features = ["native-tls", "user"] }
 ```
 
 ## Quick Start
@@ -446,7 +446,7 @@ For the project roadmap, see [ROADMAP.md](ROADMAP.md).
 
 - **Rate Limiting** — TradingView enforces rate limits; respect them to avoid bans
 - **Session Expiry** — User sessions expire periodically and need renewal
-- **Alpha Quality** — Breaking changes may occur between minor versions
+- **API Stability** — Breaking changes may occur across minor releases prior to 1.0; consult CHANGELOG.md when updating.
 - **Premium Features** — Some features require TradingView Pro/Premium/Expert subscription
 - **Study Series Loading** — Some Pine Script study data series need fixes (see `TODO` in indicator code)
 

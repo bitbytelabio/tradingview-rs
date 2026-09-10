@@ -38,5 +38,5 @@ impl InputValue {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StudyConfiguration {
     Builtin(String, HashMap<String, String>),
-    Pine(PineIndicator),
+    Pine(Box<PineIndicator>),
 }

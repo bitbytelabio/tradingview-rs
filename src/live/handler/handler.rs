@@ -78,8 +78,8 @@ mod tests {
 
     #[test]
     fn test_default_capacity_is_reasonable() {
-        assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY >= 64);
-        assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY <= 4096);
+        const { assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY >= 64) };
+        const { assert!(DEFAULT_COMMAND_CHANNEL_CAPACITY <= 4096) };
     }
 
     #[tokio::test]

@@ -9,7 +9,8 @@ pub mod quote;
 pub mod user;
 
 pub mod utils;
-static UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:155.0) Gecko/20100101 Firefox/155.0";
+static UA: &str =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:155.0) Gecko/20100101 Firefox/155.0";
 
 pub use crate::client::misc::*;
 
