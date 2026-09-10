@@ -70,8 +70,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "Checking whether tradingview-rs v${CRATE_VERSION} is already published on crates.io..."
-          if cargo info "tradingview-rs@${CRATE_VERSION}" --registry crates-io --locked >/dev/null 2>&1 || \
-             cargo search tradingview-rs --limit 10 --locked | grep -E -q "^tradingview-rs = \"${CRATE_VERSION}\""; then
+          # Query crates.io API directly and outside workspace to avoid local manifest shadowing
+          HTTP_STATUS="$(curl -s -o /dev/null -w "%{http_code}" -H "User-Agent: bitbytelabio-tradingview-rs-release" "https://crates.io/api/v1/crates/tradingview-rs/${CRATE_VERSION}" || true)"
+          if [ "$HTTP_STATUS" = "200" ] || \
+             (cd /tmp && cargo search tradingview-rs --limit 10 | grep -E -q "^tradingview-rs = \"${CRATE_VERSION}\""); then
             echo "tradingview-rs v${CRATE_VERSION} is already published on crates.io; skipping crates.io publish."
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
