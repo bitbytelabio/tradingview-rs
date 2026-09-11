@@ -48,7 +48,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 thiserror = "2"
 tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
-tokio-tungstenite = { version = "0.29", features = ["url"] }
+tokio-tungstenite = { version = "0.30", features = ["url"] }
 tokio-util = { version = "0.7", features = ["futures-util", "tracing"] }
 tracing = "0.1"
 url = "2"
