@@ -59,7 +59,7 @@ ustr = { version = "1.1.0", features = ["serde"] }
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 colored = "3"
-criterion = { version = "0.6", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 csv = "1"
 dotenv = "0.15"
 tokio = { version = "1", features = ["full"] }
