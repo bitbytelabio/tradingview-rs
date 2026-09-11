@@ -1064,9 +1064,9 @@ dependencies = [
 
 [[package]]
 name = "iso_currency"
-version = "0.5.3"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fed4b3f0921193400b1df556228bfd917c57c7fa38bda904d552653c5c3b641b"
+checksum = "52d721074ff687a7ac523217a2bedb8277ac81d83dc10216ffc2a19128ca3dd5"
 dependencies = [
  "iso_country",
  "proc-macro2",
