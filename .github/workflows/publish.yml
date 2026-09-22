@@ -149,10 +149,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Setup Virtual Environment
+        run: |
+          python -m venv $HOME/.venv
+          echo "$HOME/.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=$HOME/.venv" >> $GITHUB_ENV
 
       - name: Install Maturin and Twine
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install maturin twine
 
       - name: Build Python wheels and sdist

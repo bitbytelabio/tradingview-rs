@@ -117,12 +117,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Setup Virtual Environment
+        run: |
+          python -m venv $HOME/.venv
+          echo "$HOME/.venv/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=$HOME/.venv" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install maturin pytest pytest-asyncio mypy ruff polars pandas
-
       - name: Check code formatting and linting with Ruff
         run: |
           cd crates/tradingview-py
