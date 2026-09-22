@@ -2522,7 +2522,7 @@ dependencies = [
 
 [[package]]
 name = "tradingview-py"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -2539,7 +2539,7 @@ dependencies = [
 
 [[package]]
 name = "tradingview-rs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
