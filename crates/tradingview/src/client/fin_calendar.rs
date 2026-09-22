@@ -334,6 +334,11 @@ pub async fn get_economic_calendar_with_client(
         })?;
 
     let status = response.status();
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(Error::RateLimited(Ustr::from(
+            "economic calendar rate limited (HTTP 429)",
+        )));
+    }
     if !status.is_success() {
         let body = response.text().await.map_err(|e| {
             Error::Request(Ustr::from(&format!("failed to read response body: {e}")))

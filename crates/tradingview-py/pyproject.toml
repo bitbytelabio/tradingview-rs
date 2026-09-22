@@ -1,0 +1,58 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "tradingview"
+version = "0.3.0"
+description = "High-performance Python bindings for TradingView data provider backed by tradingview-rs"
+authors = [
+    { name = "Nguyen Thanh Dat", email = "dat.nguyen@bitbytelab.io" }
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["tradingview", "market-data", "finance", "asyncio", "pyo3"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+polars = ["polars>=0.20"]
+pandas = ["pandas>=2.0"]
+all = ["polars>=0.20", "pandas>=2.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "mypy>=1.9",
+    "ruff>=0.3",
+    "maturin>=1.5",
+]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "tradingview._tradingview"
+compatibility = "abi3"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_configs = true
+files = ["python", "tests"]
