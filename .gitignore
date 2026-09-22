@@ -24,3 +24,18 @@ tmp
 # Reference JS implementation (local reference only, not packaged)
 TradingView-API/
 release-assets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+dist/
+wheels/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

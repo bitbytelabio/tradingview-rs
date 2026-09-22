@@ -1,477 +1,469 @@
-# TradingView Data Source
+# TradingView Data Provider (`tradingview-rs` & `tradingview-py`)
 
-![Tests](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/ci.yml/badge.svg)
-![GitHub latest commit](https://img.shields.io/github/last-commit/bitbytelabio/tradingView-rs)
+![CI](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/ci.yml/badge.svg)
+![Release](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/publish.yml/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/tradingview-rs)](https://crates.io/crates/tradingview-rs)
+[![PyPI](https://img.shields.io/pypi/v/tradingview.svg)](https://pypi.org/project/tradingview/)
 [![Documentation](https://docs.rs/tradingview-rs/badge.svg)](https://docs.rs/tradingview-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Introduction
+A high-performance, asynchronous TradingView data provider written in Rust (`tradingview-rs`) with first-class Python bindings (`tradingview-py` via PyO3 0.29). Inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API), this project delivers institutional-grade market data streaming, historical OHLCV series, corporate fundamental metrics, and global economic calendar events with direct [Polars](https://pola.rs) DataFrame support.
 
-This is a data source library for algorithmic trading written in Rust inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API). It provides programmatic access to TradingView's data and features through a robust, async-first API.
+---
 
-The library exposes **two usage tiers**:
-- **High-level** — An event-driven [`DataLoader`](https://docs.rs/tradingview-rs/latest/tradingview/loader/struct.DataLoader.html) that connects a source to multiple sinks with backpressure and graceful shutdown.
-- **Low-level** — Direct access to HTTP clients, WebSocket sessions, and raw message parsing for full control.
+## Architecture Overview
 
-**Status**: `tradingview-rs` is a stable community data source library under active development. Note that it is an unofficial integration subject to upstream TradingView changes; review version notes and test against your workload before deploying to production.
+```mermaid
+graph TD
+    subgraph Python Environment
+        PyApp[Python Algorithmic Trading / Analytics App]
+        Polars[Polars / Pandas DataFrames]
+        AsyncIO[Python asyncio Event Loop]
+    end
+
+    subgraph PyO3 Native Extension [crates/tradingview-py]
+        TVClient[TradingViewClient]
+        Dispatcher[Callback Trampoline & sys.unraisablehook]
+        PyModels[Bar / CandleUpdate / QuoteTick / FundamentalSeries]
+    end
+
+    subgraph Rust Core Engine [crates/tradingview]
+        TokioRt[Tokio Multi-Threaded Runtime]
+        HistClient[HistoricalClient & Batch Runner]
+        WSClient[WebSocketClient & Auto-Reconnect Engine]
+        FundClient[Fundamental Catalog & Registry Engine]
+        CalClient[Economic Calendar REST Client]
+    end
+
+    subgraph TradingView Upstream
+        TVSocket[TradingView WebSocket Server]
+        TVHTTP[TradingView REST & Scanner APIs]
+    end
+
+    PyApp --> TVClient
+    TVClient --> PyModels
+    PyModels -.->|as_dataframe / to_polars| Polars
+    TVClient -->|Releases GIL| TokioRt
+    TokioRt --> HistClient
+    TokioRt --> WSClient
+    TokioRt --> FundClient
+    TokioRt --> CalClient
+
+    WSClient <-->|UTF-16 Framing & Heartbeat Echo| TVSocket
+    HistClient <--> TVSocket
+    FundClient <--> TVHTTP
+    CalClient <--> TVHTTP
+
+    WSClient --> Dispatcher
+    Dispatcher -->|loop.call_soon_threadsafe| AsyncIO
+    AsyncIO --> PyApp
+```
+
+### Rust Core Architecture (Two-Tier Model)
+
+```mermaid
+graph LR
+    subgraph High-Level Event Pipeline
+        Source[DataSource: Live Quotes / Chart Series / Scanner]
+        Loader[DataLoader Engine]
+        ChannelSink[ChannelSink: Bounded mpsc]
+        CallbackSink[CallbackSink: Synchronous / Async]
+        KafkaSink[KafkaSink: RedPanda / Apache Kafka]
+    end
+
+    subgraph Low-Level Protocol Primitives
+        WS[WebSocketClient]
+        Session[Chart, Quote & Replay Sessions]
+        Parser[UTF-16 Code-Unit Packet Parser]
+    end
+
+    Source --> Loader
+    Loader --> ChannelSink
+    Loader --> CallbackSink
+    Loader --> KafkaSink
+
+    WS --> Parser
+    Parser --> Session
+    Session --> Source
+```
+
+---
 
 ## Features
 
-- [x] **Async Support** — Built with Tokio for high-performance async operations
-- [x] **Event-Driven Pipeline** — `DataSource` → fan-out → `EventSink` architecture with bounded channels, cancellation tokens, and error recovery
-- [x] **Multiple Sinks** — Built-in channel, callback, and Kafka (RedPanda) sinks; implement your own via the `EventSink` trait
-- [x] **Real-time Data** — WebSocket-based live market data with automatic reconnection and circuit breaker
-- [x] **Historical Data** — Fetch OHLCV data for single symbols and concurrent batch operations
-- [x] **Session Management** — Shared sessions between threads to respect TradingView's rate limits
-- [x] **Custom Indicators** — Work with Pine Script indicators via study configurations
-- [x] **Chart Drawings** — Retrieve your chart drawings and annotations
-- [x] **Replay Mode** — Historical market replay functionality
-- [x] **Symbol Search** — Search and filter symbols by market, country, and type
-- [x] **News Integration** — Access TradingView news and headlines
-- [x] **User Authentication** — Login with username/password + TOTP 2FA support
-- [x] **Premium Features** — Access TradingView Pro/Premium/Expert data tiers
-- [x] **Fundamental data** — Built-in Pine study catalog & date-versioned registry (`tradingview::fundamental`)
-- [x] **Technical analysis signals** — Retrieve scanner ratings across 8 timeframes (via get_technical_analysis)
-- [x] **Invite-only indicators support** — Access private Pine Script indicators (via get_private_indicators)
-- [ ] Public chat interactions
-- [ ] Screener integration
-- [x] **Economic calendar** — Global macroeconomic events endpoint (`tradingview::client::fin_calendar`)
-- [ ] Vectorized data conversion
+- [x] **Zero GIL Contention**: Long-running network I/O, batch downloads, and deserialization execute in Tokio background threads with the Python GIL released.
+- [x] **Direct Polars Support**: Fetch historical candlestick bars, batch series, fundamental indicators, and economic calendar events directly as high-performance Polars DataFrames (`as_dataframe=True`).
+- [x] **Dual-Mode Streaming**: Consume live quotes and in-flight candlesticks through native asynchronous iterators (`async for`) or synchronous callbacks (`add_callback`) dispatched on the asyncio event loop with exception isolation (`sys.unraisablehook`).
+- [x] **Strict Wire Parity**: Accurate UTF-16 code-unit framing (`~m~<len>~m~<payload>`), 1:1 heartbeat echoing, and protocol parity matching TradingView web clients.
+- [x] **Event-Driven Rust Pipeline**: High-level `DataLoader` architecture connecting custom sources to Channel, Callback, and Kafka sinks with backpressure and graceful cancellation.
+- [x] **Historical Market Data**: Single-symbol and concurrent multi-symbol batch fetching with configurable concurrency limits and per-symbol timeouts.
+- [x] **Corporate Fundamentals**: Date-versioned fundamental Pine study catalog (`tradingview::fundamental`) querying annual, quarterly, and TTM balance sheet, income, and cash flow metrics.
+- [x] **Economic Calendar**: Global macroeconomic event queries filtered by ISO 3166-1 country codes, timestamps, and importance levels.
+- [x] **Credential & Token Authentication**: Support for both session auth tokens and full credential login with optional TOTP 2FA.
+
+---
 
 ## Installation
 
-Add this to your `Cargo.toml`:
+### Python (`tradingview`)
+
+Install from PyPI:
+
+```bash
+pip install tradingview
+```
+
+To enable direct Polars and Pandas DataFrame conversion:
+
+```bash
+pip install "tradingview[polars,pandas]"
+```
+
+To build and install locally from source:
+
+```bash
+cd crates/tradingview-py
+pip install maturin
+maturin develop --release
+```
+
+### Rust (`tradingview-rs`)
+
+Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-# From crates.io (recommended):
 tradingview-rs = "0.3"
-
-# Or from the Git repository:
-tradingview-rs = { git = "https://github.com/bitbytelabio/tradingview-rs.git", branch = "main" }
 ```
 
-### Feature Flags
+#### Feature Flags
 
 | Feature | Default | Description |
-|---------|---------|-------------|
-| `rustls-tls` | ✅ | TLS via rustls (recommended) |
-| `native-tls` | — | TLS via platform-native libraries |
-| `user` | ✅ | User authentication (login, 2FA, session cookies) |
+| :--- | :---: | :--- |
+| `rustls-tls` | ✅ | Pure-Rust TLS backed by `rustls` (recommended) |
+| `native-tls` | — | Platform-native TLS via OpenSSL / SChannel / Security Framework |
+| `user` | ✅ | User authentication support (login, TOTP 2FA, session cookies) |
 
-Example with optional features:
+---
 
-```toml
-[dependencies]
-tradingview-rs = { version = "0.3", default-features = false, features = ["native-tls", "user"] }
+## Python Quick Start
+
+### 1. Historical Candlesticks Directly to Polars
+
+```python
+import asyncio
+from tradingview import TradingViewClient, Interval
+
+async def main():
+    client = TradingViewClient()
+
+    # Fetch 100 daily bars directly as a Polars DataFrame
+    df = await client.get_historical("AAPL", "NASDAQ", Interval.OneDay, n_bars=100, as_dataframe=True)
+    print(df)
+    # Output columns: timestamp, open, high, low, close, volume
+
+    # Or retrieve structured HistoricalSeries with .to_polars() and .to_pandas()
+    series = await client.get_historical("BTCUSDT", "BINANCE", Interval.OneHour, n_bars=50)
+    print(f"{series.symbol} on {series.exchange}: {len(series)} bars")
+    latest = series[-1]
+    print(f"Latest Close: {latest.close} (Volume: {latest.volume})")
+
+    # Concurrent batch retrieval as a dictionary of DataFrames
+    batch_df = await client.get_historical_batch(
+        [("AAPL", "NASDAQ"), ("MSFT", "NASDAQ")],
+        interval=Interval.OneDay,
+        n_bars=30,
+        as_dataframe=True,
+    )
+    print("AAPL rows:", batch_df["NASDAQ:AAPL"].height)
+    print("MSFT rows:", batch_df["NASDAQ:MSFT"].height)
+
+    await client.close()
+
+asyncio.run(main())
 ```
 
-## Quick Start
+### 2. Real-Time Quotes & Candlestick Streaming
 
-### Historical Data (Single Symbol)
+```python
+import asyncio
+from tradingview import TradingViewClient, Interval, QuoteTick, CandleUpdate
 
-```rust
-use tradingview::{DataServer, Interval, history};
+def on_quote(tick: QuoteTick):
+    print(f"[Callback] {tick.symbol} Price={tick.price} Bid={tick.bid} Ask={tick.ask}")
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
+def on_candle(candle: CandleUpdate):
+    print(f"[Callback] {candle.symbol} Close={candle.close} High={candle.high} Low={candle.low}")
 
-    let (_info, data) = history::single::retrieve()
-        .auth_token(&auth_token)
-        .symbol("BTCUSDT")
-        .exchange("BINANCE")
-        .interval(Interval::OneHour)
-        .with_replay(true)
-        .server(DataServer::ProData)
-        .call()
-        .await?;
+async def main():
+    client = TradingViewClient()
 
-    println!("Retrieved {} data points", data.len());
-    Ok(())
-}
+    # 1. Quote streaming with callback & async iterator
+    quote_sub = await client.subscribe_quotes(["BINANCE:BTCUSDT"], callback=on_quote)
+
+    count = 0
+    async for tick in quote_sub:
+        print(f"[Iterator] Tick: {tick.symbol} @ {tick.price}")
+        count += 1
+        if count >= 3:
+            break
+    await quote_sub.stop()
+
+    # 2. Live in-flight 1-minute candle streaming
+    candle_sub = await client.subscribe_bars(["BINANCE:ETHUSDT"], interval=Interval.OneMinute, callback=on_candle)
+
+    count = 0
+    async for candle in candle_sub:
+        print(f"[Iterator] Live Candle: {candle.symbol} Close={candle.close} Vol={candle.volume}")
+        count += 1
+        if count >= 2:
+            break
+    await candle_sub.stop()
+
+    await client.close()
+
+asyncio.run(main())
 ```
 
-### Historical Data (Batch)
+### 3. Fundamentals & Global Economic Calendar
+
+```python
+import asyncio
+from tradingview import TradingViewClient, FinancialPeriod, EconomicImportance
+
+async def main():
+    client = TradingViewClient()
+
+    # Query corporate revenue history directly as a Polars DataFrame
+    fund_df = await client.get_fundamental(
+        "AAPL", "NASDAQ", "total_revenue", FinancialPeriod.FiscalYear, n_bars=5, as_dataframe=True
+    )
+    print("Revenue History:")
+    print(fund_df)
+
+    # Query high-importance macroeconomic events for the US
+    events_df = await client.get_economic_calendar(
+        countries=["US"], min_importance=EconomicImportance.High, as_dataframe=True
+    )
+    print("Upcoming US Macroeconomic Releases:")
+    print(events_df.select(["date", "country", "title", "indicator", "actual", "forecast"]))
+
+    await client.close()
+
+asyncio.run(main())
+```
+
+---
+
+## Rust Quick Start
+
+### 1. Historical Data Retrieval (Single & Batch)
 
 ```rust
-use tradingview::{Interval, Symbol, history};
+use tradingview::historical::{BatchConfig, HistoricalClient, HistoricalRequest};
+use tradingview::live::models::DataServer;
+use tradingview::models::Interval;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let auth_token = std::env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = HistoricalClient::new("unauthorized_user_token", DataServer::Data);
 
-    let symbols = vec![
-        Symbol::builder().symbol("BTCUSDT").exchange("BINANCE").build(),
-        Symbol::builder().symbol("ETHUSDT").exchange("BINANCE").build(),
-    ];
+    // 1. Single symbol historical fetch
+    let request = HistoricalRequest::builder()
+        .symbol("AAPL")
+        .exchange("NASDAQ")
+        .interval(Interval::OneDay)
+        .num_bars(100)
+        .build();
 
-    let datamap = history::batch::retrieve()
-        .auth_token(&auth_token)
-        .symbols(&symbols)
-        .interval(Interval::OneHour)
-        .call()
-        .await?;
-
-    for (symbol_info, ticker_data) in datamap.values() {
-        println!("{}: {} data points", symbol_info.name, ticker_data.len());
+    let result = client.retrieve(request).await?;
+    println!("Retrieved {} bars for {}", result.len(), result.symbol_info.name);
+    if let Some(first) = result.data.first() {
+        println!("Earliest timestamp: {}", first.timestamp);
     }
 
-    Ok(())
-}
-```
+    // 2. Concurrent multi-symbol batch retrieval
+    let symbols = vec![
+        ("AAPL".to_string(), "NASDAQ".to_string()),
+        ("MSFT".to_string(), "NASDAQ".to_string()),
+    ];
 
-### Symbol Search
+    let batch = client
+        .retrieve_batch(
+            &symbols,
+            Interval::OneDay,
+            Some(50),
+            BatchConfig {
+                max_concurrency: 4,
+                ..Default::default()
+            },
+        )
+        .await;
 
-```rust
-use tradingview::{list_symbols, prelude::*};
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let symbols = list_symbols()
-        .market_type(MarketType::All)
-        .call()
-        .await?;
-
-    println!("Found {} symbols", symbols.len());
-    Ok(())
-}
-```
-
-### User Authentication
-
-```rust
-use tradingview::UserCookies;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let username = std::env::var("TV_USERNAME").expect("TV_USERNAME is not set");
-    let password = std::env::var("TV_PASSWORD").expect("TV_PASSWORD is not set");
-    let totp = std::env::var("TV_TOTP_SECRET").expect("TV_TOTP_SECRET is not set");
-
-    let user = UserCookies::default()
-        .login(&username, &password, Some(&totp))
-        .await?;
-
-    // Save cookies for later use
-    let json = serde_json::to_string_pretty(&user)?;
-    std::fs::write("tv_user_cookies.json", json)?;
+    println!("Batch finished: {} succeeded, {} failed", batch.successful.len(), batch.failed.len());
 
     Ok(())
 }
 ```
 
-### Real-time Data
+### 2. Real-Time WebSocket Quote Streaming
 
 ```rust
-use dotenv::dotenv;
-use std::{env, sync::Arc, time::Duration};
-use tokio::{sync::mpsc, time::sleep};
-use tradingview::{
-    ChartOptions, Interval,
-    live::{
-        handler::{
-            command::CommandRunner,
-            message::{Command, TradingViewResponse},
-        },
-        models::DataServer,
-        websocket::WebSocketClient,
-    },
-};
+use serde_json::Value;
+use std::sync::Arc;
+use tokio::signal;
+use tradingview::live::{handler::Handler, models::TradingViewDataEvent, websocket::WebSocketClient};
+use tradingview::{DataServer, Error};
+
+struct QuoteLogger;
+
+impl Handler for QuoteLogger {
+    fn handle_events(&self, event: TradingViewDataEvent, message: &[Value]) {
+        if event == TradingViewDataEvent::OnQuoteData {
+            println!("Quote update: {:?}", message);
+        }
+    }
+    fn handle_quote_data(&self, message: &[Value]) {
+        println!("Legacy quote update: {:?}", message);
+    }
+    fn handle_series_data(&self, _event: TradingViewDataEvent, _messages: &[Value]) {}
+    fn notify_error(&self, error: Error, message: &[Value]) {
+        eprintln!("Socket error: {:?}, payload: {:?}", error, message);
+    }
+}
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    dotenv().ok();
-
-    let auth_token = env::var("TV_AUTH_TOKEN").expect("TV_AUTH_TOKEN is not set");
-
-    // Create communication channels
-    let (response_tx, mut response_rx) = mpsc::unbounded_channel();
-    let (command_tx, command_rx) = mpsc::unbounded_channel();
-
-    // Create WebSocket client
-    let ws_client = WebSocketClient::builder()
-        .auth_token(&auth_token)
-        .server(DataServer::ProData)
-        .data_tx(response_tx)
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let ws = WebSocketClient::builder()
+        .auth_token("unauthorized_user_token")
+        .server(DataServer::Data)
+        .handler(QuoteLogger)
         .build()
         .await?;
 
-    // Create command runner
-    let command_runner = CommandRunner::new(command_rx, Arc::clone(&ws_client));
+    Arc::clone(&ws).spawn_reader_task();
 
-    // Spawn command runner
-    tokio::spawn(async move {
-        command_runner.run().await.unwrap();
+    let session = tradingview::utils::gen_session_id("qs");
+    ws.create_quote_session(&session).await?;
+    ws.set_fields(&session).await?;
+    ws.add_symbols(&session, &["BINANCE:BTCUSDT", "NASDAQ:AAPL"]).await?;
+
+    println!("Streaming live quotes. Press Ctrl+C to exit.");
+    signal::ctrl_c().await?;
+
+    ws.delete_quote_session(&session).await?;
+    ws.close().await?;
+    Ok(())
+}
+```
+
+### 3. Event-Driven Pipeline (`DataLoader`)
+
+```rust
+use std::sync::Arc;
+use tradingview::loader::DataLoader;
+use tradingview::sink::callback::CallbackSink;
+use tradingview::sink::channel::ChannelSink;
+use tradingview::source::tradingview::WebSocketSource;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (channel_sink, mut rx) = ChannelSink::new(1024);
+
+    let callback_sink = CallbackSink::new(|event| {
+        println!("Callback received event: {:?}", event);
+        Ok(())
     });
 
-    // Handle responses
+    let source = WebSocketSource::builder()
+        .auth_token("unauthorized_user_token")
+        .symbols(vec!["BINANCE:BTCUSDT".to_string()])
+        .build()?;
+
+    let mut loader = DataLoader::builder()
+        .source(Box::new(source))
+        .add_sink(Arc::new(channel_sink))
+        .add_sink(Arc::new(callback_sink))
+        .build()?;
+
+    let handle = loader.start().await?;
+
     tokio::spawn(async move {
-        while let Some(response) = response_rx.recv().await {
-            match response {
-                TradingViewResponse::ChartData(series_info, data_points) => {
-                    println!("Chart Data: {} points", data_points.len());
-                }
-                TradingViewResponse::QuoteData(quote) => {
-                    println!("Quote: {:?}", quote);
-                }
-                _ => {}
-            }
+        while let Some(event) = rx.recv().await {
+            println!("Channel received: {:?}", event);
         }
     });
 
-    // Set up market data
-    let options = ChartOptions::builder()
-        .symbol("BTCUSDT".into())
-        .exchange("BINANCE".into())
-        .interval(Interval::OneMinute)
-        .build();
-
-    command_tx.send(Command::set_market(options))?;
-    command_tx.send(Command::add_symbol("NASDAQ:AAPL"))?;
-
-    // Keep running
-    sleep(Duration::from_secs(60)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    handle.stop().await?;
 
     Ok(())
 }
 ```
 
-### Working with Indicators
+---
 
-```rust
-use tradingview::{
-    ChartOptions, Interval, StudyOptions,
-    get_builtin_indicators,
-    pine_indicator::{BuiltinIndicators, ScriptType},
-};
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Get built-in indicators
-    let indicators = get_builtin_indicators(BuiltinIndicators::Standard).await?;
-
-    if let Some(indicator) = indicators.first() {
-        let opts = ChartOptions::builder()
-            .symbol("BTCUSDT".into())
-            .exchange("BINANCE".into())
-            .interval(Interval::OneDay)
-            .bar_count(20)
-            .study_config(StudyOptions {
-                script_id: (&indicator.script_id).into(),
-                script_version: (&indicator.script_version).into(),
-                script_type: ScriptType::IntervalScript,
-            })
-            .build();
-
-        // Use opts with WebSocket client for real-time indicator data
-    }
-
-    Ok(())
-}
-```
-
-### Full Fundamental Data With One Stock Code
-
-```rust
-use tradingview::fundamental::{FullFundamentalResult, fetch_full_fundamentals};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Bare tickers are resolved through TradingView's ranked stock search.
-    // Canonical values such as "HOSE:FPT" or "TWSE:2330" are also accepted.
-    let result: FullFundamentalResult = fetch_full_fundamentals("AAPL").await?;
-
-    println!("{}: {} studies", result.canonical_id(), result.total_studies());
-    println!(
-        "success={}, empty={}, errors={}",
-        result.success_count(),
-        result.empty_count(),
-        result.error_count()
-    );
-
-    // Optional lossless long-form CSV export from the returned struct.
-    result.write_csv("AAPL_fundamentals.csv")?;
-    Ok(())
-}
-```
-
-The returned `FullFundamentalResult` owns the resolved stock metadata, registry date/schema
-version, and every metric result as `Success(Vec<DataPoint>)`, `Empty`, or `Error(String)`.
-The full stock catalog excludes crypto-only `STD;CryptoFund_*` studies.
-
-Run the example with one stock code:
-
-```bash
-cargo run --example full_fundamental_fetch -- AAPL
-cargo run --example full_fundamental_fetch -- HOSE:FPT
-cargo run --example full_fundamental_fetch -- TWSE:2330
-```
-
-### Economic Calendar
-
-```rust
-use chrono::{Duration, Utc};
-use tradingview::client::fin_calendar::{
-    EconomicCalendarRequest, EconomicImportance, get_economic_calendar,
-};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let now = Utc::now();
-    let request = EconomicCalendarRequest::builder()
-        .from(now)
-        .to(now + Duration::days(7))
-        .countries(vec!["US".to_string(), "DE".to_string()])
-        .min_importance(EconomicImportance::Medium)
-        .build();
-
-    let events = get_economic_calendar(&request).await?;
-    for event in events {
-        println!("{}: {} (importance: {:?})", event.date, event.title, event.importance_level());
-    }
-    Ok(())
-}
-```
-
-## Examples
-
-The [`examples/`](examples/) directory contains runnable examples for every major feature:
-
-| Example | Description |
-|---------|-------------|
-| [`historical_data_fetch.rs`](examples/historical_data_fetch.rs) | Fetch historical OHLCV for a single symbol |
-| [`batch_historical_fetch.rs`](examples/batch_historical_fetch.rs) | Concurrent batch historical data |
-| [`live_quote.rs`](examples/live_quote.rs) | Real-time quote streaming via WebSocket |
-| [`channel_consumer.rs`](examples/channel_consumer.rs) | Event-driven loader with a channel sink |
-| [`callback_consumer.rs`](examples/callback_consumer.rs) | Event-driven loader with an inline callback sink |
-| [`user.rs`](examples/user.rs) | User authentication and session management |
-| [`search.rs`](examples/search.rs) | Symbol search and filtering |
-| [`misc.rs`](examples/misc.rs) | Miscellaneous utility functions |
-| [`full_fundamental_fetch.rs`](examples/full_fundamental_fetch.rs) | Fetch full fundamental Pine studies catalog from one stock code and export to CSV |
-
-Run an example:
-
-```bash
-cargo run --example historical_data_fetch
-cargo run --example live_quote
-cargo run --example channel_consumer
-cargo run --example full_fundamental_fetch -- AAPL
-```
-
-## Prerequisites
-
-- **Rust 1.85+** (edition 2024) — This library uses modern Rust features
-- **TradingView Account** — Required for authenticated features (free tier works for most)
-- **Network Access** — Connects to TradingView's servers
-
-### Environment Variables
-
-For examples requiring authentication, create a `.env` file:
-
-```env
-TV_USERNAME=your_username
-TV_PASSWORD=your_password
-TV_TOTP_SECRET=your_2fa_secret  # Optional, for 2FA
-TV_AUTH_TOKEN=your_auth_token   # Get from user authentication
-```
-
-## Architecture
+## Workspace Structure
 
 ```text
-┌──────────────────────────────────────────────────┐
-│                   tradingview-rs                   │
-├──────────────────────────────────────────────────┤
-│  High-Level API (event-driven)                    │
-│  ┌──────────┐    ┌───────────┐    ┌────────────┐ │
-│  │  Source   │───▶│ DataLoader │───▶│ EventSink  │ │
-│  │ (TV feed) │    │  (fan-out) │    │ (channel,  │ │
-│  │           │    │            │    │  callback, │ │
-│  │           │    │            │    │  kafka)    │ │
-│  └──────────┘    └───────────┘    └────────────┘ │
-├──────────────────────────────────────────────────┤
-│  Low-Level API (direct access)                    │
-│  ┌──────────────┐ ┌──────────────┐ ┌───────────┐ │
-│  │  historical  │ │    live      │ │   client   │ │
-│  │ (WebSocket)  │ │ (WebSocket)  │ │  (REST)    │ │
-│  └──────────────┘ └──────────────┘ └───────────┘ │
-├──────────────────────────────────────────────────┤
-│  Shared: models, chart, quote, error, utils       │
-└──────────────────────────────────────────────────┘
+tradingview-rs/
+├── Cargo.toml                       # Virtual workspace manifest
+├── crates/
+│   ├── tradingview/                 # Pure Rust core library (tradingview-rs)
+│   │   ├── Cargo.toml
+│   │   ├── src/                     # Protocol framing, WebSocket engine, loader, fundamental
+│   │   ├── tests/                   # Wire and integration tests
+│   │   ├── examples/                # Runnable Rust examples
+│   │   └── benches/                 # Criterion microbenchmarks
+│   └── tradingview-py/              # PyO3 0.29 CPython extension (tradingview)
+│       ├── Cargo.toml               # Native extension build config (abi3, tokio-runtime)
+│       ├── pyproject.toml           # Maturin package metadata and dependencies
+│       ├── src/                     # PyO3 bindings, models, callback dispatcher, streaming
+│       ├── python/tradingview/      # Python package exports, PEP 561 py.typed, .pyi stubs
+│       └── tests/                   # Pytest async and typing validation suite
+└── .github/
+    └── workflows/
+        ├── ci.yml                   # Rust formatting, clippy, tests + Python test and type matrix
+        └── publish.yml              # crates.io Trusted Publishing + PyPI Twine release pipeline
 ```
 
-| Module | Purpose |
-|--------|---------|
-| [`historical`](https://docs.rs/tradingview-rs/latest/tradingview/historical/) | Single + batch OHLCV retrieval via WebSocket |
-| [`live`](https://docs.rs/tradingview-rs/latest/tradingview/live/) | Real-time WebSocket streaming (quotes, charts, studies) |
-| [`client`](https://docs.rs/tradingview-rs/latest/tradingview/client/) | REST HTTP client (search, news, financial calendar) |
-| [`loader`](https://docs.rs/tradingview-rs/latest/tradingview/loader/) | Event-driven orchestrator (source → fan-out → sinks) |
-| [`source`](https://docs.rs/tradingview-rs/latest/tradingview/source/) | `DataSource` trait + TradingView WebSocket adapter |
-| [`sink`](https://docs.rs/tradingview-rs/latest/tradingview/sink/) | `EventSink` trait + channel, callback, Kafka sinks |
-| [`events`](https://docs.rs/tradingview-rs/latest/tradingview/events/) | Normalized `MarketEvent` types (Candle, Quote, News, etc.) |
-| [`chart`](https://docs.rs/tradingview-rs/latest/tradingview/chart/) | Chart session config + Pine Script studies |
-| [`quote`](https://docs.rs/tradingview-rs/latest/tradingview/quote/) | Real-time quote data model + field definitions |
+---
 
-## Use Cases
+## Development & Testing
 
-- **[VNQuant Datafeed](https://github.com/bitbytelabio/vnquant-datafeed)** — Event-driven data engine with RedPanda (Kafka)
-- **Algorithmic Trading Bots** — Real-time market data for trading strategies
-- **Market Research** — Historical data analysis and backtesting
-- **Portfolio Management** — Track and analyze investment performance
-- **Technical Analysis** — Custom indicators and studies
+Run all Rust and Python checks locally:
 
-## Documentation
+```bash
+# Format & Lint Rust
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
 
-Full API documentation is published on [docs.rs](https://docs.rs/tradingview-rs). All public types, traits, and modules are documented with examples.
+# Execute Rust Workspace Tests (201 passing tests)
+cargo test --workspace --no-default-features
 
-Quick links to key types:
-- [`DataLoader`](https://docs.rs/tradingview-rs/latest/tradingview/loader/struct.DataLoader.html) — event-driven orchestrator
-- [`HistoricalClient`](https://docs.rs/tradingview-rs/latest/tradingview/historical/client/struct.HistoricalClient.html) — historical data
-- [`WebSocketClient`](https://docs.rs/tradingview-rs/latest/tradingview/websocket/struct.WebSocketClient.html) — real-time streaming
-- [`Symbol`](https://docs.rs/tradingview-rs/latest/tradingview/models/struct.Symbol.html) — instrument representation
-- [`Interval`](https://docs.rs/tradingview-rs/latest/tradingview/models/enum.Interval.html) — time granularity
+# Build Python Extension & Run Python Test Suite (22 passing tests)
+cd crates/tradingview-py
+maturin develop --release
+pytest -v
 
-For the project roadmap, see [ROADMAP.md](ROADMAP.md).
+# Type Verification
+mypy python/ tests/
+ruff check python tests
+```
 
-## Before Opening an Issue
+---
 
-1. **Check existing issues** - Your problem might already be reported
-2. **Update to latest version** - Bug fixes are released regularly
-3. **Review examples** - Make sure you're using the API correctly
-4. **Provide minimal reproduction** - Include code that demonstrates the issue
-5. **Include error messages** - Full error output helps with debugging
+## Publishing to PyPI
 
-## Known Issues & Limitations
+The release workflow `.github/workflows/publish.yml` is triggered automatically on tag creation (`v*`) or via manual dispatch:
 
-- **Rate Limiting** — TradingView enforces rate limits; respect them to avoid bans
-- **Session Expiry** — User sessions expire periodically and need renewal
-- **API Stability** — Breaking changes may occur across minor releases prior to 1.0; consult CHANGELOG.md when updating.
-- **Premium Features** — Some features require TradingView Pro/Premium/Expert subscription
-- **Study Series Loading** — Some Pine Script study data series need fixes (see `TODO` in indicator code)
+- **crates.io**: Authenticates via OIDC Trusted Publishing and publishes `tradingview-rs`.
+- **PyPI**: Builds source distribution and wheels with `maturin build --release`, then uploads via `twine` using your configured credentials (supporting `~/.pypirc` or `PYPI_API_TOKEN` secret).
 
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for planned features, milestones, and version timeline.
-
-## Contributing
-
-Contributions are welcome! Please read our [Code of Conduct](CODE_OF_CONDUCT.md) first.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Security
-
-If you discover a security vulnerability, please see our [Security Policy](SECURITY.md) for reporting instructions.
+---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the [MIT License](LICENSE).
 
-## Disclaimer
-
-This library is not affiliated with TradingView. Use at your own risk and ensure compliance with TradingView's Terms of Service.
+*Disclaimer*: This library is not affiliated with, maintained, or endorsed by TradingView. Use in compliance with TradingView's Terms of Service.

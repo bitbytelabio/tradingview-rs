@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-22
+
+### Added
+- Native Python bindings (`tradingview-py`) built with PyO3 0.29, `abi3` stable ABI (Python >= 3.10), and Tokio async runtime integration.
+- Direct Polars DataFrame conversion across historical OHLCV data, batch retrieval, corporate fundamentals, and economic calendar queries (`as_dataframe=True` and `get_historical_df`).
+- Dual-mode real-time streaming: async iterators (`async for`) and synchronous callbacks with exception isolation (`sys.unraisablehook`) and thread-safe event loop trampolining.
+- Python exception hierarchy (`TradingViewError`, `AuthenticationError`, `SymbolNotFoundError`, `ConnectionError`, `TimeoutError`, `RateLimitError`, `ProtocolError`) with orphan-rule-safe Rust error mapping.
+- Core error enrichment: added typed `Error::RateLimited` variant and enriched HTTP 429 status code handling.
+- CI/CD workflow for automated Python wheel building and PyPI publishing via Twine.
+- Comprehensive documentation with Mermaid architecture diagrams in `README.md` and dedicated guides in `docs/`.
+
+### Changed
+- Converted project into a virtual Cargo workspace with `crates/tradingview` (core library) and `crates/tradingview-py` (Python extension).
+- Relocated core library source, tests, examples, and benchmarks into `crates/tradingview/`.
 ## [0.3.0] - 2026-09-10
 
 ### Added

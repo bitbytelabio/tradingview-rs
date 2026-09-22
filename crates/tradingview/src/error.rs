@@ -19,6 +19,9 @@ pub enum Error {
     #[error("Request failed: {0}")]
     Request(Ustr),
 
+    #[error("Rate limited: {0}")]
+    RateLimited(Ustr),
+
     #[error("JSON parsing failed: {0}")]
     JsonParse(Ustr),
 
@@ -92,6 +95,11 @@ pub enum Error {
 // Implement From traits for common error types
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
+        if let Some(status) = err.status()
+            && status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        {
+            return Error::RateLimited(err.to_string().into());
+        }
         Error::Request(err.to_string().into())
     }
 }

@@ -100,6 +100,11 @@ pub async fn fetch_fundamental_registry_for_date(
         .map_err(|e| crate::Error::Request(e.to_string().into()))?;
 
     let status = response.status();
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(crate::Error::RateLimited(
+            "failed to fetch fundamental studies: HTTP 429 Too Many Requests".into(),
+        ));
+    }
     if !status.is_success() {
         return Err(crate::Error::Request(
             format!("failed to fetch fundamental studies: HTTP {status}").into(),
