@@ -39,6 +39,7 @@ The library exposes **two usage tiers**:
 - [x] **Economic calendar** — Global macroeconomic events endpoint (`tradingview::client::fin_calendar`)
 - [ ] Vectorized data conversion
 
+- [x] **Python Bindings (`pyo3` 0.29)** — Native Python bindings with asyncio, callback dispatching, and direct Polars DataFrame support
 ## Installation
 
 Add this to your `Cargo.toml`:
@@ -65,6 +66,53 @@ Example with optional features:
 ```toml
 [dependencies]
 tradingview-rs = { version = "0.3", default-features = false, features = ["native-tls", "user"] }
+```
+
+### Python Package Installation
+
+Install from source using `maturin`:
+
+```bash
+cd crates/tradingview-py
+pip install maturin
+maturin develop --release
+```
+
+Or install with Polars / Pandas extensions:
+
+```bash
+pip install "tradingview[polars]"
+```
+
+### Python Quick Start
+
+```python
+import asyncio
+from tradingview import TradingViewClient, Interval
+
+async def main():
+    client = TradingViewClient()
+
+    # 1. Fetch historical OHLCV as a Polars DataFrame directly
+    df = await client.get_historical("AAPL", "NASDAQ", Interval.OneDay, n_bars=100, as_dataframe=True)
+    print(df)
+
+    # 2. Or retrieve structured HistoricalSeries with .to_polars() / .to_pandas()
+    series = await client.get_historical("BTCUSDT", "BINANCE", Interval.OneHour, n_bars=50)
+    polars_df = series.to_polars()
+    first_bar = series[0]
+    print(f"Latest Bar: Close={first_bar.close}, Vol={first_bar.volume}")
+
+    # 3. Stream real-time quotes via async iterator & callbacks
+    sub = await client.subscribe_quotes(["BINANCE:BTCUSDT"], callback=lambda tick: print(f"Tick: {tick.price}"))
+    async for tick in sub:
+        print(f"Async tick: {tick.symbol} Price={tick.price} Vol={tick.volume}")
+        break
+    await sub.stop()
+
+    await client.close()
+
+asyncio.run(main())
 ```
 
 ## Quick Start

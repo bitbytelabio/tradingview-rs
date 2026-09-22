@@ -30,29 +30,29 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-polars = ["polars>=0.20"]
-pandas = ["pandas>=2.0"]
-all = ["polars>=0.20", "pandas>=2.0"]
+polars = ["polars>=1.44.2"]
+pandas = ["pandas>=3.0.0"]
+all = ["polars>=1.44.2", "pandas>=3.0.0"]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "mypy>=1.9",
-    "ruff>=0.3",
-    "maturin>=1.5",
+    "pytest>=9.1.0",
+    "pytest-asyncio>=1.4.0",
+    "mypy>=2.3.0",
+    "ruff>=0.16.0",
+    "maturin>=1.15.0",
 ]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "tradingview._tradingview"
-compatibility = "abi3"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 strict = true
 warn_unused_configs = true
+ignore_missing_imports = true
 files = ["python", "tests"]

@@ -95,10 +95,10 @@ pub enum Error {
 // Implement From traits for common error types
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
-        if let Some(status) = err.status() {
-            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                return Error::RateLimited(err.to_string().into());
-            }
+        if let Some(status) = err.status()
+            && status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        {
+            return Error::RateLimited(err.to_string().into());
         }
         Error::Request(err.to_string().into())
     }

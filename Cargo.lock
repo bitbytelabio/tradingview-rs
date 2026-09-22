@@ -2524,7 +2524,9 @@ dependencies = [
 name = "tradingview-py"
 version = "0.3.0"
 dependencies = [
+ "chrono",
  "futures-util",
+ "parking_lot",
  "pyo3",
  "pyo3-async-runtimes",
  "serde",
@@ -2532,6 +2534,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tradingview-rs",
+ "ustr",
 ]
 
 [[package]]
