@@ -9,7 +9,9 @@ publish = false
 
 [lib]
 name = "_tradingview"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
+test = false
+doctest = false
 
 [dependencies]
 pyo3 = { version = "0.29", features = ["abi3-py310"] }
