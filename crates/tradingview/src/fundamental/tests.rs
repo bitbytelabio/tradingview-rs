@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use rand::Rng;
+use rand::RngExt;
 use std::{env::temp_dir, path::PathBuf};
 use ustr::Ustr;
 

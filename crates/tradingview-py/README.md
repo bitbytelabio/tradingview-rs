@@ -19,13 +19,13 @@ Features institutional-grade historical OHLCV data retrieval, real-time quote an
 ## Installation
 
 ```bash
-pip install tradingview
+pip install tradingview-rs
 ```
 
 To enable Polars and Pandas support:
 
 ```bash
-pip install "tradingview[polars,pandas]"
+pip install "tradingview-rs[polars,pandas]"
 ```
 
 ---

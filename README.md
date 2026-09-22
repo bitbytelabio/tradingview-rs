@@ -110,13 +110,13 @@ graph LR
 Install from PyPI:
 
 ```bash
-pip install tradingview
+pip install tradingview-rs
 ```
 
 To enable direct Polars and Pandas DataFrame conversion:
 
 ```bash
-pip install "tradingview[polars,pandas]"
+pip install "tradingview-rs[polars,pandas]"
 ```
 
 To build and install locally from source:

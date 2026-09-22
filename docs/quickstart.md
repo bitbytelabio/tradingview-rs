@@ -14,7 +14,7 @@ uv venv --python 3.12 .venv
 source .venv/bin/activate
 
 # Install the tradingview package with Polars and Pandas support
-pip install "tradingview[polars,pandas]"
+pip install "tradingview-rs[polars,pandas]"
 ```
 
 ### Scenario 1: Historical OHLCV Directly to Polars

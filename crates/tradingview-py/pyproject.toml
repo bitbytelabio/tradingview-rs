@@ -3,7 +3,7 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "tradingview"
+name = "tradingview-rs"
 version = "0.4.0"
 description = "High-performance Python bindings for TradingView data provider backed by tradingview-rs"
 authors = [

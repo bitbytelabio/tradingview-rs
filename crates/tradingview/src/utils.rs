@@ -5,7 +5,7 @@ use crate::{
 };
 use bon::builder;
 use iso_currency::Currency;
-use rand::{Rng, distr::Alphanumeric};
+use rand::{RngExt, distr::Alphanumeric};
 use reqwest::{
     Response,
     header::{ACCEPT, COOKIE, HeaderMap, HeaderValue, ORIGIN, REFERER},
