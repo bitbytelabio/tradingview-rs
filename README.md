@@ -3,7 +3,7 @@
 ![CI](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/publish.yml/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/tradingview-rs)](https://crates.io/crates/tradingview-rs)
-[![PyPI](https://img.shields.io/pypi/v/tradingview.svg)](https://pypi.org/project/tradingview/)
+[![PyPI](https://img.shields.io/pypi/v/tradingview-rs.svg)](https://pypi.org/project/tradingview-rs/)
 [![Documentation](https://docs.rs/tradingview-rs/badge.svg)](https://docs.rs/tradingview-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 

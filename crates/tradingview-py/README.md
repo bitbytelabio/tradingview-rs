@@ -1,4 +1,4 @@
-# TradingView Python Bindings (`tradingview`)
+# TradingView Python Bindings (`tradingview-rs`)
 
 High-performance Python bindings for the `tradingview-rs` asynchronous TradingView data provider, implemented in Rust via PyO3 0.29 and Maturin.
 
