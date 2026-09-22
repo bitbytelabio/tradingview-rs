@@ -1,6 +1,5 @@
 """Unit and integration tests for real-time quote and candle streaming (User Story 2)."""
 
-import asyncio
 import pytest
 from tradingview import (
     Bar,
@@ -9,6 +8,7 @@ from tradingview import (
     QuoteTick,
     TradingViewClient,
 )
+
 
 def test_quote_tick_model() -> None:
     tick = QuoteTick(

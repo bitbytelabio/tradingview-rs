@@ -4,6 +4,7 @@ import pytest
 from tradingview import TradingViewClient
 from tradingview.exceptions import AuthenticationError
 
+
 def test_client_init_with_token() -> None:
     client = TradingViewClient(auth_token="test_token_123")
     assert client.auth_token == "test_token_123"

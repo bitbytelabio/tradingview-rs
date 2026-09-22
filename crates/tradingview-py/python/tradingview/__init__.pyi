@@ -1,7 +1,18 @@
 """TradingView Data Provider Python API bindings backed by tradingview-rs."""
 
-from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union, overload
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from enum import Enum
+from typing import Any, TypeAlias
+
+from tradingview.exceptions import (
+    AuthenticationError,
+    ConnectionError,
+    ProtocolError,
+    RateLimitError,
+    SymbolNotFoundError,
+    TimeoutError,
+    TradingViewError,
+)
 
 class Interval(Enum):
     OneMinute = "1"
@@ -32,6 +43,7 @@ class EconomicImportance(Enum):
 
 class Bar:
     """Individual historical OHLCV price bar."""
+
     timestamp: int
     open: float
     high: float
@@ -48,11 +60,12 @@ class Bar:
         close: float,
         volume: float,
     ) -> None: ...
-    def to_dict(self) -> Dict[str, Any]: ...
-    def to_tuple(self) -> Tuple[int, float, float, float, float, float]: ...
+    def to_dict(self) -> dict[str, Any]: ...
+    def to_tuple(self) -> tuple[int, float, float, float, float, float]: ...
 
 class CandleUpdate:
     """Real-time in-flight candle progress or closed bar update."""
+
     symbol: str
     interval: Interval
     timestamp: int
@@ -73,40 +86,42 @@ class CandleUpdate:
         close: float,
         volume: float,
     ) -> None: ...
-    def to_dict(self) -> Dict[str, Any]: ...
+    def to_dict(self) -> dict[str, Any]: ...
     def to_bar(self) -> Bar: ...
 
 class HistoricalSeries:
     """Ordered collection of price bars for a symbol."""
+
     symbol: str
     exchange: str
     interval: Interval
-    bars: List[Bar]
+    bars: list[Bar]
 
     def __init__(
         self,
         symbol: str,
         exchange: str,
         interval: Interval,
-        bars: List[Bar],
+        bars: list[Bar],
     ) -> None: ...
     def __len__(self) -> int: ...
     def __getitem__(self, index: int) -> Bar: ...
     def __iter__(self) -> Iterator[Bar]: ...
-    def to_dict(self) -> Dict[str, Any]: ...
+    def to_dict(self) -> dict[str, Any]: ...
     def to_polars(self) -> Any: ...
     def to_pandas(self) -> Any: ...
 
 class QuoteTick:
     """Real-time market quote update."""
+
     symbol: str
     timestamp: int
     price: float
     volume: float
-    bid: Optional[float]
-    ask: Optional[float]
-    change: Optional[float]
-    change_percent: Optional[float]
+    bid: float | None
+    ask: float | None
+    change: float | None
+    change_percent: float | None
 
     def __init__(
         self,
@@ -114,15 +129,16 @@ class QuoteTick:
         timestamp: int,
         price: float,
         volume: float,
-        bid: Optional[float] = None,
-        ask: Optional[float] = None,
-        change: Optional[float] = None,
-        change_percent: Optional[float] = None,
+        bid: float | None = None,
+        ask: float | None = None,
+        change: float | None = None,
+        change_percent: float | None = None,
     ) -> None: ...
-    def to_dict(self) -> Dict[str, Any]: ...
+    def to_dict(self) -> dict[str, Any]: ...
 
 class FundamentalPoint:
     """Individual fundamental indicator point."""
+
     timestamp: int
     value: float
     index: int
@@ -133,15 +149,16 @@ class FundamentalPoint:
         value: float,
         index: int,
     ) -> None: ...
-    def to_dict(self) -> Dict[str, Any]: ...
+    def to_dict(self) -> dict[str, Any]: ...
 
 class FundamentalSeries:
     """Time series of fundamental data points."""
+
     symbol: str
     exchange: str
     fund_id: str
     period: FinancialPeriod
-    points: List[FundamentalPoint]
+    points: list[FundamentalPoint]
 
     def __init__(
         self,
@@ -149,17 +166,18 @@ class FundamentalSeries:
         exchange: str,
         fund_id: str,
         period: FinancialPeriod,
-        points: List[FundamentalPoint],
+        points: list[FundamentalPoint],
     ) -> None: ...
     def __len__(self) -> int: ...
     def __getitem__(self, index: int) -> FundamentalPoint: ...
     def __iter__(self) -> Iterator[FundamentalPoint]: ...
-    def to_dict(self) -> Dict[str, Any]: ...
+    def to_dict(self) -> dict[str, Any]: ...
     def to_polars(self) -> Any: ...
     def to_pandas(self) -> Any: ...
 
 class EconomicEvent:
     """Scheduled global macroeconomic event."""
+
     id: str
     title: str
     country: str
@@ -167,9 +185,9 @@ class EconomicEvent:
     ticker: str
     date: int
     importance: EconomicImportance
-    actual: Optional[float]
-    forecast: Optional[float]
-    previous: Optional[float]
+    actual: float | None
+    forecast: float | None
+    previous: float | None
 
     def __init__(
         self,
@@ -180,14 +198,14 @@ class EconomicEvent:
         ticker: str,
         date: int,
         importance: EconomicImportance,
-        actual: Optional[float] = None,
-        forecast: Optional[float] = None,
-        previous: Optional[float] = None,
+        actual: float | None = None,
+        forecast: float | None = None,
+        previous: float | None = None,
     ) -> None: ...
-    def to_dict(self) -> Dict[str, Any]: ...
+    def to_dict(self) -> dict[str, Any]: ...
 
-QuoteCallback = Callable[[QuoteTick], None]
-CandleCallback = Callable[[CandleUpdate], None]
+QuoteCallback: TypeAlias = Callable[[QuoteTick], None]
+CandleCallback: TypeAlias = Callable[[CandleUpdate], None]
 
 class QuoteSubscription:
     """Active real-time market quote stream subscription."""
@@ -206,27 +224,24 @@ class BarSubscription:
 class TradingViewClient:
     """Main client interface for accessing TradingView market data."""
 
-    auth_token: Optional[str]
-    username: Optional[str]
+    auth_token: str | None
+    username: str | None
     is_authenticated: bool
 
-    def __init__(self, auth_token: Optional[str] = None) -> None: ...
-
+    def __init__(self, auth_token: str | None = None) -> None: ...
     @classmethod
     async def login(
         cls,
         username: str,
         password: str,
-        totp_secret: Optional[str] = None,
-    ) -> "TradingViewClient": ...
-
+        totp_secret: str | None = None,
+    ) -> TradingViewClient: ...
     async def authenticate(
         self,
         username: str,
         password: str,
-        totp_secret: Optional[str] = None,
+        totp_secret: str | None = None,
     ) -> None: ...
-
     async def get_historical(
         self,
         symbol: str,
@@ -236,7 +251,6 @@ class TradingViewClient:
         with_replay: bool = False,
         as_dataframe: bool = False,
     ) -> Any: ...
-
     async def get_historical_df(
         self,
         symbol: str,
@@ -245,29 +259,25 @@ class TradingViewClient:
         n_bars: int = 100,
         with_replay: bool = False,
     ) -> Any: ...
-
     async def get_historical_batch(
         self,
-        symbols: Sequence[Tuple[str, str]],
+        symbols: Sequence[tuple[str, str]],
         interval: Interval = Interval.OneDay,
         n_bars: int = 100,
         max_concurrency: int = 4,
         as_dataframe: bool = False,
     ) -> Any: ...
-
     async def subscribe_quotes(
         self,
         symbols: Sequence[str],
-        callback: Optional[QuoteCallback] = None,
+        callback: QuoteCallback | None = None,
     ) -> QuoteSubscription: ...
-
     async def subscribe_bars(
         self,
         symbols: Sequence[str],
         interval: Interval = Interval.OneMinute,
-        callback: Optional[CandleCallback] = None,
+        callback: CandleCallback | None = None,
     ) -> BarSubscription: ...
-
     async def get_fundamental(
         self,
         symbol: str,
@@ -277,37 +287,35 @@ class TradingViewClient:
         n_bars: int = 20,
         as_dataframe: bool = False,
     ) -> Any: ...
-
     async def get_economic_calendar(
         self,
-        countries: Optional[Sequence[str]] = None,
-        from_timestamp: Optional[int] = None,
-        to_timestamp: Optional[int] = None,
+        countries: Sequence[str] | None = None,
+        from_timestamp: int | None = None,
+        to_timestamp: int | None = None,
         min_importance: EconomicImportance = EconomicImportance.Medium,
         as_dataframe: bool = False,
     ) -> Any: ...
-
     async def close(self) -> None: ...
 
 __all__ = [
-    "TradingViewError",
     "AuthenticationError",
-    "SymbolNotFoundError",
-    "ConnectionError",
-    "TimeoutError",
-    "RateLimitError",
-    "ProtocolError",
-    "Interval",
-    "FinancialPeriod",
-    "EconomicImportance",
     "Bar",
+    "BarSubscription",
     "CandleUpdate",
-    "HistoricalSeries",
-    "QuoteTick",
+    "ConnectionError",
+    "EconomicEvent",
+    "EconomicImportance",
+    "FinancialPeriod",
     "FundamentalPoint",
     "FundamentalSeries",
-    "EconomicEvent",
+    "HistoricalSeries",
+    "Interval",
+    "ProtocolError",
     "QuoteSubscription",
-    "BarSubscription",
+    "QuoteTick",
+    "RateLimitError",
+    "SymbolNotFoundError",
+    "TimeoutError",
     "TradingViewClient",
+    "TradingViewError",
 ]

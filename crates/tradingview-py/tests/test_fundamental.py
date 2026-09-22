@@ -8,6 +8,7 @@ from tradingview import (
     TradingViewClient,
 )
 
+
 def test_fundamental_point_model() -> None:
     p = FundamentalPoint(timestamp=1700000000, value=1234567.89, index=1)
     assert p.timestamp == 1700000000
@@ -69,9 +70,15 @@ async def test_get_fundamental() -> None:
 @pytest.mark.asyncio
 async def test_get_fundamental_polars_dataframe() -> None:
     import polars as pl
+
     client = TradingViewClient()
     df = await client.get_fundamental(
-        "AAPL", "NASDAQ", "total_revenue", FinancialPeriod.FiscalYear, n_bars=3, as_dataframe=True
+        "AAPL",
+        "NASDAQ",
+        "total_revenue",
+        FinancialPeriod.FiscalYear,
+        n_bars=3,
+        as_dataframe=True,
     )
     assert isinstance(df, pl.DataFrame)
     assert df.height > 0

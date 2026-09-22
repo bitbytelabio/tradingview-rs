@@ -2,7 +2,7 @@
 
 import pytest
 from tradingview import Bar, HistoricalSeries, Interval, TradingViewClient
-from tradingview.exceptions import SymbolNotFoundError, TradingViewError
+
 
 def test_bar_model_attributes_and_conversion() -> None:
     bar = Bar(
@@ -58,6 +58,7 @@ def test_historical_series_methods() -> None:
     # Polars & Pandas export
     try:
         import polars as pl
+
         df_pl = series.to_polars()
         assert isinstance(df_pl, pl.DataFrame)
         assert df_pl.shape == (2, 6)
@@ -66,6 +67,7 @@ def test_historical_series_methods() -> None:
 
     try:
         import pandas as pd
+
         df_pd = series.to_pandas()
         assert isinstance(df_pd, pd.DataFrame)
         assert df_pd.shape == (2, 6)
@@ -108,10 +110,13 @@ async def test_get_historical_batch() -> None:
 @pytest.mark.asyncio
 async def test_get_historical_polars_dataframe() -> None:
     import polars as pl
+
     client = TradingViewClient()
-    
+
     # Using as_dataframe=True
-    df = await client.get_historical("AAPL", "NASDAQ", Interval.OneDay, n_bars=10, as_dataframe=True)
+    df = await client.get_historical(
+        "AAPL", "NASDAQ", Interval.OneDay, n_bars=10, as_dataframe=True
+    )
     assert isinstance(df, pl.DataFrame)
     assert df.height == 10
     assert set(df.columns) == {"timestamp", "open", "high", "low", "close", "volume"}
@@ -123,15 +128,16 @@ async def test_get_historical_polars_dataframe() -> None:
     assert isinstance(df2, pl.DataFrame)
     assert df2.height == 5
     assert set(df2.columns) == {"timestamp", "open", "high", "low", "close", "volume"}
-    
+
     await client.close()
 
 
 @pytest.mark.asyncio
 async def test_get_historical_batch_polars_dataframe() -> None:
     import polars as pl
+
     client = TradingViewClient()
-    
+
     batch_df = await client.get_historical_batch(
         [("AAPL", "NASDAQ"), ("MSFT", "NASDAQ")],
         interval=Interval.OneDay,
@@ -144,5 +150,5 @@ async def test_get_historical_batch_polars_dataframe() -> None:
     assert isinstance(batch_df["NASDAQ:MSFT"], pl.DataFrame)
     assert batch_df["NASDAQ:AAPL"].height == 5
     assert batch_df["NASDAQ:MSFT"].height == 5
-    
+
     await client.close()

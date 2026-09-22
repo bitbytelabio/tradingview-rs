@@ -7,6 +7,7 @@ from tradingview import (
     TradingViewClient,
 )
 
+
 def test_economic_event_model() -> None:
     evt = EconomicEvent(
         id="12345",
@@ -57,6 +58,7 @@ async def test_get_economic_calendar() -> None:
 @pytest.mark.asyncio
 async def test_get_economic_calendar_polars_dataframe() -> None:
     import polars as pl
+
     client = TradingViewClient()
     df = await client.get_economic_calendar(
         countries=["US"],
