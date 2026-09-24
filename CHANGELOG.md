@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-24
+
+### Added
+- Python `DataServer` enum (`Data`, `ProData`, `WidgetData`, `MobileData`) for configurable TradingView WebSocket data server endpoint selection.
+- Keyword-only `server` parameter (`server=DataServer.Data`) in `TradingViewClient` constructor and `login()`, with a read-only `server` property.
+- Optional keyword-only `server` parameter override in high-level client methods: `get_historical`, `get_historical_df`, `get_historical_batch`, `subscribe_quotes`, `subscribe_bars`, and `get_fundamental`.
+- Async `get_tradingview_token()` method on Python `TradingViewClient` (and Rust `get_tradingview_token`) to retrieve a TradingView session token using authenticated session cookies.
+- Offline rejection with `AuthenticationError` when `get_tradingview_token()` is called on anonymous or token-only clients before making network requests.
+- Support for both RFC 6238 Base32 secrets and `otpauth://totp/...` URIs in `totp_secret` parameter for `login()` and `authenticate()`.
+- Automatic initial `set_auth_token` dispatch in `WebSocketClient` prior to session command execution.
+
+### Changed
+- Preserved default `DataServer.Data` endpoint and backward-compatible positional API across all client methods.
+- Migrated entire HTTP client transport from `reqwest` to `wreq` (v6.0) + `wreq-util` (v3.0) with browser emulation.
+- Migrated 2FA TOTP implementation from `google-authenticator` to `totp-rs` (v6.0) with `std`, `otpauth`, and `zeroize` features.
+- Renamed `get_quote_token` to `get_tradingview_token` across Rust and Python without aliases.
+- Cargo TLS flags (`rustls-tls`, `native-tls`) now scope exclusively to WebSocket connections via `tokio-tungstenite`.
+- Clarified `DataServer.ProData` access semantics: anonymous connection is supported for public data, while paid market data feeds require account and feed entitlements.
 ## [0.4.0] - 2026-09-22
 
 ### Added

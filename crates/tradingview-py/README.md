@@ -28,6 +28,8 @@ To enable Polars and Pandas support:
 pip install "tradingview-rs[polars,pandas]"
 ```
 
+*Note*: Compiling from source requires a local C/C++ toolchain (CMake, Clang or GCC, and Perl) to build native `wreq` / BoringSSL dependencies.
+
 ---
 
 ## Quick Start
@@ -38,15 +40,20 @@ pip install "tradingview-rs[polars,pandas]"
 import asyncio
 from tradingview import TradingViewClient, Interval
 
+
 async def main():
     client = TradingViewClient()
 
     # Fetch 100 daily bars directly as a Polars DataFrame
-    df = await client.get_historical("AAPL", "NASDAQ", Interval.OneDay, n_bars=100, as_dataframe=True)
+    df = await client.get_historical(
+        "AAPL", "NASDAQ", Interval.OneDay, n_bars=100, as_dataframe=True
+    )
     print(df)
 
     # Or retrieve structured HistoricalSeries with .to_polars() and .to_pandas()
-    series = await client.get_historical("BTCUSDT", "BINANCE", Interval.OneHour, n_bars=50)
+    series = await client.get_historical(
+        "BTCUSDT", "BINANCE", Interval.OneHour, n_bars=50
+    )
     polars_df = series.to_polars()
     latest = series[-1]
     print(f"Latest Bar: Close={latest.close}, Vol={latest.volume}")
@@ -62,6 +69,7 @@ async def main():
 
     await client.close()
 
+
 asyncio.run(main())
 ```
 
@@ -71,11 +79,16 @@ asyncio.run(main())
 import asyncio
 from tradingview import TradingViewClient, Interval, QuoteTick, CandleUpdate
 
+
 def on_quote(tick: QuoteTick):
     print(f"[Callback] {tick.symbol} Price={tick.price} Bid={tick.bid} Ask={tick.ask}")
 
+
 def on_candle(candle: CandleUpdate):
-    print(f"[Callback] {candle.symbol} Close={candle.close} High={candle.high} Low={candle.low}")
+    print(
+        f"[Callback] {candle.symbol} Close={candle.close} High={candle.high} Low={candle.low}"
+    )
+
 
 async def main():
     client = TradingViewClient()
@@ -89,14 +102,19 @@ async def main():
     await quote_sub.stop()
 
     # 2. Live in-flight 1-minute candle streaming
-    candle_sub = await client.subscribe_bars(["BINANCE:ETHUSDT"], interval=Interval.OneMinute, callback=on_candle)
+    candle_sub = await client.subscribe_bars(
+        ["BINANCE:ETHUSDT"], interval=Interval.OneMinute, callback=on_candle
+    )
 
     async for candle in candle_sub:
-        print(f"[Iterator] Live Candle: {candle.symbol} Close={candle.close} Vol={candle.volume}")
+        print(
+            f"[Iterator] Live Candle: {candle.symbol} Close={candle.close} Vol={candle.volume}"
+        )
         break
     await candle_sub.stop()
 
     await client.close()
+
 
 asyncio.run(main())
 ```
@@ -107,12 +125,18 @@ asyncio.run(main())
 import asyncio
 from tradingview import TradingViewClient, FinancialPeriod, EconomicImportance
 
+
 async def main():
     client = TradingViewClient()
 
     # Query corporate revenue history as a Polars DataFrame
     fund_df = await client.get_fundamental(
-        "AAPL", "NASDAQ", "total_revenue", FinancialPeriod.FiscalYear, n_bars=5, as_dataframe=True
+        "AAPL",
+        "NASDAQ",
+        "total_revenue",
+        FinancialPeriod.FiscalYear,
+        n_bars=5,
+        as_dataframe=True,
     )
     print(fund_df)
 
@@ -120,9 +144,61 @@ async def main():
     events_df = await client.get_economic_calendar(
         countries=["US"], min_importance=EconomicImportance.High, as_dataframe=True
     )
-    print(events_df.select(["date", "country", "title", "indicator", "actual", "forecast"]))
+    print(
+        events_df.select(
+            ["date", "country", "title", "indicator", "actual", "forecast"]
+        )
+    )
 
     await client.close()
+
+
+asyncio.run(main())
+```
+
+### 4. ProData Server Endpoint & Entitlements
+
+```python
+import asyncio
+import os
+from dotenv import load_dotenv
+from tradingview import TradingViewClient, DataServer, Interval
+
+# Entitlements Notice:
+# Anonymous connection to DataServer.ProData is supported for public market data.
+# However, accessing paid market data feeds requires account and feed entitlements;
+# changing the server endpoint to ProData does not grant paid access or bypass paywalled feeds.
+# Loading .env or environment variables is an application responsibility (e.g. via python-dotenv).
+# Token types are not equivalent: token-only clients cannot call get_tradingview_token.
+# Cookie authentication uses session cookies via wreq; no CAPTCHA bypass is claimed.
+# totp_secret supports either standard RFC 6238 Base32 or full otpauth:// URI (e.g. from Bitwarden).
+load_dotenv()
+
+
+async def main():
+    username = os.getenv("TV_USERNAME")
+    password = os.getenv("TV_PASSWORD")
+    if username and password:
+        # 1. Login with credentials to establish authenticated session cookies
+        login_client = await TradingViewClient.login(
+            username=username, password=password
+        )
+        # 2. Retrieve TradingView session token using session cookies
+        token = await login_client.get_tradingview_token()
+        await login_client.close()
+    else:
+        # Fall back to pre-configured auth token if available
+        token = os.getenv("TV_AUTH_TOKEN")
+
+    # 3. Instantiate client with token and ProData endpoint
+    client = TradingViewClient(auth_token=token, server=DataServer.ProData)
+
+    df = await client.get_historical(
+        "AAPL", "NASDAQ", Interval.OneDay, n_bars=100, as_dataframe=True
+    )
+    print(f"Retrieved {df.height} bars from ProData")
+    await client.close()
+
 
 asyncio.run(main())
 ```

@@ -41,6 +41,20 @@ class EconomicImportance(Enum):
     Medium = 0
     High = 1
 
+class DataServer(Enum):
+    """TradingView WebSocket data server endpoint.
+
+    Note:
+        Connecting anonymously to `DataServer.ProData` is supported for public market data.
+        Accessing paid market data feeds requires account and feed entitlements; changing
+        the server endpoint to ProData does not grant paid access or bypass paywalled feeds.
+    """
+
+    Data = "data"
+    ProData = "prodata"
+    WidgetData = "widgetdata"
+    MobileData = "mobile-data"
+
 class Bar:
     """Individual historical OHLCV price bar."""
 
@@ -222,26 +236,68 @@ class BarSubscription:
     async def stop(self) -> None: ...
 
 class TradingViewClient:
-    """Main client interface for accessing TradingView market data."""
+    """Main client interface for accessing TradingView market data.
+
+    Note:
+        Connecting anonymously to `DataServer.ProData` is supported for public market data.
+        However, accessing paid market data feeds requires account and feed entitlements;
+        changing the endpoint to ProData does not grant paid access without entitlements.
+        Loading credentials or tokens from `.env` or system environment variables
+        is an explicit application concern.
+    """
 
     auth_token: str | None
     username: str | None
     is_authenticated: bool
-
-    def __init__(self, auth_token: str | None = None) -> None: ...
+    @property
+    def server(self) -> DataServer: ...
+    def __init__(
+        self,
+        auth_token: str | None = None,
+        *,
+        server: DataServer = DataServer.Data,
+    ) -> None: ...
     @classmethod
     async def login(
         cls,
         username: str,
         password: str,
         totp_secret: str | None = None,
-    ) -> TradingViewClient: ...
+        *,
+        server: DataServer = DataServer.Data,
+    ) -> TradingViewClient:
+        """Authenticate with TradingView credentials and return an authenticated client.
+
+        Args:
+            username: TradingView username or email.
+            password: Account password.
+            totp_secret: Optional 2FA TOTP secret, accepting either a standard RFC 6238
+                Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
+            server: Default WebSocket data server endpoint (default: DataServer.Data).
+        """
     async def authenticate(
         self,
         username: str,
         password: str,
         totp_secret: str | None = None,
-    ) -> None: ...
+    ) -> None:
+        """Authenticate this client instance using TradingView credentials.
+
+        Args:
+            username: TradingView username or email.
+            password: Account password.
+            totp_secret: Optional 2FA TOTP secret, accepting either a standard RFC 6238
+                Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
+        """
+    async def get_tradingview_token(self) -> str:
+        """Retrieve a TradingView session token using authenticated session cookies.
+
+        The client must be authenticated with session cookies via `TradingViewClient.login()`
+        or `client.authenticate()`.
+
+        Raises:
+            AuthenticationError: If the client is anonymous or was initialized with only an auth_token.
+        """
     async def get_historical(
         self,
         symbol: str,
@@ -250,6 +306,8 @@ class TradingViewClient:
         n_bars: int = 100,
         with_replay: bool = False,
         as_dataframe: bool = False,
+        *,
+        server: DataServer | None = None,
     ) -> Any: ...
     async def get_historical_df(
         self,
@@ -258,6 +316,8 @@ class TradingViewClient:
         interval: Interval = Interval.OneDay,
         n_bars: int = 100,
         with_replay: bool = False,
+        *,
+        server: DataServer | None = None,
     ) -> Any: ...
     async def get_historical_batch(
         self,
@@ -266,17 +326,23 @@ class TradingViewClient:
         n_bars: int = 100,
         max_concurrency: int = 4,
         as_dataframe: bool = False,
+        *,
+        server: DataServer | None = None,
     ) -> Any: ...
     async def subscribe_quotes(
         self,
         symbols: Sequence[str],
         callback: QuoteCallback | None = None,
+        *,
+        server: DataServer | None = None,
     ) -> QuoteSubscription: ...
     async def subscribe_bars(
         self,
         symbols: Sequence[str],
         interval: Interval = Interval.OneMinute,
         callback: CandleCallback | None = None,
+        *,
+        server: DataServer | None = None,
     ) -> BarSubscription: ...
     async def get_fundamental(
         self,
@@ -286,6 +352,8 @@ class TradingViewClient:
         period: FinancialPeriod = FinancialPeriod.FiscalYear,
         n_bars: int = 20,
         as_dataframe: bool = False,
+        *,
+        server: DataServer | None = None,
     ) -> Any: ...
     async def get_economic_calendar(
         self,
@@ -303,6 +371,7 @@ __all__ = [
     "BarSubscription",
     "CandleUpdate",
     "ConnectionError",
+    "DataServer",
     "EconomicEvent",
     "EconomicImportance",
     "FinancialPeriod",

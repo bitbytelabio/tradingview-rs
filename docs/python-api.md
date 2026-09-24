@@ -8,6 +8,8 @@ The `tradingview` Python library provides native, high-performance bindings to `
 
 - **Tokio-to-AsyncIO Bridge**: Operations execute asynchronously on a background Tokio runtime via `pyo3-async-runtimes`. All client methods return standard Python `asyncio` awaitables/coroutines.
 - **Global Interpreter Lock (GIL) Release**: All network I/O, batch tasks, and JSON/WebSocket deserialization release the Python GIL, allowing true multicore parallelism.
+- **HTTP & WebSocket Transports**: All HTTP communication (login, cookies, quote/chart tokens, economic calendar) is powered by `wreq` and `wreq-util` with BoringSSL. WebSocket streaming connects via Tokio tungstenite; Cargo feature flags (`rustls-tls`, `native-tls`) apply to WebSocket transport only.
+- **Native Toolchain Requirement**: Building the native library from source requires CMake, Clang (or GCC), and Perl to compile BoringSSL. Pre-built wheels are not guaranteed across all environments.
 - **Callback Dispatching & Trampoline**: Callbacks registered on subscriptions are invoked on the Python event loop thread via `loop.call_soon_threadsafe` with exception isolation (`sys.unraisablehook`). Unhandled callback exceptions do not crash the stream.
 
 ---
@@ -15,38 +17,105 @@ The `tradingview` Python library provides native, high-performance bindings to `
 ## Client: `TradingViewClient`
 
 ```python
-from tradingview import TradingViewClient, Interval, FinancialPeriod, EconomicImportance
+from tradingview import (
+    TradingViewClient,
+    DataServer,
+    Interval,
+    FinancialPeriod,
+    EconomicImportance,
+)
 ```
 
 ### Initializing Client
 
 ```python
-# Anonymous client (uses default 'unauthorized_user_token')
+# Anonymous client (default server is DataServer.Data, uses default 'unauthorized_user_token')
 client = TradingViewClient()
 
-# Client initialized with a pre-authenticated session token
+# Client initialized with a pre-authenticated session token and default Data server
 client = TradingViewClient(auth_token="your_session_auth_token")
 
-# Check authentication state
+# Client configured for TradingView ProData endpoint
+client = TradingViewClient(
+    auth_token="your_session_auth_token",
+    server=DataServer.ProData,
+)
+
+# Check authentication state and configured server
 print(client.is_authenticated)  # True or False
 print(client.auth_token)        # Token string or None
+print(client.server)            # DataServer.Data or DataServer.ProData
 ```
+
+### DataServer Endpoints & Entitlements Notice
+
+The `DataServer` enum provides endpoints for TradingView WebSocket communication:
+- `DataServer.Data` (`"data"`): Default standard data server.
+- `DataServer.ProData` (`"prodata"`): High-throughput data server for authenticated Pro accounts.
+- `DataServer.WidgetData` (`"widgetdata"`): Widget data server.
+- `DataServer.MobileData` (`"mobile-data"`): Mobile application data server.
+
+> **Important Account Entitlements Notice**:
+> Anonymous connection to `DataServer.ProData` is supported for public market data. However, accessing paid market data feeds requires corresponding account and feed entitlements; changing the endpoint to `ProData` does **not** grant paid data access or bypass feed entitlement checks without appropriate account subscriptions.
+> **Application Environment Variable Responsibility**:
+> Loading authentication tokens or login credentials from `.env` files or system environment variables is an explicit application concern (e.g. using `python-dotenv` or `os.getenv`). The library never automatically loads `.env` files.
 
 ### Credential Login & Authenticate
 
 ```python
 # Asynchronous classmethod login: returns authenticated client
+# totp_secret supports either standard RFC 6238 Base32 or a full otpauth:// URI (e.g. from Bitwarden)
 client = await TradingViewClient.login(
     username="your_username",
     password="your_password",
-    totp_secret="OPTIONAL_2FA_TOTP_SECRET",
+    totp_secret="OPTIONAL_2FA_TOTP_SECRET_OR_OTPAUTH_URI",
+    server=DataServer.ProData,  # Optional keyword argument (default: DataServer.Data)
 )
 
 # Or authenticate an existing client instance
 await client.authenticate(
     username="your_username",
     password="your_password",
-    totp_secret="OPTIONAL_2FA_TOTP_SECRET",
+    totp_secret="OPTIONAL_2FA_TOTP_SECRET_OR_OTPAUTH_URI",
+)
+```
+
+### Session & TradingView Token Retrieval (`get_tradingview_token`)
+
+```python
+async def get_tradingview_token(self) -> str: ...
+```
+
+Retrieves a TradingView session token using authenticated session cookies (`sessionid`, `sessionid_sign`, `device_t`).
+
+- **Prerequisites**: The client must have established an authenticated cookie session via `TradingViewClient.login()` or `client.authenticate()`.
+- **Rejection**: Anonymous clients or token-only clients initialized via `TradingViewClient(auth_token=...)` will immediately raise `AuthenticationError` before executing any network request. A supplied auth/websocket token is not a cookie session.
+- **Token Disparity & Transport**: Token types are not equivalent; layout-sharing JWTs or standalone auth tokens do not grant cookie-authenticated HTTP session access. All HTTP requests (including login and cookie authentication) use `wreq` backed by BoringSSL; Cargo TLS flags (`native-tls`, `rustls-tls`) apply to WebSocket transport only. No claim of CAPTCHA bypass is made.
+- **Token Usage**: Returns the retrieved token string without mutating the current client's `auth_token`. The token can then be passed to instantiate a client targeting `DataServer.ProData`.
+
+#### Example: Login, Retrieve Token, and Connect to ProData
+
+```python
+import os
+from dotenv import load_dotenv
+from tradingview import TradingViewClient, DataServer
+
+load_dotenv()
+
+# 1. Login with credentials to establish authenticated session cookies
+login_client = await TradingViewClient.login(
+    username=os.environ["TV_USERNAME"],
+    password=os.environ["TV_PASSWORD"],
+)
+
+# 2. Retrieve the TradingView session token using session cookies
+token = await login_client.get_tradingview_token()
+await login_client.close()
+
+# 3. Instantiate a data client using the retrieved token and ProData endpoint
+data_client = TradingViewClient(
+    auth_token=token,
+    server=DataServer.ProData,
 )
 ```
 
@@ -64,6 +133,8 @@ async def get_historical(
     n_bars: int = 100,
     with_replay: bool = False,
     as_dataframe: bool = False,
+    *,
+    server: DataServer | None = None,
 ) -> HistoricalSeries | polars.DataFrame: ...
 ```
 
@@ -95,6 +166,8 @@ async def get_historical_batch(
     n_bars: int = 100,
     max_concurrency: int = 4,
     as_dataframe: bool = False,
+    *,
+    server: DataServer | None = None,
 ) -> dict[str, HistoricalSeries] | dict[str, polars.DataFrame]: ...
 ```
 
@@ -112,6 +185,8 @@ async def get_historical_batch(
 async def subscribe_quotes(
     symbols: Sequence[str],
     callback: Callable[[QuoteTick], None] | None = None,
+    *,
+    server: DataServer | None = None,
 ) -> QuoteSubscription: ...
 ```
 
@@ -140,6 +215,8 @@ async def subscribe_bars(
     symbols: Sequence[str],
     interval: Interval = Interval.OneMinute,
     callback: Callable[[CandleUpdate], None] | None = None,
+    *,
+    server: DataServer | None = None,
 ) -> BarSubscription: ...
 ```
 
@@ -169,6 +246,8 @@ async def get_fundamental(
     period: FinancialPeriod = FinancialPeriod.FiscalYear,
     n_bars: int = 20,
     as_dataframe: bool = False,
+    *,
+    server: DataServer | None = None,
 ) -> FundamentalSeries | polars.DataFrame: ...
 ```
 

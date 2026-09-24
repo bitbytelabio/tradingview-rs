@@ -6,21 +6,22 @@ use crate::{
 use bon::builder;
 use iso_currency::Currency;
 use rand::{RngExt, distr::Alphanumeric};
-use reqwest::{
-    Response,
-    header::{ACCEPT, COOKIE, HeaderMap, HeaderValue, ORIGIN, REFERER},
-};
 use serde::Serialize;
 use std::{collections::HashMap, sync::LazyLock};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{debug, error, warn};
 use ustr::Ustr;
+use wreq::{
+    Response,
+    header::{ACCEPT, COOKIE, HeaderMap, HeaderValue, ORIGIN, REFERER},
+};
+use wreq_util::{Emulation, Platform, Profile};
 
 // ---------------------------------------------------------------------------
 // Shared HTTP client — built once, reused for all requests.
 // Enables connection pooling, DNS caching, TLS session reuse, and HTTP/2.
 // ---------------------------------------------------------------------------
-static SHARED_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+static SHARED_CLIENT: LazyLock<wreq::Client> = LazyLock::new(|| {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     headers.insert(
@@ -32,21 +33,18 @@ static SHARED_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         HeaderValue::from_static("https://www.tradingview.com/"),
     );
 
-    let mut builder = reqwest::Client::builder()
+    let emulation = Emulation::builder()
+        .profile(Profile::Chrome133)
+        .platform(Platform::MacOS)
+        .http2(false)
+        .build();
+
+    wreq::Client::builder()
+        .emulation(emulation)
         .default_headers(headers)
         .https_only(true)
-        .user_agent(crate::UA);
-
-    #[cfg(feature = "rustls-tls")]
-    {
-        builder = builder.use_rustls_tls();
-    }
-    #[cfg(feature = "native-tls")]
-    {
-        builder = builder.use_native_tls();
-    }
-
-    builder.build().expect("Failed to build shared HTTP client")
+        .build()
+        .expect("Failed to build shared HTTP client")
 });
 
 #[macro_export]
@@ -59,19 +57,19 @@ macro_rules! payload {
     };
 }
 
-/// Returns a clone of the shared `reqwest::Client`.
+/// Returns a clone of the shared `wreq::Client`.
 ///
 /// The client is built once at first use and reused for all subsequent calls.
-/// `reqwest::Client` is cheap to clone (it wraps an `Arc` internally), so
+/// `wreq::Client` is cheap to clone (it wraps an `Arc` internally), so
 /// cloning enables connection pooling, DNS caching, and TLS session reuse.
 ///
 /// For authenticated requests, use [`http_client`] and add the cookie
 /// per-request via `.header(COOKIE, ...)`.
-pub fn http_client() -> reqwest::Client {
+pub fn http_client() -> wreq::Client {
     SHARED_CLIENT.clone()
 }
 
-/// Build a `reqwest::Client` with optional authentication cookies baked into
+/// Build a `wreq::Client` with optional authentication cookies baked into
 /// its default headers.
 ///
 /// **Deprecated for hot paths.**  Prefer [`http_client`] + per-request
@@ -84,13 +82,11 @@ pub fn http_client() -> reqwest::Client {
     since = "0.2.0",
     note = "Use http_client() and add cookies per-request via .header(COOKIE, ...) for connection pooling"
 )]
-pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {
+pub fn build_request(cookie: Option<&str>) -> Result<wreq::Client> {
     if cookie.is_some() {
         warn!(
             "build_request() with cookies bypasses connection pooling; use http_client() + .header(COOKIE, ...) instead"
         );
-        // Legacy path: build a dedicated client with cookies in default headers.
-        // This is suboptimal but maintains backward compatibility.
         let mut headers = HeaderMap::new();
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
         headers.insert(
@@ -105,21 +101,17 @@ pub fn build_request(cookie: Option<&str>) -> Result<reqwest::Client> {
             headers.insert(COOKIE, HeaderValue::from_str(cookie)?);
         }
 
-        let mut builder = reqwest::Client::builder()
+        let emulation = Emulation::builder()
+            .profile(Profile::Chrome133)
+            .platform(Platform::MacOS)
+            .http2(false)
+            .build();
+
+        return Ok(wreq::Client::builder()
+            .emulation(emulation)
             .default_headers(headers)
             .https_only(true)
-            .user_agent(crate::UA);
-
-        #[cfg(feature = "rustls-tls")]
-        {
-            builder = builder.use_rustls_tls();
-        }
-        #[cfg(feature = "native-tls")]
-        {
-            builder = builder.use_native_tls();
-        }
-
-        return Ok(builder.build()?);
+            .build()?);
     }
 
     // No cookies: return the shared client (connection pooling enabled).
@@ -356,6 +348,16 @@ mod tests {
         models::{MarketAdjustment, SessionType},
         utils::*,
     };
+    #[tokio::test]
+    async fn test_https_only_rejects_plaintext_http() {
+        #[allow(deprecated)]
+        let client_with_cookie = build_request(Some("sessionid=dummy;")).unwrap();
+        let res = client_with_cookie.get("http://localhost:8080").send().await;
+        assert!(res.is_err());
+
+        let res_shared = http_client().get("http://localhost:8080").send().await;
+        assert!(res_shared.is_err());
+    }
 
     // ──────────────────────────────────────────────────────────────────
     // parse_packet — basic smoke tests

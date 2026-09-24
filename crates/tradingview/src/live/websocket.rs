@@ -284,6 +284,20 @@ pub struct WebSocketClient<T: Handler> {
 #[bon::bon]
 #[allow(private_interfaces)]
 impl<T: Handler> WebSocketClient<T> {
+    /// Create a new WebSocket client connected to the TradingView data server.
+    ///
+    /// # Authentication Invariant
+    /// Every newly established WebSocket connection transmits exactly one `set_auth_token`
+    /// frame before any session commands (e.g. quote, chart, study, or replay) are sent.
+    ///
+    /// Initial authentication is centralized in this constructor before the builder returns.
+    /// Consumers (e.g. `HistoricalClient`, `StudyClient`, raw streams, or `CommandRunner`)
+    /// rely on this guarantee and must not send duplicate initial authentication frames.
+    /// Reconnection (`Self::reconnect`) re-transmits `set_auth_token` using the currently stored
+    /// token before restoring normal operation.
+    ///
+    /// In accordance with TradingView's protocol, if `auth_token` is `None` or omitted,
+    /// the anonymous default token (`"unauthorized_user_token"`) is transmitted.
     #[builder]
     pub async fn new(
         auth_token: Option<&str>,
@@ -292,9 +306,31 @@ impl<T: Handler> WebSocketClient<T> {
         #[builder(default = 1024*1024)] buffer_size: usize,
         #[builder(default)] error_config: ErrorRecoveryConfig,
     ) -> Result<Arc<Self>> {
-        let auth_token = Ustr::from(auth_token.unwrap_or("unauthorized_user_token"));
         let (write, read) = Self::connect(server, Some(buffer_size)).await?;
+        Self::init_with_stream(
+            handler,
+            server,
+            auth_token,
+            buffer_size,
+            error_config,
+            write,
+            read,
+        )
+        .await
+    }
 
+    /// Internal initialization with pre-connected WebSocket stream sink and stream.
+    /// Performs initial authentication and starts health monitoring before returning.
+    async fn init_with_stream(
+        handler: T,
+        server: DataServer,
+        auth_token: Option<&str>,
+        buffer_size: usize,
+        error_config: ErrorRecoveryConfig,
+        write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+        read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    ) -> Result<Arc<Self>> {
+        let auth_token = Ustr::from(auth_token.unwrap_or("unauthorized_user_token"));
         let is_closed = Arc::new(AtomicBool::new(false));
         let auth_token = Arc::new(RwLock::new(auth_token));
         let read = Arc::new(Mutex::new(read));
@@ -324,10 +360,28 @@ impl<T: Handler> WebSocketClient<T> {
         // Spawn the dedicated writer task.
         Self::spawn_writer(write, write_rx, writer_handle, is_closed.clone());
 
+        // Queue initial authentication before any session commands.
+        // Invariant: Exactly one `set_auth_token` frame is sent as the very first
+        // message on every new connection before any session commands are transmitted.
+        if let Err(e) = client.authenticate_on_connect().await {
+            client.cancellation.cancel();
+            let _ = client.close().await;
+            return Err(e);
+        }
+
         // Start health monitoring task
         client.spawn_health_monitor();
 
         Ok(client)
+    }
+
+    /// Authenticate the newly connected socket with the configured authentication token.
+    ///
+    /// Invariant: Exactly one `set_auth_token` frame is sent as the very first message
+    /// on every new connection before any session commands are transmitted.
+    async fn authenticate_on_connect(&self) -> Result<()> {
+        let token = *self.auth_token.read().await;
+        self.set_auth_token(token.as_str()).await
     }
 
     pub fn spawn_reader_task(self: Arc<Self>) {
@@ -731,8 +785,6 @@ impl<T: Handler> WebSocketClient<T> {
     }
 
     pub async fn reconnect(&self) -> Result<()> {
-        let auth_token = self.auth_token.read().await;
-
         // Abort the old writer task.
         let mut wh = self.writer_handle.lock().await;
         if let Some(handle) = wh.take() {
@@ -759,8 +811,10 @@ impl<T: Handler> WebSocketClient<T> {
 
         let mut read_guard = self.read.lock().await;
         *read_guard = read;
+        drop(read_guard);
+
         self.is_closed.store(false, Ordering::Relaxed);
-        self.set_auth_token(&auth_token).await?;
+        self.authenticate_on_connect().await?;
         Ok(())
     }
 
@@ -791,7 +845,7 @@ impl<T: Handler> WebSocketClient<T> {
         }
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    #[tracing::instrument(skip(self, p), level = "debug")]
     pub async fn send(&self, m: &str, p: &[Value]) -> Result<()> {
         if self.is_closed.load(Ordering::Relaxed) {
             return Err(Error::Internal("WebSocket is closed".into()));
@@ -876,10 +930,12 @@ impl<T: Handler> WebSocketClient<T> {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    #[tracing::instrument(skip(self, auth_token), level = "debug")]
     pub async fn set_auth_token(&self, auth_token: &str) -> Result<()> {
-        let mut auth_token_ = self.auth_token.write().await;
-        *auth_token_ = ustr(auth_token);
+        {
+            let mut auth_token_ = self.auth_token.write().await;
+            *auth_token_ = ustr(auth_token);
+        }
         self.send("set_auth_token", &payload!(auth_token)).await?;
         Ok(())
     }
@@ -1736,5 +1792,148 @@ mod tests {
             1,
             "quote_data should not be called for non-qsd"
         );
+    }
+
+    #[tokio::test]
+    async fn test_local_ws_peer_observes_auth_first_and_session_order() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+
+        let server_task = tokio::spawn(async move {
+            let (tcp_stream, _) = listener.accept().await.unwrap();
+            let mut ws_stream = tokio_tungstenite::accept_async(tcp_stream).await.unwrap();
+            let first_msg = ws_stream.next().await.unwrap().unwrap();
+            let second_msg = ws_stream.next().await.unwrap().unwrap();
+            (first_msg, second_msg)
+        });
+
+        let client_tcp = tokio::net::TcpStream::connect(server_addr).await.unwrap();
+        let plain = MaybeTlsStream::Plain(client_tcp);
+        let (ws_stream, _) =
+            tokio_tungstenite::client_async(format!("ws://{}", server_addr), plain)
+                .await
+                .unwrap();
+
+        let (write, read) = ws_stream.split();
+        let client = WebSocketClient::init_with_stream(
+            MockHandler::new(),
+            DataServer::Data,
+            Some("test_token_secret"),
+            1024 * 1024,
+            ErrorRecoveryConfig::default(),
+            write,
+            read,
+        )
+        .await
+        .unwrap();
+
+        // Send session command immediately after construction
+        client
+            .create_quote_session("quote_session_test")
+            .await
+            .unwrap();
+
+        let (first, second) = server_task.await.unwrap();
+
+        if let Message::Text(first_text) = first {
+            assert!(
+                first_text.contains("set_auth_token"),
+                "First message must be set_auth_token: {}",
+                first_text
+            );
+            assert!(
+                first_text.contains("test_token_secret"),
+                "First message must contain token: {}",
+                first_text
+            );
+        } else {
+            panic!("Expected Text message for first frame");
+        }
+
+        if let Message::Text(second_text) = second {
+            assert!(
+                second_text.contains("quote_create_session"),
+                "Second message must be quote_create_session: {}",
+                second_text
+            );
+            assert!(
+                second_text.contains("quote_session_test"),
+                "Second message must contain session name: {}",
+                second_text
+            );
+        } else {
+            panic!("Expected Text message for second frame");
+        }
+
+        let _ = client.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_local_ws_peer_observes_anonymous_auth() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+
+        let server_task = tokio::spawn(async move {
+            let (tcp_stream, _) = listener.accept().await.unwrap();
+            let mut ws_stream = tokio_tungstenite::accept_async(tcp_stream).await.unwrap();
+            let first_msg = ws_stream.next().await.unwrap().unwrap();
+            let second_msg = ws_stream.next().await.unwrap().unwrap();
+            (first_msg, second_msg)
+        });
+
+        let client_tcp = tokio::net::TcpStream::connect(server_addr).await.unwrap();
+        let plain = MaybeTlsStream::Plain(client_tcp);
+        let (ws_stream, _) =
+            tokio_tungstenite::client_async(format!("ws://{}", server_addr), plain)
+                .await
+                .unwrap();
+
+        let (write, read) = ws_stream.split();
+        let client = WebSocketClient::init_with_stream(
+            MockHandler::new(),
+            DataServer::Data,
+            None,
+            1024 * 1024,
+            ErrorRecoveryConfig::default(),
+            write,
+            read,
+        )
+        .await
+        .unwrap();
+
+        client.create_quote_session("anon_session").await.unwrap();
+
+        let (first, second) = server_task.await.unwrap();
+        if let Message::Text(first_text) = first {
+            assert!(
+                first_text.contains("set_auth_token"),
+                "First message must be set_auth_token: {}",
+                first_text
+            );
+            assert!(
+                first_text.contains("unauthorized_user_token"),
+                "Anonymous auth must contain unauthorized_user_token: {}",
+                first_text
+            );
+        } else {
+            panic!("Expected Text message for first frame");
+        }
+
+        if let Message::Text(second_text) = second {
+            assert!(
+                second_text.contains("quote_create_session"),
+                "Second message must be quote_create_session: {}",
+                second_text
+            );
+            assert!(
+                second_text.contains("anon_session"),
+                "Second message must contain anon_session: {}",
+                second_text
+            );
+        } else {
+            panic!("Expected Text message for second frame");
+        }
+
+        let _ = client.close().await;
     }
 }

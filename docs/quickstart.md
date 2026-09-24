@@ -14,6 +14,7 @@ uv venv --python 3.12 .venv
 source .venv/bin/activate
 
 # Install the tradingview package with Polars and Pandas support
+# Note: Building from source requires CMake, Clang (or GCC), and Perl to compile wreq / BoringSSL.
 pip install "tradingview-rs[polars,pandas]"
 ```
 
@@ -53,6 +54,54 @@ async def main():
     print("AAPL rows:", batch_df["NASDAQ:AAPL"].height)
     print("MSFT rows:", batch_df["NASDAQ:MSFT"].height)
 
+    await client.close()
+
+asyncio.run(main())
+```
+
+### Scenario 1b: Using the ProData Server Endpoint with TradingView Token
+
+```python
+import asyncio
+import os
+from dotenv import load_dotenv
+from tradingview import TradingViewClient, DataServer, Interval
+
+# Entitlements & Environment Notice:
+# Anonymous connection to DataServer.ProData is supported for public market data.
+# However, accessing paid market data feeds requires account and feed entitlements;
+# merely switching the endpoint to ProData does not grant paid access or bypass paywalled feeds.
+# Loading credentials or tokens from .env is an explicit application concern (e.g. using python-dotenv).
+# An explicit login session retrieves a TradingView token, which can then be passed to a ProData client.
+# Note: Token types are not equivalent. A supplied TV_AUTH_TOKEN does not constitute a cookie session
+# (token-only clients cannot call get_tradingview_token). Cookie authentication uses session cookies via wreq;
+# no CAPTCHA bypass is claimed. totp_secret supports either standard RFC 6238 Base32 or full otpauth:// URI.
+load_dotenv()
+
+async def main():
+    username = os.getenv("TV_USERNAME")
+    password = os.getenv("TV_PASSWORD")
+    if username and password:
+        # 1. Login with credentials to establish authenticated session cookies
+        login_client = await TradingViewClient.login(username=username, password=password)
+        # 2. Retrieve TradingView session token using session cookies
+        token = await login_client.get_tradingview_token()
+        await login_client.close()
+    else:
+        # Fall back to pre-configured auth token if set
+        token = os.getenv("TV_AUTH_TOKEN")
+
+    # 3. Instantiate client with token and ProData endpoint
+    client = TradingViewClient(auth_token=token, server=DataServer.ProData)
+
+    df = await client.get_historical(
+        symbol="AAPL",
+        exchange="NASDAQ",
+        interval=Interval.OneDay,
+        n_bars=50,
+        as_dataframe=True,
+    )
+    print(f"ProData DataFrame shape: {df.shape}")
     await client.close()
 
 asyncio.run(main())

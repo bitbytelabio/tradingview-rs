@@ -7,17 +7,17 @@ use std::sync::Arc;
 use std::time::Duration;
 use tradingview::chart::OHLCV;
 use tradingview::historical::{BatchConfig, HistoricalClient, HistoricalRequest};
-use tradingview::live::models::DataServer;
+use tradingview::live::models::DataServer as CoreDataServer;
 use tradingview::live::websocket::WebSocketClient;
 use tradingview::models::UserCookies;
 
 use crate::PyObject;
 use crate::callbacks::CallbackDispatcher;
-use crate::errors::to_py_err;
+use crate::errors::{AuthenticationError, to_py_err};
 use crate::models::bar::{Bar, HistoricalSeries};
 use crate::models::calendar::EconomicEvent;
 use crate::models::candle::{BarSubscription, CandleUpdate};
-use crate::models::enums::{EconomicImportance, FinancialPeriod, Interval};
+use crate::models::enums::{DataServer, EconomicImportance, FinancialPeriod, Interval};
 use crate::models::fundamental::{FundamentalPoint, FundamentalSeries};
 use crate::models::quote::{QuoteSubscription, QuoteTick};
 use crate::streaming::{CandleStreamHandler, QuoteStreamHandler};
@@ -29,18 +29,25 @@ pub struct TradingViewClient {
     pub(crate) auth_token: Arc<RwLock<Option<String>>>,
     pub(crate) username: Arc<RwLock<Option<String>>>,
     pub(crate) user_cookies: Arc<RwLock<Option<UserCookies>>>,
+    pub(crate) server: DataServer,
 }
 
 #[pymethods]
 impl TradingViewClient {
     #[new]
-    #[pyo3(signature = (auth_token = None))]
-    pub fn new(auth_token: Option<String>) -> Self {
+    #[pyo3(signature = (auth_token = None, *, server = DataServer::Data))]
+    pub fn new(auth_token: Option<String>, server: DataServer) -> Self {
         Self {
             auth_token: Arc::new(RwLock::new(auth_token)),
             username: Arc::new(RwLock::new(None)),
             user_cookies: Arc::new(RwLock::new(None)),
+            server,
         }
+    }
+
+    #[getter]
+    pub fn server(&self) -> DataServer {
+        self.server
     }
 
     #[getter]
@@ -64,14 +71,17 @@ impl TradingViewClient {
     }
 
     /// Authenticate with TradingView credentials (username, password, optional TOTP) and return an authenticated client.
+    ///
+    /// The `totp_secret` parameter supports either a standard RFC 6238 Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
     #[classmethod]
-    #[pyo3(signature = (username, password, totp_secret = None))]
+    #[pyo3(signature = (username, password, totp_secret = None, *, server = DataServer::Data))]
     pub fn login<'py>(
         _cls: &Bound<'py, PyType>,
         py: Python<'py>,
         username: String,
         password: String,
         totp_secret: Option<String>,
+        server: DataServer,
     ) -> PyResult<Bound<'py, PyAny>> {
         future_into_py(py, async move {
             let mut cookies = UserCookies::new();
@@ -84,6 +94,7 @@ impl TradingViewClient {
                 auth_token: Arc::new(RwLock::new(Some(logged_in.auth_token.clone()))),
                 username: Arc::new(RwLock::new(Some(logged_in.username.clone()))),
                 user_cookies: Arc::new(RwLock::new(Some(logged_in))),
+                server,
             };
 
             Ok(client)
@@ -91,6 +102,8 @@ impl TradingViewClient {
     }
 
     /// Authenticate the existing client instance using credentials.
+    ///
+    /// The `totp_secret` parameter supports either a standard RFC 6238 Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
     #[pyo3(signature = (username, password, totp_secret = None))]
     pub fn authenticate<'py>(
         &self,
@@ -122,12 +135,32 @@ impl TradingViewClient {
             Ok(())
         })
     }
+    /// Retrieve a TradingView session token using authenticated session cookies.
+    ///
+    /// Requires an active cookie session obtained via `login()` or `authenticate()`.
+    /// Anonymous or token-only clients will raise `AuthenticationError` before making network calls.
+    pub fn get_tradingview_token<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let cookies_opt = self.user_cookies.read().clone();
+        future_into_py(py, async move {
+            let cookies = cookies_opt.ok_or_else(|| {
+                AuthenticationError::new_err(
+                    "Client must be authenticated via login() or authenticate() with session cookies to retrieve a TradingView token; a supplied auth_token is not a cookie session",
+                )
+            })?;
+
+            let token = tradingview::client::misc::get_tradingview_token(&cookies)
+                .await
+                .map_err(to_py_err)?;
+
+            Ok(token)
+        })
+    }
 
     /// Retrieve historical OHLCV candlestick bars for a single symbol asynchronously.
     ///
     /// If `as_dataframe=True`, returns a Polars DataFrame directly.
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (symbol, exchange, interval = Interval::OneDay, n_bars = 100, with_replay = false, as_dataframe = false))]
+    #[pyo3(signature = (symbol, exchange, interval = Interval::OneDay, n_bars = 100, with_replay = false, as_dataframe = false, *, server = None))]
     pub fn get_historical<'py>(
         &self,
         py: Python<'py>,
@@ -137,15 +170,17 @@ impl TradingViewClient {
         n_bars: u64,
         with_replay: bool,
         as_dataframe: bool,
+        server: Option<DataServer>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let auth_token = self
             .auth_token
             .read()
             .clone()
             .unwrap_or_else(|| "unauthorized_user_token".to_string());
+        let target_server: CoreDataServer = server.unwrap_or(self.server).into();
 
         future_into_py(py, async move {
-            let client = HistoricalClient::new(&auth_token, DataServer::Data);
+            let client = HistoricalClient::new(&auth_token, target_server);
             let req = HistoricalRequest::builder()
                 .symbol(symbol.clone())
                 .exchange(exchange.clone())
@@ -190,7 +225,8 @@ impl TradingViewClient {
     }
 
     /// Retrieve historical data directly as a Polars DataFrame.
-    #[pyo3(signature = (symbol, exchange, interval = Interval::OneDay, n_bars = 100, with_replay = false))]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (symbol, exchange, interval = Interval::OneDay, n_bars = 100, with_replay = false, *, server = None))]
     pub fn get_historical_df<'py>(
         &self,
         py: Python<'py>,
@@ -199,14 +235,25 @@ impl TradingViewClient {
         interval: Interval,
         n_bars: u64,
         with_replay: bool,
+        server: Option<DataServer>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        self.get_historical(py, symbol, exchange, interval, n_bars, with_replay, true)
+        self.get_historical(
+            py,
+            symbol,
+            exchange,
+            interval,
+            n_bars,
+            with_replay,
+            true,
+            server,
+        )
     }
 
     /// Retrieve historical OHLCV data for multiple symbols concurrently.
     ///
     /// If `as_dataframe=True`, returns a dictionary mapping "EXCHANGE:SYMBOL" to Polars DataFrames.
-    #[pyo3(signature = (symbols, interval = Interval::OneDay, n_bars = 100, max_concurrency = 4, as_dataframe = false))]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (symbols, interval = Interval::OneDay, n_bars = 100, max_concurrency = 4, as_dataframe = false, *, server = None))]
     pub fn get_historical_batch<'py>(
         &self,
         py: Python<'py>,
@@ -215,15 +262,17 @@ impl TradingViewClient {
         n_bars: u64,
         max_concurrency: usize,
         as_dataframe: bool,
+        server: Option<DataServer>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let auth_token = self
             .auth_token
             .read()
             .clone()
             .unwrap_or_else(|| "unauthorized_user_token".to_string());
+        let target_server: CoreDataServer = server.unwrap_or(self.server).into();
 
         future_into_py(py, async move {
-            let client = HistoricalClient::new(&auth_token, DataServer::Data);
+            let client = HistoricalClient::new(&auth_token, target_server);
             let config = BatchConfig {
                 max_concurrency,
                 per_symbol_timeout: Duration::from_secs(30),
@@ -280,19 +329,20 @@ impl TradingViewClient {
     }
 
     /// Subscribe to live market quote streams asynchronously.
-    #[pyo3(signature = (symbols, callback = None))]
+    #[pyo3(signature = (symbols, callback = None, *, server = None))]
     pub fn subscribe_quotes<'py>(
         &self,
         py: Python<'py>,
         symbols: Vec<String>,
         callback: Option<PyObject>,
+        server: Option<DataServer>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let auth_token = self
             .auth_token
             .read()
             .clone()
             .unwrap_or_else(|| "unauthorized_user_token".to_string());
-
+        let target_server: CoreDataServer = server.unwrap_or(self.server).into();
         let dispatcher = CallbackDispatcher::new();
         if let Some(cb) = callback {
             dispatcher.add_callback(py, cb)?;
@@ -309,7 +359,7 @@ impl TradingViewClient {
 
             let ws = WebSocketClient::builder()
                 .auth_token(&auth_token)
-                .server(DataServer::Data)
+                .server(target_server)
                 .handler(handler)
                 .build()
                 .await
@@ -340,20 +390,21 @@ impl TradingViewClient {
     }
 
     /// Subscribe to live candle/bar progress updates.
-    #[pyo3(signature = (symbols, interval = Interval::OneMinute, callback = None))]
+    #[pyo3(signature = (symbols, interval = Interval::OneMinute, callback = None, *, server = None))]
     pub fn subscribe_bars<'py>(
         &self,
         py: Python<'py>,
         symbols: Vec<String>,
         interval: Interval,
         callback: Option<PyObject>,
+        server: Option<DataServer>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let auth_token = self
             .auth_token
             .read()
             .clone()
             .unwrap_or_else(|| "unauthorized_user_token".to_string());
-
+        let target_server: CoreDataServer = server.unwrap_or(self.server).into();
         let dispatcher = CallbackDispatcher::new();
         if let Some(cb) = callback {
             dispatcher.add_callback(py, cb)?;
@@ -373,7 +424,7 @@ impl TradingViewClient {
 
             let ws = WebSocketClient::builder()
                 .auth_token(&auth_token)
-                .server(DataServer::Data)
+                .server(target_server)
                 .handler(handler)
                 .build()
                 .await
@@ -434,7 +485,7 @@ impl TradingViewClient {
     ///
     /// If `as_dataframe=True`, returns a Polars DataFrame directly.
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (symbol, exchange, fund_id, period = FinancialPeriod::FiscalYear, n_bars = 20, as_dataframe = false))]
+    #[pyo3(signature = (symbol, exchange, fund_id, period = FinancialPeriod::FiscalYear, n_bars = 20, as_dataframe = false, *, server = None))]
     pub fn get_fundamental<'py>(
         &self,
         py: Python<'py>,
@@ -444,13 +495,14 @@ impl TradingViewClient {
         period: FinancialPeriod,
         n_bars: u64,
         as_dataframe: bool,
+        server: Option<DataServer>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let auth_token = self
             .auth_token
             .read()
             .clone()
             .unwrap_or_else(|| "unauthorized_user_token".to_string());
-
+        let target_server: CoreDataServer = server.unwrap_or(self.server).into();
         future_into_py(py, async move {
             let registry = tradingview::fundamental::fetch_fundamental_registry()
                 .await
@@ -466,7 +518,7 @@ impl TradingViewClient {
                 tradingview::models::Interval::OneDay,
                 n_bars,
                 Some(&auth_token),
-                DataServer::Data,
+                target_server,
             )
             .await
             .map_err(to_py_err)?;

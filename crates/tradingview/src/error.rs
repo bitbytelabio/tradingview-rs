@@ -9,7 +9,7 @@ use ustr::Ustr;
 ///
 /// # Conversion
 ///
-/// Common external errors (`reqwest::Error`, `serde_json::Error`, `chrono::ParseError`,
+/// Common external errors (`wreq::Error`, `serde_json::Error`, `chrono::ParseError`,
 /// etc.) convert automatically via `From` impls.
 #[derive(Debug, Clone, Error, Copy, Serialize, Deserialize)]
 pub enum Error {
@@ -93,10 +93,13 @@ pub enum Error {
 }
 
 // Implement From traits for common error types
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
+impl From<wreq::Error> for Error {
+    fn from(err: wreq::Error) -> Self {
+        if err.is_timeout() {
+            return Error::Timeout(err.to_string().into());
+        }
         if let Some(status) = err.status()
-            && status == reqwest::StatusCode::TOO_MANY_REQUESTS
+            && status == wreq::StatusCode::TOO_MANY_REQUESTS
         {
             return Error::RateLimited(err.to_string().into());
         }
@@ -116,8 +119,8 @@ impl From<std::num::ParseIntError> for Error {
     }
 }
 
-impl From<reqwest::header::InvalidHeaderValue> for Error {
-    fn from(err: reqwest::header::InvalidHeaderValue) -> Self {
+impl From<wreq::header::InvalidHeaderValue> for Error {
+    fn from(err: wreq::header::InvalidHeaderValue) -> Self {
         Error::HeaderValue(err.to_string().into())
     }
 }
@@ -249,4 +252,6 @@ pub enum LoginError {
     ParseAuthTokenError,
     #[error("Missing auth token")]
     MissingAuthToken,
+    #[error("Captcha verification required")]
+    CaptchaRequired,
 }

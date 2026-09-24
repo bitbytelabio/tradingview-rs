@@ -33,6 +33,9 @@ pub fn to_py_err(err: Error) -> PyErr {
             LoginError::EmptyCredentials | LoginError::InvalidCredentials => {
                 AuthenticationError::new_err("Invalid credentials")
             }
+            LoginError::CaptchaRequired => {
+                AuthenticationError::new_err("TradingView requires CAPTCHA verification")
+            }
             LoginError::OTPSecretNotFound | LoginError::InvalidOTPSecret => {
                 AuthenticationError::new_err("Invalid or missing OTP secret")
             }

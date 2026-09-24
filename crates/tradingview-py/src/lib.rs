@@ -17,6 +17,7 @@ fn _tradingview(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<models::enums::Interval>()?;
     m.add_class::<models::enums::FinancialPeriod>()?;
     m.add_class::<models::enums::EconomicImportance>()?;
+    m.add_class::<models::enums::DataServer>()?;
 
     // Register historical models
     m.add_class::<models::bar::Bar>()?;

@@ -99,7 +99,7 @@ graph LR
 - [x] **Historical Market Data**: Single-symbol and concurrent multi-symbol batch fetching with configurable concurrency limits and per-symbol timeouts.
 - [x] **Corporate Fundamentals**: Date-versioned fundamental Pine study catalog (`tradingview::fundamental`) querying annual, quarterly, and TTM balance sheet, income, and cash flow metrics.
 - [x] **Economic Calendar**: Global macroeconomic event queries filtered by ISO 3166-1 country codes, timestamps, and importance levels.
-- [x] **Credential & Token Authentication**: Support for both session auth tokens and full credential login with optional TOTP 2FA.
+- [x] **Credential & Token Authentication**: Support for session auth tokens, full credential login with optional TOTP 2FA, and cookie-authenticated TradingView session token retrieval (`get_tradingview_token`).
 
 ---
 
@@ -119,7 +119,7 @@ To enable direct Polars and Pandas DataFrame conversion:
 pip install "tradingview-rs[polars,pandas]"
 ```
 
-To build and install locally from source:
+To build and install locally from source (requires CMake, Clang or GCC, and Perl to build native `wreq` / BoringSSL dependencies):
 
 ```bash
 cd crates/tradingview-py
@@ -133,17 +133,18 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tradingview-rs = "0.3"
+tradingview-rs = "0.4"
 ```
 
 #### Feature Flags
 
 | Feature | Default | Description |
 | :--- | :---: | :--- |
-| `rustls-tls` | ✅ | Pure-Rust TLS backed by `rustls` (recommended) |
-| `native-tls` | — | Platform-native TLS via OpenSSL / SChannel / Security Framework |
-| `user` | ✅ | User authentication support (login, TOTP 2FA, session cookies) |
+| `rustls-tls` | ✅ | Pure-Rust TLS backed by `rustls` (WebSocket transport only) |
+| `native-tls` | — | Platform-native TLS via OpenSSL / SChannel / Security Framework (WebSocket transport only) |
+| `user` | ✅ | User authentication support (login, TOTP 2FA, session cookies via `wreq`) |
 
+*Note*: All HTTP endpoints use `wreq` with BoringSSL. The `rustls-tls` and `native-tls` flags configure WebSocket transport only.
 ---
 
 ## Python Quick Start
@@ -248,6 +249,46 @@ async def main():
     print("Upcoming US Macroeconomic Releases:")
     print(events_df.select(["date", "country", "title", "indicator", "actual", "forecast"]))
 
+    await client.close()
+
+asyncio.run(main())
+```
+
+### 4. ProData Server Endpoint & Entitlements
+
+```python
+import asyncio
+import os
+from dotenv import load_dotenv
+from tradingview import TradingViewClient, DataServer, Interval
+
+# Entitlements Notice:
+# Anonymous connection to DataServer.ProData is supported for public market data.
+# However, accessing paid market data feeds requires account and feed entitlements;
+# changing the server endpoint to ProData does not grant paid access or bypass paywalled feeds.
+# Loading .env or environment variables is an application responsibility (e.g. via python-dotenv).
+# Token types are not equivalent: token-only clients cannot call get_tradingview_token.
+# Cookie authentication uses session cookies via wreq; no CAPTCHA bypass is claimed.
+# totp_secret supports either standard RFC 6238 Base32 or full otpauth:// URI (e.g. from Bitwarden).
+
+async def main():
+    username = os.getenv("TV_USERNAME")
+    password = os.getenv("TV_PASSWORD")
+    if username and password:
+        # 1. Login with credentials to establish authenticated session cookies
+        login_client = await TradingViewClient.login(username=username, password=password)
+        # 2. Retrieve TradingView session token using session cookies
+        token = await login_client.get_tradingview_token()
+        await login_client.close()
+    else:
+        # Fall back to pre-configured auth token if available
+        token = os.getenv("TV_AUTH_TOKEN")
+
+    # 3. Instantiate client with token and ProData endpoint
+    client = TradingViewClient(auth_token=token, server=DataServer.ProData)
+
+    df = await client.get_historical("AAPL", "NASDAQ", Interval.OneDay, n_bars=100, as_dataframe=True)
+    print(f"Retrieved {df.height} bars from ProData")
     await client.close()
 
 asyncio.run(main())

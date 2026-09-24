@@ -753,15 +753,10 @@ impl<T: Handler> CommandRunner<T> {
 
     #[instrument(skip(self))]
     async fn initialize_connection(&mut self) -> Result<()> {
-        // Start the WebSocket reader task
+        // Start the WebSocket reader task.
+        // Initial authentication is centralized in WebSocketClient::new before the client
+        // is returned to callers; CommandRunner does not send a duplicate initial auth frame.
         self.start_reader_task();
-
-        // Send initial authentication if we have a token
-        let auth_token = *self.ws.auth_token.read().await;
-        if auth_token != "unauthorized_user_token" {
-            info!("Sending initial authentication token");
-            self.ws.set_auth_token(&auth_token).await?;
-        }
 
         self.state.mark_successful_operation();
         Ok(())

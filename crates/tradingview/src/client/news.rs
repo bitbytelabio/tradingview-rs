@@ -125,13 +125,11 @@ async fn test_list_news() -> Result<()> {
 
 #[tokio::test]
 async fn test_fetch_news() -> Result<()> {
-    let _ = fetch_news("tag:reuters.com,2024:newsml_L4N3E9476:0").await?;
-
     let res = list_news().section(NewsSection::AnalysisAll).call().await?;
 
-    for item in res.items[0..2].iter() {
+    for item in res.items.iter().take(2) {
         let content = item.get_content().await?;
-        println!("{content:#?}");
+        assert!(!content.title.is_empty());
     }
 
     Ok(())

@@ -52,9 +52,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_quote_token() {
+    async fn test_get_tradingview_token() {
         let cookies = UserCookies::new();
-        let token = get_quote_token(&cookies).await;
+        let token = get_tradingview_token(&cookies).await;
         // Must return error cause we are not logged in
         assert!(token.is_err());
     }

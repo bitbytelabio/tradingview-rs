@@ -10,13 +10,13 @@ use crate::{
     utils::http_client,
 };
 use bon::builder;
-use reqwest::{Response, header::COOKIE};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::{sync::Semaphore, task::JoinHandle};
 use tracing::debug;
 use urlencoding::encode;
 use ustr::Ustr;
+use wreq::{Response, header::COOKIE};
 
 static SEARCH_BASE_URL: &str = "https://symbol-search.tradingview.com/symbol_search/v3/";
 static DEFAULT_LANGUAGE: &str = "en";
@@ -365,11 +365,23 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
 ///
 /// A `Result` containing a `String` with the quote token if successful, or an error if the request fails.
 #[tracing::instrument(skip(client))]
-pub async fn get_quote_token(client: &UserCookies) -> Result<String> {
-    let data: String = get(Some(client), "https://www.tradingview.com/quote_token")
-        .await?
-        .json()
-        .await?;
+pub async fn get_tradingview_token(client: &UserCookies) -> Result<String> {
+    let response = get(Some(client), "https://www.tradingview.com/quote_token").await?;
+    let status = response.status();
+    if status == wreq::StatusCode::TOO_MANY_REQUESTS {
+        return Err(Error::RateLimited(
+            "HTTP 429 Too Many Requests: /quote_token".into(),
+        ));
+    }
+    if !status.is_success() {
+        return Err(Error::Request(
+            format!("HTTP request failed with status {status}: /quote_token").into(),
+        ));
+    }
+    let data: String = response.json().await?;
+    if data.trim().is_empty() {
+        return Err(Error::NoChartTokenFound);
+    }
     Ok(data)
 }
 

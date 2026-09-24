@@ -262,3 +262,73 @@ impl From<tradingview::client::fin_calendar::EconomicImportance> for EconomicImp
         }
     }
 }
+
+/// TradingView WebSocket data server endpoint.
+#[pyclass(eq, eq_int, from_py_object)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum DataServer {
+    #[default]
+    Data,
+    ProData,
+    WidgetData,
+    MobileData,
+}
+
+#[pymethods]
+impl DataServer {
+    #[getter]
+    pub fn value(&self) -> &'static str {
+        self.as_str()
+    }
+
+    #[getter]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Data => "Data",
+            Self::ProData => "ProData",
+            Self::WidgetData => "WidgetData",
+            Self::MobileData => "MobileData",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<DataServer.{}: '{}'>", self.name(), self.value())
+    }
+
+    fn __str__(&self) -> &'static str {
+        self.as_str()
+    }
+}
+
+impl DataServer {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Data => "data",
+            Self::ProData => "prodata",
+            Self::WidgetData => "widgetdata",
+            Self::MobileData => "mobile-data",
+        }
+    }
+}
+
+impl From<DataServer> for tradingview::live::models::DataServer {
+    fn from(s: DataServer) -> Self {
+        match s {
+            DataServer::Data => tradingview::live::models::DataServer::Data,
+            DataServer::ProData => tradingview::live::models::DataServer::ProData,
+            DataServer::WidgetData => tradingview::live::models::DataServer::WidgetData,
+            DataServer::MobileData => tradingview::live::models::DataServer::MobileData,
+        }
+    }
+}
+
+impl From<tradingview::live::models::DataServer> for DataServer {
+    fn from(s: tradingview::live::models::DataServer) -> Self {
+        match s {
+            tradingview::live::models::DataServer::Data => DataServer::Data,
+            tradingview::live::models::DataServer::ProData => DataServer::ProData,
+            tradingview::live::models::DataServer::WidgetData => DataServer::WidgetData,
+            tradingview::live::models::DataServer::MobileData => DataServer::MobileData,
+        }
+    }
+}
