@@ -3,10 +3,9 @@
 use chrono::NaiveDate;
 use serde::Deserialize;
 use ustr::Ustr;
-use wreq::header::USER_AGENT;
 
 use crate::{
-    Result, UA,
+    Result,
     fundamental::registry::FundamentalRegistry,
     models::{
         FinancialPeriod,
@@ -94,7 +93,6 @@ pub async fn fetch_fundamental_registry_for_date(
 ) -> Result<FundamentalRegistry> {
     let response = client
         .get(PINE_FACADE_FUNDAMENTAL_URL)
-        .header(USER_AGENT, UA)
         .send()
         .await
         .map_err(|e| crate::Error::Request(e.to_string().into()))?;

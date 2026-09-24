@@ -14,7 +14,7 @@ use tokio_tungstenite::{
 use ustr::Ustr;
 
 use crate::{
-    Result, UA,
+    Result,
     error::{Error, TradingViewError},
     utils::format_packet,
 };
@@ -23,7 +23,12 @@ use std::sync::LazyLock;
 pub static WEBSOCKET_HEADERS: LazyLock<HeaderMap<HeaderValue>> = LazyLock::new(|| {
     let mut headers = HeaderMap::new();
     headers.insert("Origin", "https://www.tradingview.com/".parse().unwrap());
-    headers.insert("User-Agent", UA.parse().unwrap());
+    headers.insert(
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:155.0) Gecko/20100101 Firefox/155.0"
+            .parse()
+            .unwrap(),
+    );
     headers
 });
 

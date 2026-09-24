@@ -117,6 +117,7 @@ impl News {
 }
 
 #[tokio::test]
+#[ignore = "requires network access to news-headlines.tradingview.com"]
 async fn test_list_news() -> Result<()> {
     let res = list_news().section(NewsSection::AnalysisAll).call().await?;
     println!("{res:#?}");
@@ -124,6 +125,7 @@ async fn test_list_news() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires network access to news-headlines.tradingview.com"]
 async fn test_fetch_news() -> Result<()> {
     let res = list_news().section(NewsSection::AnalysisAll).call().await?;
 
@@ -136,6 +138,7 @@ async fn test_fetch_news() -> Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires network access to news-headlines.tradingview.com"]
 async fn test_get_source_html() -> Result<()> {
     let res = list_news().section(NewsSection::AnalysisAll).call().await?;
 

@@ -262,15 +262,6 @@ import os
 from dotenv import load_dotenv
 from tradingview import TradingViewClient, DataServer, Interval
 
-# Entitlements Notice:
-# Anonymous connection to DataServer.ProData is supported for public market data.
-# However, accessing paid market data feeds requires account and feed entitlements;
-# changing the server endpoint to ProData does not grant paid access or bypass paywalled feeds.
-# Loading .env or environment variables is an application responsibility (e.g. via python-dotenv).
-# Token types are not equivalent: token-only clients cannot call get_tradingview_token.
-# Cookie authentication uses session cookies via wreq; no CAPTCHA bypass is claimed.
-# totp_secret supports either standard RFC 6238 Base32 or full otpauth:// URI (e.g. from Bitwarden).
-
 async def main():
     username = os.getenv("TV_USERNAME")
     password = os.getenv("TV_PASSWORD")

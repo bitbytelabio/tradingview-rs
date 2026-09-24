@@ -34,9 +34,9 @@ static SHARED_CLIENT: LazyLock<wreq::Client> = LazyLock::new(|| {
     );
 
     let emulation = Emulation::builder()
-        .profile(Profile::Chrome133)
+        .profile(Profile::Chrome149)
         .platform(Platform::MacOS)
-        .http2(false)
+        .http2(true)
         .build();
 
     wreq::Client::builder()
