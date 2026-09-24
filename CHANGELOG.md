@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- Linux OpenSSL/BoringSSL linker collision by enabling `prefix-symbols` on `wreq`.
+## [0.4.2] - 2026-09-24
 
+### Fixed
+- Resolved Linux CI linker collision between OpenSSL (`native-tls`) and BoringSSL (`wreq`/`btls-sys`) by standardizing on `rustls-tls` (`aws-lc-rs`).
+- Resolved response decompression errors on large Pine studies catalog endpoints (`pine-facade`) by adding `gzip` and `brotli` decompression features to `reqwest`.
+- Handled non-JSON authentication responses (e.g. Cloudflare / CAPTCHA challenge pages) safely in `UserCookies::login`, mapping them cleanly to `AuthenticationError`.
+- Cleaned up obsolete static `UA` string from `src/lib.rs` and `fundamental/fetch.rs`, retaining `User-Agent` explicitly inside `WEBSOCKET_HEADERS` for WebSocket connections.
+- Marked external live network news tests as `#[ignore]` matching existing `fin_calendar` conventions.
+
+### Changed
+- Isolated `wreq` and `wreq-util` as optional dependencies dedicated strictly to `feature = "user"` for authenticated flows (`login`, 2FA, `get_tradingview_token`).
+- Restored `reqwest` for all unauthenticated/public HTTP REST queries.
 ## [0.4.1] - 2026-09-24
 
 ### Added
