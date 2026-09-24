@@ -8,9 +8,9 @@ use wreq_util::{Emulation, Platform, Profile};
 
 static USER_CLIENT: LazyLock<wreq::Client> = LazyLock::new(|| {
     let emulation = Emulation::builder()
-        .profile(Profile::Chrome133)
+        .profile(Profile::Chrome149)
         .platform(Platform::MacOS)
-        .http2(false)
+        .http2(true)
         .build();
 
     wreq::Client::builder()
@@ -43,6 +43,8 @@ impl UserCookies {
         let client = user_http_client();
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
+            .header(wreq::header::ORIGIN, "https://www.tradingview.com")
+            .header(wreq::header::REFERER, "https://www.tradingview.com/")
             .form(&[
                 ("username", username),
                 ("password", password),
@@ -79,6 +81,9 @@ impl UserCookies {
         };
 
         if is_recaptcha_required(&body) {
+            let err_val = body.get("error").cloned().unwrap_or_default();
+            let code_val = body.get("code").cloned().unwrap_or_default();
+            error!(error = %err_val, code = %code_val, "TradingView signin required captcha");
             return Err(Error::Login {
                 source: LoginError::CaptchaRequired,
             });
@@ -181,6 +186,8 @@ impl UserCookies {
         let response = user_http_client()
             .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
             .header(COOKIE, &cookie)
+            .header(wreq::header::ORIGIN, "https://www.tradingview.com")
+            .header(wreq::header::REFERER, "https://www.tradingview.com/")
             .form(&[("code", code.as_str())])
             .send()
             .await?;
@@ -202,6 +209,8 @@ pub async fn fetch_tradingview_token(client: &UserCookies) -> Result<String> {
     let resp = user_http_client()
         .get("https://www.tradingview.com/quote_token")
         .header(COOKIE, &cookie)
+        .header(wreq::header::ORIGIN, "https://www.tradingview.com")
+        .header(wreq::header::REFERER, "https://www.tradingview.com/")
         .send()
         .await?;
     let status = resp.status();
