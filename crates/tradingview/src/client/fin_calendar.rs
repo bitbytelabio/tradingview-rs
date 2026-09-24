@@ -315,9 +315,9 @@ pub async fn get_economic_calendar(
     get_economic_calendar_with_client(&client, request.borrow()).await
 }
 
-/// Fetches economic calendar events using the specified [`wreq::Client`].
+/// Fetches economic calendar events using the specified [`reqwest::Client`].
 pub async fn get_economic_calendar_with_client(
-    client: &wreq::Client,
+    client: &reqwest::Client,
     request: &EconomicCalendarRequest,
 ) -> Result<Vec<EconomicCalendarEvent>> {
     let query_params = build_query_params(request)?;
@@ -334,7 +334,7 @@ pub async fn get_economic_calendar_with_client(
         })?;
 
     let status = response.status();
-    if status == wreq::StatusCode::TOO_MANY_REQUESTS {
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Err(Error::RateLimited(Ustr::from(
             "economic calendar rate limited (HTTP 429)",
         )));
@@ -377,16 +377,9 @@ pub async fn get_economic_calendar_with_client(
 }
 
 /// Client for TradingView's Economic Calendar REST API.
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct EconomicCalendarClient {
-    client: wreq::Client,
-}
-
-impl std::fmt::Debug for EconomicCalendarClient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("EconomicCalendarClient")
-            .finish_non_exhaustive()
-    }
+    client: reqwest::Client,
 }
 
 impl EconomicCalendarClient {
@@ -397,8 +390,8 @@ impl EconomicCalendarClient {
         }
     }
 
-    /// Creates a new client with a custom [`wreq::Client`].
-    pub fn with_client(client: wreq::Client) -> Self {
+    /// Creates a new client with a custom [`reqwest::Client`].
+    pub fn with_client(client: reqwest::Client) -> Self {
         Self { client }
     }
 
@@ -458,12 +451,12 @@ mod tests {
             ]
         );
 
-        let url = wreq::Client::new()
+        let url = reqwest::Client::new()
             .get(ECONOMIC_CALENDAR_URL)
             .query(&params)
             .build()
             .unwrap()
-            .uri()
+            .url()
             .to_string();
 
         assert!(url.contains("from=2025-01-01T00%3A00%3A00.000Z"));

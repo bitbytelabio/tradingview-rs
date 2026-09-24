@@ -80,7 +80,7 @@ pub async fn fetch_fundamental_registry() -> Result<FundamentalRegistry> {
 
 /// Fetches the fundamental Pine study list using the provided HTTP client.
 pub async fn fetch_fundamental_registry_with_client(
-    client: wreq::Client,
+    client: reqwest::Client,
 ) -> Result<FundamentalRegistry> {
     let date = chrono::Utc::now().date_naive();
     fetch_fundamental_registry_for_date(client, date).await
@@ -88,7 +88,7 @@ pub async fn fetch_fundamental_registry_with_client(
 
 /// Fetches the fundamental Pine study list for a specific UTC date tag.
 pub async fn fetch_fundamental_registry_for_date(
-    client: wreq::Client,
+    client: reqwest::Client,
     date: NaiveDate,
 ) -> Result<FundamentalRegistry> {
     let response = client
@@ -98,7 +98,7 @@ pub async fn fetch_fundamental_registry_for_date(
         .map_err(|e| crate::Error::Request(e.to_string().into()))?;
 
     let status = response.status();
-    if status == wreq::StatusCode::TOO_MANY_REQUESTS {
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Err(crate::Error::RateLimited(
             "failed to fetch fundamental studies: HTTP 429 Too Many Requests".into(),
         ));

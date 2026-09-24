@@ -2,8 +2,27 @@ pub use crate::models::UserCookies;
 use crate::{
     Result,
     error::{Error, LoginError},
-    utils::http_client,
 };
+use std::sync::LazyLock;
+use wreq_util::{Emulation, Platform, Profile};
+
+static USER_CLIENT: LazyLock<wreq::Client> = LazyLock::new(|| {
+    let emulation = Emulation::builder()
+        .profile(Profile::Chrome133)
+        .platform(Platform::MacOS)
+        .http2(false)
+        .build();
+
+    wreq::Client::builder()
+        .emulation(emulation)
+        .https_only(true)
+        .build()
+        .expect("Failed to build user HTTP client")
+});
+
+pub(crate) fn user_http_client() -> &'static wreq::Client {
+    &USER_CLIENT
+}
 use serde::Deserialize;
 use serde_json::Value;
 use totp_rs::{Builder, Secret, Totp, TotpError};
@@ -21,7 +40,7 @@ impl UserCookies {
         password: &str,
         totp_secret: Option<&str>,
     ) -> Result<Self> {
-        let client = http_client();
+        let client = user_http_client();
         let response = client
             .post("https://www.tradingview.com/accounts/signin/")
             .form(&[
@@ -50,7 +69,14 @@ impl UserCookies {
             user: UserCookies,
         }
 
-        let body: Value = response.json().await?;
+        let body: Value = match response.json().await {
+            Ok(val) => val,
+            Err(_) => {
+                return Err(Error::Login {
+                    source: LoginError::InvalidCredentials,
+                });
+            }
+        };
 
         if is_recaptcha_required(&body) {
             return Err(Error::Login {
@@ -109,7 +135,14 @@ impl UserCookies {
             let final_signature = mfa_signature.or(signature).unwrap_or_default();
             let final_device_token = mfa_device_token.or(device_token).unwrap_or_default();
 
-            let mfa_body: Value = mfa_response.json().await?;
+            let mfa_body: Value = match mfa_response.json().await {
+                Ok(val) => val,
+                Err(_) => {
+                    return Err(Error::Login {
+                        source: LoginError::InvalidOTPSecret,
+                    });
+                }
+            };
             let login_resp: LoginUserResponse = serde_json::from_value(mfa_body)?;
 
             info!("2FA authentication completed");
@@ -145,7 +178,7 @@ impl UserCookies {
         })?;
 
         let cookie = format!("sessionid={session}; sessionid_sign={signature};");
-        let response = http_client()
+        let response = user_http_client()
             .post("https://www.tradingview.com/accounts/two-factor/signin/totp/")
             .header(COOKIE, &cookie)
             .form(&[("code", code.as_str())])
@@ -160,6 +193,33 @@ impl UserCookies {
             })
         }
     }
+}
+pub async fn fetch_tradingview_token(client: &UserCookies) -> Result<String> {
+    let cookie = format!(
+        "sessionid={}; sessionid_sign={}; device_t={};",
+        client.session, client.session_signature, client.device_token
+    );
+    let resp = user_http_client()
+        .get("https://www.tradingview.com/quote_token")
+        .header(COOKIE, &cookie)
+        .send()
+        .await?;
+    let status = resp.status();
+    if status == wreq::StatusCode::TOO_MANY_REQUESTS {
+        return Err(Error::RateLimited(
+            "HTTP 429 Too Many Requests: /quote_token".into(),
+        ));
+    }
+    if !status.is_success() {
+        return Err(Error::Request(
+            format!("HTTP request failed with status {status}: /quote_token").into(),
+        ));
+    }
+    let data: String = resp.json().await?;
+    if data.trim().is_empty() {
+        return Err(Error::NoChartTokenFound);
+    }
+    Ok(data)
 }
 pub(crate) fn is_recaptcha_required(body: &Value) -> bool {
     let code_match = body

@@ -93,6 +93,21 @@ pub enum Error {
 }
 
 // Implement From traits for common error types
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        if err.is_timeout() {
+            return Error::Timeout(err.to_string().into());
+        }
+        if let Some(status) = err.status()
+            && status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        {
+            return Error::RateLimited(err.to_string().into());
+        }
+        Error::Request(err.to_string().into())
+    }
+}
+
+#[cfg(feature = "user")]
 impl From<wreq::Error> for Error {
     fn from(err: wreq::Error) -> Self {
         if err.is_timeout() {
@@ -119,8 +134,8 @@ impl From<std::num::ParseIntError> for Error {
     }
 }
 
-impl From<wreq::header::InvalidHeaderValue> for Error {
-    fn from(err: wreq::header::InvalidHeaderValue) -> Self {
+impl From<reqwest::header::InvalidHeaderValue> for Error {
+    fn from(err: reqwest::header::InvalidHeaderValue) -> Self {
         Error::HeaderValue(err.to_string().into())
     }
 }
