@@ -1,7 +1,7 @@
 [package]
 name = "tradingview-rs"
 authors = ["Nguyen Thanh Dat <dat.nguyen@bitbytelab.io>"]
-version = "0.4.2"
+version = "0.4.3"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/bitbytelabio/tradingview-rs"
@@ -35,7 +35,7 @@ wreq-util = { version = "=3.0.0-rc.14", features = ["emulation"], optional = tru
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "time"] }
 tokio-tungstenite = { version = "0.30", features = ["url"] }
 tokio-util = { version = "0.7", features = ["futures-util", "tracing"] }
 tracing = "0.1"

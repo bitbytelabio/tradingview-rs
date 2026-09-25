@@ -355,15 +355,19 @@ pub async fn get_chart_token(client: &UserCookies, layout_id: &str) -> Result<St
     }
 }
 
-/// Retrieves the quote token from TradingView.
+/// Retrieves a TradingView WebSocket auth token from TradingView's `/quote_token/` endpoint.
+///
+/// # Prerequisites
+///
+/// Requires a valid authenticated cookie session (`UserCookies` with non-empty `session` and `session_signature`).
 ///
 /// # Arguments
 ///
-/// * `client` - A reference to a `UserCookies` struct containing the user's cookies.
+/// * `client` - A reference to a `UserCookies` struct containing authenticated session cookies.
 ///
 /// # Returns
 ///
-/// A `Result` containing a `String` with the quote token if successful, or an error if the request fails.
+/// A `Result` containing a `String` with the TradingView WebSocket auth token if successful, or an error if the request fails.
 #[cfg(feature = "user")]
 #[tracing::instrument(skip(client))]
 pub async fn get_tradingview_token(client: &UserCookies) -> Result<String> {

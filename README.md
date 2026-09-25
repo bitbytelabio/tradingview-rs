@@ -1,4 +1,4 @@
-# TradingView Data Provider (`tradingview-rs` & `tradingview-py`)
+# TradingView Data Provider
 
 ![CI](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/bitbytelabio/tradingview-rs/actions/workflows/publish.yml/badge.svg)
@@ -7,7 +7,7 @@
 [![Documentation](https://docs.rs/tradingview-rs/badge.svg)](https://docs.rs/tradingview-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A high-performance, asynchronous TradingView data provider written in Rust (`tradingview-rs`) with first-class Python bindings (`tradingview-py` via PyO3 0.29). Inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API), this project delivers institutional-grade market data streaming, historical OHLCV series, corporate fundamental metrics, and global economic calendar events with direct [Polars](https://pola.rs) DataFrame support.
+A high-performance, asynchronous TradingView data provider written in Rust with first-class Python bindings. Inspired by [TradingView-API](https://github.com/Mathieu2301/TradingView-API), this project delivers institutional-grade market data streaming, historical OHLCV series, corporate fundamental metrics, and global economic calendar events with direct [Polars](https://pola.rs) DataFrame support.
 
 ---
 
@@ -99,7 +99,7 @@ graph LR
 - [x] **Historical Market Data**: Single-symbol and concurrent multi-symbol batch fetching with configurable concurrency limits and per-symbol timeouts.
 - [x] **Corporate Fundamentals**: Date-versioned fundamental Pine study catalog (`tradingview::fundamental`) querying annual, quarterly, and TTM balance sheet, income, and cash flow metrics.
 - [x] **Economic Calendar**: Global macroeconomic event queries filtered by ISO 3166-1 country codes, timestamps, and importance levels.
-- [x] **Credential & Token Authentication**: Support for session auth tokens, full credential login with optional TOTP 2FA, and cookie-authenticated TradingView session token retrieval (`get_tradingview_token`).
+- [x] **Credential & Token Authentication**: Support for session auth tokens, full credential login with optional TOTP 2FA, opt-in reCAPTCHA v2 solving via 2Captcha, and cookie-authenticated TradingView session token retrieval (`get_tradingview_token`).
 
 ---
 
@@ -142,9 +142,9 @@ tradingview-rs = "0.4"
 | :--- | :---: | :--- |
 | `rustls-tls` | ✅ | Pure-Rust TLS backed by `rustls` (WebSocket transport only) |
 | `native-tls` | — | Platform-native TLS via OpenSSL / SChannel / Security Framework (WebSocket transport only) |
-| `user` | ✅ | User authentication support (login, TOTP 2FA, session cookies via `wreq`) |
+| `user` | ✅ | User authentication support (login, TOTP 2FA, opt-in 2Captcha solver, session cookies via `wreq`) |
 
-*Note*: All HTTP endpoints use `wreq` with BoringSSL. The `rustls-tls` and `native-tls` flags configure WebSocket transport only.
+*Note*: Public REST queries use `reqwest`, while authenticated user workflows use `wreq` with browser emulation. The `rustls-tls` and `native-tls` flags configure WebSocket transport only.
 ---
 
 ## Python Quick Start

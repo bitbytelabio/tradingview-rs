@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-25
+
+### Added
+- Added explicit opt-in reCAPTCHA v2 solving support via `UserCookies::login_with_captcha` using 2Captcha (`RecaptchaV2TaskProxyless` on sitekey `6Lcqv24UAAAAAIvkElDvwPxD0R8scDnMpizaBcHQ` with `g-recaptcha-response-v2` field).
+- Added single-retry and spending controls for CAPTCHA solving: dispatches at most one paid `createTask` upon receiving a `recaptcha_required` challenge, bounded by a 120-second deadline (5-second polling) and 30-second per-request timeouts.
+- Added automated single feedback reporting via 2Captcha `reportIncorrect` when a solved token is explicitly rejected by TradingView on retry (subject to provider review; not a guaranteed refund).
+- Added optional `TWO_CAPTCHA_API_KEY` configuration in `crates/tradingview/examples/user.rs` and `.env.example`.
+
+### Changed
+- Reorganized `crates/tradingview/src/user.rs` into `crates/tradingview/src/user/mod.rs` and private solver module `crates/tradingview/src/user/captcha.rs`.
+- Preserved standard `UserCookies::login` contract unchanged without third-party solver calls or automated bypass loops.
+- Retained all challenge cookies across solver retry within RFC-scoped per-login cookie jar.
+- Stopped solver dispatch on invalid credentials, 2FA failures, HTTP 429 or HTTP 200 `rate_limit` responses, and server errors to prevent unnecessary API spend.
+
+### Fixed
+- Fixed authentication error handling to properly detect and map empty credentials (`LoginError::EmptyCredentials`), missing session cookies (`LoginError::SessionNotFound`), and invalid sessions (`LoginError::InvalidSession`).
+- Fixed TOTP 2FA parsing to support both standard RFC 6238 Base32 secrets and `otpauth://totp/...` URIs.
+- Supported whitespace-grouped raw Base32 TOTP secrets (e.g., authenticator vault exports with space separators) by conditionally stripping internal ASCII whitespace while rejecting non-whitespace punctuation.
+- Fixed Cloudflare and reCAPTCHA challenge response handling during login without attempting automated bypass or looping.
+- Fixed WebSocket auth token retrieval (`get_tradingview_token`) to use canonical `/quote_token/` endpoint with strict JSON string deserialization and accurate cookie headers (`sessionid`, `sessionid_sign`, `device_t`).
+- Hardened `examples/user.rs` by making `TV_TOTP_SECRET` optional, eliminating credentials/secrets logging, and saving user cookies to `tv_user_cookies.json` with `create_new(true)` and Unix permissions `0o600` refusing file overwrites.
 ## [0.4.2] - 2026-09-24
 
 ### Fixed

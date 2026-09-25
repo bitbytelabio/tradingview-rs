@@ -8,7 +8,7 @@ The `tradingview` Python library provides native, high-performance bindings to `
 
 - **Tokio-to-AsyncIO Bridge**: Operations execute asynchronously on a background Tokio runtime via `pyo3-async-runtimes`. All client methods return standard Python `asyncio` awaitables/coroutines.
 - **Global Interpreter Lock (GIL) Release**: All network I/O, batch tasks, and JSON/WebSocket deserialization release the Python GIL, allowing true multicore parallelism.
-- **HTTP & WebSocket Transports**: All HTTP communication (login, cookies, quote/chart tokens, economic calendar) is powered by `wreq` and `wreq-util` with BoringSSL. WebSocket streaming connects via Tokio tungstenite; Cargo feature flags (`rustls-tls`, `native-tls`) apply to WebSocket transport only.
+- **HTTP & WebSocket Transports**: Authenticated user flows (`login`, 2FA TOTP verification, and session token retrieval via `get_tradingview_token`) use `wreq` and `wreq-util` with browser emulation and BoringSSL under the `user` feature. All public and unauthenticated HTTP REST requests (e.g. quote search, chart tokens, economic calendar, Pine catalog) use `reqwest`. WebSocket streaming connects via Tokio tungstenite; the Cargo `rustls-tls` feature applies to `reqwest` and WebSocket transport.
 - **Native Toolchain Requirement**: Building the native library from source requires CMake, Clang (or GCC), and Perl to compile BoringSSL. Pre-built wheels are not guaranteed across all environments.
 - **Callback Dispatching & Trampoline**: Callbacks registered on subscriptions are invoked on the Python event loop thread via `loop.call_soon_threadsafe` with exception isolation (`sys.unraisablehook`). Unhandled callback exceptions do not crash the stream.
 
@@ -90,7 +90,7 @@ Retrieves a TradingView session token using authenticated session cookies (`sess
 
 - **Prerequisites**: The client must have established an authenticated cookie session via `TradingViewClient.login()` or `client.authenticate()`.
 - **Rejection**: Anonymous clients or token-only clients initialized via `TradingViewClient(auth_token=...)` will immediately raise `AuthenticationError` before executing any network request. A supplied auth/websocket token is not a cookie session.
-- **Token Disparity & Transport**: Token types are not equivalent; layout-sharing JWTs or standalone auth tokens do not grant cookie-authenticated HTTP session access. All HTTP requests (including login and cookie authentication) use `wreq` backed by BoringSSL; Cargo TLS flags (`native-tls`, `rustls-tls`) apply to WebSocket transport only. No claim of CAPTCHA bypass is made.
+- **Token Disparity & Transport**: Token types are not equivalent; layout-sharing JWTs or standalone auth tokens do not grant cookie-authenticated HTTP session access. Authenticated cookie flows use `wreq` backed by BoringSSL, while public HTTP requests use `reqwest`; the Cargo `rustls-tls` feature applies to `reqwest` and WebSocket transport. No claim of CAPTCHA bypass is made.
 - **Token Usage**: Returns the retrieved token string without mutating the current client's `auth_token`. The token can then be passed to instantiate a client targeting `DataServer.ProData`.
 
 #### Example: Login, Retrieve Token, and Connect to ProData
