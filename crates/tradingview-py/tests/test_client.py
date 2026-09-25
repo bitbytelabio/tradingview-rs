@@ -9,7 +9,7 @@ from tradingview import (
     Interval,
     TradingViewClient,
 )
-from tradingview.exceptions import AuthenticationError
+from tradingview.exceptions import AuthenticationError, ConnectionError
 
 
 def test_client_init_with_token() -> None:
@@ -42,6 +42,29 @@ async def test_client_authenticate_instance() -> None:
         await client.authenticate(
             username="invalid_test_user_xyz",
             password="wrong_password_123",
+        )
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_client_login_with_blank_captcha_key_rejected() -> None:
+    with pytest.raises(ConnectionError, match="2Captcha API key cannot be empty"):
+        await TradingViewClient.login(
+            username="invalid_test_user_xyz",
+            password="wrong_password_123",
+            captcha_key="   ",
+        )
+
+
+@pytest.mark.asyncio
+async def test_client_authenticate_with_blank_captcha_key_rejected() -> None:
+    client = TradingViewClient()
+    assert client.is_authenticated is False
+    with pytest.raises(ConnectionError, match="2Captcha API key cannot be empty"):
+        await client.authenticate(
+            username="invalid_test_user_xyz",
+            password="wrong_password_123",
+            captcha_key="   ",
         )
     await client.close()
 

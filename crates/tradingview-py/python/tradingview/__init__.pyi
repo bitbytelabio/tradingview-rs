@@ -264,6 +264,7 @@ class TradingViewClient:
         password: str,
         totp_secret: str | None = None,
         *,
+        captcha_key: str | None = None,
         server: DataServer = DataServer.Data,
     ) -> TradingViewClient:
         """Authenticate with TradingView credentials and return an authenticated client.
@@ -273,13 +274,15 @@ class TradingViewClient:
             password: Account password.
             totp_secret: Optional 2FA TOTP secret, accepting either a standard RFC 6238
                 Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
-            server: Default WebSocket data server endpoint (default: DataServer.Data).
+            captcha_key: Optional 2Captcha API key to automatically solve reCAPTCHA challenges.
         """
     async def authenticate(
         self,
         username: str,
         password: str,
         totp_secret: str | None = None,
+        *,
+        captcha_key: str | None = None,
     ) -> None:
         """Authenticate this client instance using TradingView credentials.
 
@@ -288,6 +291,7 @@ class TradingViewClient:
             password: Account password.
             totp_secret: Optional 2FA TOTP secret, accepting either a standard RFC 6238
                 Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
+            captcha_key: Optional 2Captcha API key to automatically solve reCAPTCHA challenges.
         """
     async def get_tradingview_token(self) -> str:
         """Retrieve a TradingView session token using authenticated session cookies.

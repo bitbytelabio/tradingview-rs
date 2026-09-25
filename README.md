@@ -105,7 +105,7 @@ graph LR
 
 ## Installation
 
-### Python (`tradingview`)
+### Python
 
 Install from PyPI:
 
@@ -127,7 +127,7 @@ pip install maturin
 maturin develop --release
 ```
 
-### Rust (`tradingview-rs`)
+### Rust
 
 Add to your `Cargo.toml`:
 
@@ -266,8 +266,12 @@ async def main():
     username = os.getenv("TV_USERNAME")
     password = os.getenv("TV_PASSWORD")
     if username and password:
-        # 1. Login with credentials to establish authenticated session cookies
-        login_client = await TradingViewClient.login(username=username, password=password)
+        # 1. Login with credentials to establish authenticated session cookies (optional 2Captcha key)
+        login_client = await TradingViewClient.login(
+            username=username,
+            password=password,
+            captcha_key=os.getenv("TWO_CAPTCHA_API_KEY"),
+        )
         # 2. Retrieve TradingView session token using session cookies
         token = await login_client.get_tradingview_token()
         await login_client.close()

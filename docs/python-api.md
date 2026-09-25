@@ -65,10 +65,12 @@ The `DataServer` enum provides endpoints for TradingView WebSocket communication
 ```python
 # Asynchronous classmethod login: returns authenticated client
 # totp_secret supports either standard RFC 6238 Base32 or a full otpauth:// URI (e.g. from Bitwarden)
+# captcha_key is an optional 2Captcha API key to automatically solve reCAPTCHA v2 challenges
 client = await TradingViewClient.login(
     username="your_username",
     password="your_password",
     totp_secret="OPTIONAL_2FA_TOTP_SECRET_OR_OTPAUTH_URI",
+    captcha_key="OPTIONAL_2CAPTCHA_API_KEY",
     server=DataServer.ProData,  # Optional keyword argument (default: DataServer.Data)
 )
 
@@ -77,6 +79,7 @@ await client.authenticate(
     username="your_username",
     password="your_password",
     totp_secret="OPTIONAL_2FA_TOTP_SECRET_OR_OTPAUTH_URI",
+    captcha_key="OPTIONAL_2CAPTCHA_API_KEY",
 )
 ```
 

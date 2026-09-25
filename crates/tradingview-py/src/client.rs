@@ -74,21 +74,30 @@ impl TradingViewClient {
     ///
     /// The `totp_secret` parameter supports either a standard RFC 6238 Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
     #[classmethod]
-    #[pyo3(signature = (username, password, totp_secret = None, *, server = DataServer::Data))]
+    #[pyo3(signature = (username, password, totp_secret = None, *, captcha_key = None, server = DataServer::Data))]
     pub fn login<'py>(
         _cls: &Bound<'py, PyType>,
         py: Python<'py>,
         username: String,
         password: String,
         totp_secret: Option<String>,
+        captcha_key: Option<String>,
         server: DataServer,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let effective_captcha_key = captcha_key;
         future_into_py(py, async move {
             let mut cookies = UserCookies::new();
-            let logged_in = cookies
-                .login(&username, &password, totp_secret.as_deref())
-                .await
-                .map_err(to_py_err)?;
+            let logged_in = if let Some(key) = &effective_captcha_key {
+                cookies
+                    .login_with_captcha(&username, &password, totp_secret.as_deref(), key)
+                    .await
+                    .map_err(to_py_err)?
+            } else {
+                cookies
+                    .login(&username, &password, totp_secret.as_deref())
+                    .await
+                    .map_err(to_py_err)?
+            };
 
             let client = TradingViewClient {
                 auth_token: Arc::new(RwLock::new(Some(logged_in.auth_token.clone()))),
@@ -104,24 +113,33 @@ impl TradingViewClient {
     /// Authenticate the existing client instance using credentials.
     ///
     /// The `totp_secret` parameter supports either a standard RFC 6238 Base32 secret or a full `otpauth://totp/...` URI (e.g. from Bitwarden).
-    #[pyo3(signature = (username, password, totp_secret = None))]
+    #[pyo3(signature = (username, password, totp_secret = None, *, captcha_key = None))]
     pub fn authenticate<'py>(
         &self,
         py: Python<'py>,
         username: String,
         password: String,
         totp_secret: Option<String>,
+        captcha_key: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let effective_captcha_key = captcha_key;
         let auth_token_lock = Arc::clone(&self.auth_token);
         let username_lock = Arc::clone(&self.username);
         let user_cookies_lock = Arc::clone(&self.user_cookies);
 
         future_into_py(py, async move {
             let mut cookies = UserCookies::new();
-            let logged_in = cookies
-                .login(&username, &password, totp_secret.as_deref())
-                .await
-                .map_err(to_py_err)?;
+            let logged_in = if let Some(key) = &effective_captcha_key {
+                cookies
+                    .login_with_captcha(&username, &password, totp_secret.as_deref(), key)
+                    .await
+                    .map_err(to_py_err)?
+            } else {
+                cookies
+                    .login(&username, &password, totp_secret.as_deref())
+                    .await
+                    .map_err(to_py_err)?
+            };
 
             let mut tok = auth_token_lock.write();
             *tok = Some(logged_in.auth_token.clone());

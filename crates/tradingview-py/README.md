@@ -170,7 +170,7 @@ from tradingview import TradingViewClient, DataServer, Interval
 # changing the server endpoint to ProData does not grant paid access or bypass paywalled feeds.
 # Loading .env or environment variables is an application responsibility (e.g. via python-dotenv).
 # Token types are not equivalent: token-only clients cannot call get_tradingview_token.
-# Cookie authentication uses session cookies via wreq; no CAPTCHA bypass is claimed.
+# Cookie authentication uses session cookies via wreq; optional 2Captcha solver via captcha_key.
 # totp_secret supports either standard RFC 6238 Base32 or full otpauth:// URI (e.g. from Bitwarden).
 load_dotenv()
 
@@ -181,7 +181,9 @@ async def main():
     if username and password:
         # 1. Login with credentials to establish authenticated session cookies
         login_client = await TradingViewClient.login(
-            username=username, password=password
+            username=username,
+            password=password,
+            captcha_key=os.getenv("TWO_CAPTCHA_API_KEY"),
         )
         # 2. Retrieve TradingView session token using session cookies
         token = await login_client.get_tradingview_token()
