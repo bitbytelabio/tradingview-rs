@@ -59,11 +59,12 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at
-report@bitbytelab.io.
-All complaints will be reviewed and investigated promptly and fairly.
+reported to the community leaders and project maintainers responsible for enforcement at:
 
-All community leaders are obligated to respect the privacy and security of the
+- **Email**: `report@bitbytelab.io` or `dat.nguyen@bitbytelab.io`
+
+All complaints will be reviewed and investigated promptly and fairly. All community
+leaders and maintainers are obligated to respect the privacy and security of the
 reporter of any incident.
 
 ## Enforcement Guidelines

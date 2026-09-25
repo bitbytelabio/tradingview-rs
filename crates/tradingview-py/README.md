@@ -171,7 +171,10 @@ from tradingview import TradingViewClient, DataServer, Interval
 # Loading .env or environment variables is an application responsibility (e.g. via python-dotenv).
 # Token types are not equivalent: token-only clients cannot call get_tradingview_token.
 # Cookie authentication uses session cookies via wreq; optional 2Captcha solver via captcha_key.
-# totp_secret supports either standard RFC 6238 Base32 or full otpauth:// URI (e.g. from Bitwarden).
+# When TradingView challenges with recaptcha_required, 2Captcha solves reCAPTCHA v2 (sitekey 6Lcqv24UAAAAAIvkElDvwPxD0R8scDnMpizaBcHQ).
+# Budget: at most 1 paid task per signin, 120s timeout; never called on wrong password, 2FA, 429, or rate-limit.
+# If the token is rejected by TradingView on retry, reportIncorrect is submitted once for review.
+# totp_secret supports either standard RFC 6238 Base32 (including grouped spaces) or full otpauth:// URI.
 load_dotenv()
 
 

@@ -437,8 +437,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
----
+### 4. User Session Authentication & Automated CAPTCHA Solving
 
+```rust
+use tradingview::{get_tradingview_token, UserCookies};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cookies = UserCookies::default();
+
+    // Standard signin with optional TOTP (supports Base32, whitespace-grouped, and otpauth:// URIs)
+    let user = cookies
+        .login("my_username", "my_password", Some("JBSWY3DPEHPK3PXP"))
+        .await?;
+
+    // Or opt-in to automated reCAPTCHA v2 solving with 2Captcha if challenged:
+    // let user = cookies
+    //     .login_with_captcha("my_username", "my_password", None, "2CAPTCHA_API_KEY")
+    //     .await?;
+
+    // Retrieve WebSocket auth token from /quote_token/
+    let auth_token = get_tradingview_token(&user).await?;
+    println!("Retrieved session token: {}", auth_token);
+
+    Ok(())
+}
+```
+
+---
 ## Workspace Structure
 
 ```text

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-25
+
 ### Added
 - Added optional `captcha_key` keyword argument to Python `TradingViewClient.login()` and `TradingViewClient.authenticate()` to support 2Captcha reCAPTCHA v2 solving directly from Python.
 

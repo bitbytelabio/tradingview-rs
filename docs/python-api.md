@@ -80,8 +80,27 @@ await client.authenticate(
     password="your_password",
     totp_secret="OPTIONAL_2FA_TOTP_SECRET_OR_OTPAUTH_URI",
     captcha_key="OPTIONAL_2CAPTCHA_API_KEY",
+```
+
+### Automated CAPTCHA Solving (2Captcha Integration)
+
+When TradingView requires a CAPTCHA verification challenge during automated sign-in (`recaptcha_required`), the Python client can automatically solve it using [2Captcha](https://2captcha.com) by supplying `captcha_key`:
+
+```python
+client = await TradingViewClient.login(
+    username=os.environ["TV_USERNAME"],
+    password=os.environ["TV_PASSWORD"],
+    totp_secret=os.getenv("TV_TOTP_SECRET"),
+    captcha_key=os.getenv("TWO_CAPTCHA_API_KEY"),
 )
 ```
+
+#### CAPTCHA Solving Details & Safeguards
+- **Target reCAPTCHA Type**: TradingView uses standard **reCAPTCHA v2** (visible checkbox, `RecaptchaV2TaskProxyless` on sitekey `6Lcqv24UAAAAAIvkElDvwPxD0R8scDnMpizaBcHQ` and domain `recaptcha.net`), sending the solved token in form field `g-recaptcha-response-v2`. (Note: reCAPTCHA v3 is not used for email/password sign-in).
+- **Strict Spending Control**: The solver is **never** invoked unconditionally. The client first sends regular credentials; only when TradingView responds with `recaptcha_required` does it dispatch at most **one** paid `createTask` task.
+- **Never Called on Non-CAPTCHA Failures**: The solver is skipped on invalid credentials, 2FA errors, HTTP 429 or HTTP 200 `rate_limit` responses, and server errors, preventing wasted balance.
+- **Timeouts & Deadlines**: Overall solve polling is bounded to a 120-second deadline (5-second polling interval) with 30-second HTTP request timeouts.
+- **Automated Refund Reporting (`reportIncorrect`)**: If TradingView rejects the solved token on retry, the client automatically submits a single feedback complaint via [2Captcha reportIncorrect](https://2captcha.com/api-docs/report-incorrect). Complaints are reviewed by 2Captcha and refunds are subject to provider review (not guaranteed). Unsolvable tasks (`ERROR_CAPTCHA_UNSOLVABLE`, error 12) are automatically refunded by 2Captcha.
 
 ### Session & TradingView Token Retrieval (`get_tradingview_token`)
 
