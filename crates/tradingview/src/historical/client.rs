@@ -85,7 +85,7 @@ impl HistoricalClient {
 
         // 3. Create data series to start receiving chart data.
         // In count mode, exactly 6 arguments are sent (no range).
-        // In range mode, exactly 7 arguments are sent with bar_count = 0.
+        // In range mode, exactly 7 arguments are sent with a positive bar count.
         let create_series_args = build_create_series_args(
             &chart_session,
             &series_identifier,
@@ -179,7 +179,9 @@ impl HistoricalClient {
 /// `[chart_session, series_identifier, series_id, symbol_series_id, interval, bar_count]`.
 ///
 /// In range mode (`range` is `Some`), the message must have exactly 7 arguments:
-/// `[chart_session, series_identifier, series_id, symbol_series_id, interval, 0, range]`.
+/// `[chart_session, series_identifier, series_id, symbol_series_id, interval, bar_count, range]`.
+/// Range requests require a positive bar count: preserve the requested value,
+/// default to 512 when omitted, and normalize an explicit zero to 1.
 /// Providing 7 arguments with an empty range causes the server to fail with
 /// `critical_error: "unsupported method: du"`.
 pub(crate) fn build_create_series_args(
@@ -198,7 +200,7 @@ pub(crate) fn build_create_series_args(
             Value::from(series_id),
             Value::from(symbol_series_id),
             Value::from(interval.to_string()),
-            Value::from(0u64), // bar_count MUST be 0 in range mode
+            Value::from(num_bars.unwrap_or(512).max(1)),
             Value::from(r.to_string()),
         ]
     } else {
@@ -377,7 +379,7 @@ mod tests {
             "s1",
             "sds_sym_1",
             Interval::OneDay,
-            Some(500), // even if num_bars is provided, range mode must zero it
+            Some(500),
             Some(range),
         );
         assert_eq!(args.len(), 7, "Range mode must have exactly 7 arguments");
@@ -388,8 +390,8 @@ mod tests {
         assert_eq!(args[4], Value::from("1D"));
         assert_eq!(
             args[5],
-            Value::from(0u64),
-            "Bar count in range mode must be 0"
+            Value::from(500u64),
+            "Range mode preserves the requested positive bar count"
         );
         assert_eq!(args[6], Value::from(range.to_string()));
     }
@@ -409,9 +411,26 @@ mod tests {
         assert_eq!(args.len(), 7, "Range mode must have exactly 7 arguments");
         assert_eq!(
             args[5],
-            Value::from(0u64),
-            "Bar count in range mode must be 0"
+            Value::from(512u64),
+            "Range mode defaults to a positive bar count"
         );
+        assert_eq!(args[6], Value::from(range.to_string()));
+    }
+
+    #[test]
+    fn test_create_series_args_range_mode_explicit_zero() {
+        let range = Range::FromTo(1626220800, 1628640000);
+        let args = build_create_series_args(
+            "cs_test",
+            "sds_1",
+            "s1",
+            "sds_sym_1",
+            Interval::OneDay,
+            Some(0),
+            Some(range),
+        );
+        assert_eq!(args.len(), 7);
+        assert_eq!(args[5], Value::from(1u64));
         assert_eq!(args[6], Value::from(range.to_string()));
     }
 
