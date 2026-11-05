@@ -385,11 +385,36 @@ impl<T: Handler> WebSocketClient<T> {
     }
 
     pub fn spawn_reader_task(self: Arc<Self>) {
+        drop(self.spawn_reader_task_with_handle());
+    }
+
+    pub(crate) fn spawn_reader_task_with_handle(self: Arc<Self>) -> JoinHandle<()> {
         tokio::spawn(async move {
             if let Err(e) = self.subscribe().await {
                 error!("Reader task failed: {}", e);
             }
-        });
+        })
+    }
+
+    pub(crate) async fn close_reader_task(&self, mut reader: JoinHandle<()>) -> Result<()> {
+        let close_result = self.close().await;
+
+        match timeout(Duration::from_secs(5), &mut reader).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) if error.is_cancelled() => {}
+            Ok(Err(error)) => warn!("Reader task failed while shutting down: {error}"),
+            Err(_) => {
+                warn!("Reader task did not stop after cancellation; aborting it");
+                reader.abort();
+                if let Err(error) = reader.await {
+                    if !error.is_cancelled() {
+                        warn!("Reader task failed while being aborted: {error}");
+                    }
+                }
+            }
+        }
+
+        close_result
     }
 
     /// Spawn a dedicated writer task that owns the `SplitSink` directly (no
@@ -872,6 +897,7 @@ impl<T: Handler> WebSocketClient<T> {
 
     pub async fn close(&self) -> Result<()> {
         self.is_closed.store(true, Ordering::Relaxed);
+        self.cancellation.cancel();
         // Drop the send half of the channel — this signals the writer task
         // that no more messages are coming, causing `rx.recv()` to return
         // `None` and the writer task to exit.

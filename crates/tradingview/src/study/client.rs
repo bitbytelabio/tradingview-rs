@@ -63,95 +63,103 @@ impl StudyClient {
             .build()
             .await?;
 
-        // ── Protocol sequence ──────────────────────────────────────────
-        // TradingView study retrieval protocol:
-        //   1. chart_create_session → create chart session
-        //   2. resolve_symbol       → resolve instrument and receive SymbolInfo
-        //   3. create_series        → create base price series
-        //   4. create_study         → attach study to chart series (sds_1)
-        //   5. wait for matching study_completed or error
-        let instrument = format!("{exchange}:{symbol}");
-        let chart_session = format!("cs_{}", crate::utils::gen_id());
-        let symbol_series_id = format!("sds_sym_{}", crate::utils::gen_id());
-        let series_identifier = "sds_1".to_string();
-        let series_id = "s1".to_string();
+        let mut reader_task = None;
+        let retrieval_result = async {
+            // ── Protocol sequence ──────────────────────────────────────────
+            // TradingView study retrieval protocol:
+            //   1. chart_create_session → create chart session
+            //   2. resolve_symbol       → resolve instrument and receive SymbolInfo
+            //   3. create_series        → create base price series
+            //   4. create_study         → attach study to chart series (sds_1)
+            //   5. wait for matching study_completed or error
+            let instrument = format!("{exchange}:{symbol}");
+            let chart_session = format!("cs_{}", crate::utils::gen_id());
+            let symbol_series_id = format!("sds_sym_{}", crate::utils::gen_id());
+            let series_identifier = "sds_1".to_string();
+            let series_id = "s1".to_string();
 
-        // 1. Create chart session.
-        ws.create_chart_session(&chart_session).await?;
-        debug!(session = %chart_session, "chart session created");
+            ws.create_chart_session(&chart_session).await?;
+            debug!(session = %chart_session, "chart session created");
 
-        // 2. Resolve symbol within the session.
-        let symbol_init_str = symbol_init().instrument(&instrument).call()?;
-        ws.send(
-            "resolve_symbol",
-            &[
-                Value::from(chart_session.as_str()),
-                Value::from(symbol_series_id.as_str()),
-                Value::from(symbol_init_str),
-            ],
-        )
-        .await?;
-        debug!(instrument = %instrument, "symbol resolution requested");
-
-        // 3. Create base data series.
-        let create_series_args = crate::historical::client::build_create_series_args(
-            &chart_session,
-            &series_identifier,
-            &series_id,
-            &symbol_series_id,
-            request.interval,
-            Some(request.base_bar_count),
-            None,
-        );
-        ws.send("create_series", &create_series_args).await?;
-        debug!(
-            interval = ?request.interval,
-            bars = request.base_bar_count,
-            "base series created"
-        );
-
-        // 4. Create study attached to base series reference (sds_1).
-        ws.create_study()
-            .chart_session(&chart_session)
-            .study_ids(&[&study_id, &study_sub_id])
-            .chart_series_id(&series_identifier)
-            .study(request.study)
-            .call()
+            let symbol_init_str = symbol_init().instrument(&instrument).call()?;
+            ws.send(
+                "resolve_symbol",
+                &[
+                    Value::from(chart_session.as_str()),
+                    Value::from(symbol_series_id.as_str()),
+                    Value::from(symbol_init_str),
+                ],
+            )
             .await?;
-        debug!(study_id = %study_id, "study created");
+            debug!(instrument = %instrument, "symbol resolution requested");
 
-        Arc::clone(&ws).spawn_reader_task();
+            let create_series_args = crate::historical::client::build_create_series_args(
+                &chart_session,
+                &series_identifier,
+                &series_id,
+                &symbol_series_id,
+                request.interval,
+                Some(request.base_bar_count),
+                None,
+            );
+            ws.send("create_series", &create_series_args).await?;
+            debug!(
+                interval = ?request.interval,
+                bars = request.base_bar_count,
+                "base series created"
+            );
 
-        let result = tokio::time::timeout(request.timeout, Self::wait_for_completion(&state)).await;
+            ws.create_study()
+                .chart_session(&chart_session)
+                .study_ids(&[&study_id, &study_sub_id])
+                .chart_series_id(&series_identifier)
+                .study(request.study)
+                .call()
+                .await?;
+            debug!(study_id = %study_id, "study created");
 
-        let mut state_guard = state.lock().unwrap();
-        let total_points = state_guard.total_points;
-        let data = state_guard.finalize();
-        let elapsed = started.elapsed();
+            reader_task = Some(Arc::clone(&ws).spawn_reader_task_with_handle());
 
-        match result {
-            Ok(_) => {
-                if state_guard.errored {
-                    let msg = state_guard
+            let result =
+                tokio::time::timeout(request.timeout, Self::wait_for_completion(&state)).await;
+
+            let mut state_guard = state.lock().unwrap();
+            let total_points = state_guard.total_points;
+            let data = state_guard.finalize();
+            let elapsed = started.elapsed();
+
+            match result {
+                Ok(_) if state_guard.errored => {
+                    let message = state_guard
                         .error_message
                         .take()
                         .unwrap_or_else(|| "study data retrieval failed".to_string());
-                    return Err(Error::Internal(msg.into()));
+                    Err(Error::Internal(message.into()))
                 }
-                let symbol_info = state_guard
-                    .symbol_info
-                    .take()
-                    .ok_or_else(|| Error::Internal("no symbol info received".into()))?;
-                Ok(StudyResult {
-                    symbol_info,
-                    data,
-                    study_id,
-                    total_points_received: total_points,
-                    elapsed,
-                })
+                Ok(_) => {
+                    let symbol_info = state_guard
+                        .symbol_info
+                        .take()
+                        .ok_or_else(|| Error::Internal("no symbol info received".into()))?;
+                    Ok(StudyResult {
+                        symbol_info,
+                        data,
+                        study_id,
+                        total_points_received: total_points,
+                        elapsed,
+                    })
+                }
+                Err(_) => Err(Error::Timeout("study data retrieval timed out".into())),
             }
-            Err(_) => Err(Error::Timeout("study data retrieval timed out".into())),
         }
+        .await;
+
+        let close_result = match reader_task {
+            Some(reader_task) => ws.close_reader_task(reader_task).await,
+            None => ws.close().await,
+        };
+        close_result?;
+        retrieval_result
     }
 
     pub(crate) async fn wait_for_completion(state: &Arc<Mutex<StudyState>>) {

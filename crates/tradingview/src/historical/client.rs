@@ -53,101 +53,107 @@ impl HistoricalClient {
             .build()
             .await?;
 
-        // ── Protocol sequence ──────────────────────────────────────────
-        // TradingView chart data protocol:
-        //   1. chart_create_session → server acknowledges with session
-        //   2. resolve_symbol       → server returns SymbolInfo
-        //   3. create_series        → server starts streaming chart data
-        //   4. OnSeriesCompleted    → all data received
+        let mut reader_task = None;
+        let retrieval_result = async {
+            // ── Protocol sequence ──────────────────────────────────────────
+            // TradingView chart data protocol:
+            //   1. chart_create_session → server acknowledges with session
+            //   2. resolve_symbol       → server returns SymbolInfo
+            //   3. create_series        → server starts streaming chart data
+            //   4. OnSeriesCompleted    → all data received
 
-        let instrument = format!("{exchange}:{symbol}");
-        let chart_session = format!("cs_{}", crate::utils::gen_id());
-        let symbol_series_id = format!("sds_sym_{}", crate::utils::gen_id());
-        let series_identifier = "sds_1".to_string();
-        let series_id = "s1".to_string();
+            let instrument = format!("{exchange}:{symbol}");
+            let chart_session = format!("cs_{}", crate::utils::gen_id());
+            let symbol_series_id = format!("sds_sym_{}", crate::utils::gen_id());
+            let series_identifier = "sds_1".to_string();
+            let series_id = "s1".to_string();
 
-        // 1. Create chart session.
-        ws.create_chart_session(&chart_session).await?;
-        debug!(session = %chart_session, "Chart session created");
+            ws.create_chart_session(&chart_session).await?;
+            debug!(session = %chart_session, "Chart session created");
 
-        // 2. Resolve symbol within the session.
-        let symbol_init_str = symbol_init().instrument(&instrument).call()?;
-        ws.send(
-            "resolve_symbol",
-            &[
-                Value::from(chart_session.as_str()),
-                Value::from(symbol_series_id.as_str()),
-                Value::from(symbol_init_str),
-            ],
-        )
-        .await?;
-        debug!(instrument = %instrument, "Symbol resolution requested");
-
-        // 3. Create data series to start receiving chart data.
-        // In count mode, exactly 6 arguments are sent (no range).
-        // In range mode, exactly 7 arguments are sent with bar_count = 0.
-        let create_series_args = build_create_series_args(
-            &chart_session,
-            &series_identifier,
-            &series_id,
-            &symbol_series_id,
-            request.interval,
-            request.num_bars,
-            request.range,
-        );
-        ws.send("create_series", &create_series_args).await?;
-        debug!(
-            interval = ?request.interval,
-            bars = request.num_bars,
-            range = ?request.range,
-            "Data series created"
-        );
-
-        // Also set up a quote session for supplementary data.
-        let qs = format!("qs_{}", crate::utils::gen_id());
-        ws.send("quote_create_session", &[Value::from(qs.as_str())])
+            let symbol_init_str = symbol_init().instrument(&instrument).call()?;
+            ws.send(
+                "resolve_symbol",
+                &[
+                    Value::from(chart_session.as_str()),
+                    Value::from(symbol_series_id.as_str()),
+                    Value::from(symbol_init_str),
+                ],
+            )
             .await?;
-        ws.send("quote_set_fields", &[Value::from(qs.as_str())])
+            debug!(instrument = %instrument, "Symbol resolution requested");
+
+            let create_series_args = build_create_series_args(
+                &chart_session,
+                &series_identifier,
+                &series_id,
+                &symbol_series_id,
+                request.interval,
+                request.num_bars,
+                request.range,
+            );
+            ws.send("create_series", &create_series_args).await?;
+            debug!(
+                interval = ?request.interval,
+                bars = request.num_bars,
+                range = ?request.range,
+                "Data series created"
+            );
+
+            let qs = format!("qs_{}", crate::utils::gen_id());
+            ws.send("quote_create_session", &[Value::from(qs.as_str())])
+                .await?;
+            ws.send("quote_set_fields", &[Value::from(qs.as_str())])
+                .await?;
+            ws.send(
+                "quote_add_symbols",
+                &[Value::from(qs.as_str()), Value::from(symbol.as_str())],
+            )
             .await?;
-        ws.send(
-            "quote_add_symbols",
-            &[Value::from(qs.as_str()), Value::from(symbol.as_str())],
-        )
-        .await?;
 
-        Arc::clone(&ws).spawn_reader_task();
+            reader_task = Some(Arc::clone(&ws).spawn_reader_task_with_handle());
 
-        let result = tokio::time::timeout(request.timeout, Self::wait_for_completion(&state)).await;
+            let result =
+                tokio::time::timeout(request.timeout, Self::wait_for_completion(&state)).await;
 
-        let mut state_guard = state.lock().unwrap();
-        let total_bars = state_guard.total_bars;
-        let data = state_guard.finalize();
-        let elapsed = started.elapsed();
+            let mut state_guard = state.lock().unwrap();
+            let total_bars = state_guard.total_bars;
+            let data = state_guard.finalize();
+            let elapsed = started.elapsed();
 
-        match result {
-            Ok(_) => {
-                if state_guard.errored {
-                    let msg = state_guard
+            match result {
+                Ok(_) if state_guard.errored => {
+                    let message = state_guard
                         .error_message
                         .take()
                         .unwrap_or_else(|| "Historical data retrieval failed".to_string());
-                    return Err(Error::Internal(msg.into()));
+                    Err(Error::Internal(message.into()))
                 }
-                let symbol_info = state_guard
-                    .symbol_info
-                    .take()
-                    .ok_or_else(|| Error::Internal("No symbol info received".into()))?;
-                Ok(HistoricalResult {
-                    symbol_info,
-                    data,
-                    series_info: state_guard.series_info.take(),
-                    total_bars_received: total_bars,
-                    replay_used: request.with_replay,
-                    elapsed,
-                })
+                Ok(_) => {
+                    let symbol_info = state_guard
+                        .symbol_info
+                        .take()
+                        .ok_or_else(|| Error::Internal("No symbol info received".into()))?;
+                    Ok(HistoricalResult {
+                        symbol_info,
+                        data,
+                        series_info: state_guard.series_info.take(),
+                        total_bars_received: total_bars,
+                        replay_used: request.with_replay,
+                        elapsed,
+                    })
+                }
+                Err(_) => Err(Error::Timeout("Historical data retrieval timed out".into())),
             }
-            Err(_) => Err(Error::Timeout("Historical data retrieval timed out".into())),
         }
+        .await;
+
+        let close_result = match reader_task {
+            Some(reader_task) => ws.close_reader_task(reader_task).await,
+            None => ws.close().await,
+        };
+        close_result?;
+        retrieval_result
     }
 
     pub(crate) async fn wait_for_completion(state: &Arc<Mutex<HistoricalState>>) {
