@@ -28,7 +28,9 @@ To enable Polars and Pandas support:
 pip install "tradingview-rs[polars,pandas]"
 ```
 
-*Note*: Compiling from source requires a local C/C++ toolchain (CMake, Clang or GCC, and Perl) to build native `wreq` / BoringSSL dependencies.
+Wheels are published for Linux with glibc 2.28 or newer (x86_64, aarch64), macOS 11 or newer (x86_64, arm64), and Windows (x86_64), and support Python 3.10 and newer.
+
+*Note*: On other platforms, `pip` compiles from source, which requires Rust and a local C/C++ toolchain (CMake, Clang or GCC, and Perl) to build native `wreq` / BoringSSL dependencies.
 
 ---
 
