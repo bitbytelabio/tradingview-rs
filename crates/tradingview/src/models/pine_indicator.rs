@@ -113,12 +113,34 @@ pub struct PineSearchAuthor {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub struct PineMetadata {
-    #[serde(rename(deserialize = "IL"))]
+    /// No longer sent by TradingView's `translate` endpoint.
+    #[serde(default, rename(deserialize = "IL"))]
     pub il: Ustr,
-    #[serde(rename(deserialize = "ilTemplate"))]
+    /// No longer sent at the top level by TradingView's `translate` endpoint;
+    /// use [`Self::script_text`], which also checks its current location.
+    #[serde(default, rename(deserialize = "ilTemplate"))]
     pub il_template: Ustr,
     #[serde(rename(deserialize = "metaInfo"))]
     pub data: PineMetadataInfo,
+}
+
+impl PineMetadata {
+    /// Encrypted script template for the `text` input of `create_study`.
+    ///
+    /// TradingView moved it from the top-level `ilTemplate` field to
+    /// `metaInfo.defaults.inputs.text`. Without it a study is accepted and
+    /// completes, but silently produces no data.
+    pub fn script_text(&self) -> &str {
+        if !self.il_template.is_empty() {
+            return self.il_template.as_str();
+        }
+        self.data
+            .defaults
+            .get(&Ustr::from("inputs"))
+            .and_then(|inputs| inputs.get("text"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
@@ -263,7 +285,7 @@ impl PineIndicator {
         let mut inputs: HashMap<Ustr, IndicatorInput> = HashMap::new();
         inputs.insert(
             Ustr::from("text"),
-            IndicatorInput::String(Ustr::from(&self.metadata.il_template)),
+            IndicatorInput::String(Ustr::from(self.metadata.script_text())),
         );
         inputs.insert(
             Ustr::from("pineId"),
@@ -289,5 +311,58 @@ impl PineIndicator {
 
         let json_value = serde_json::to_value(inputs)?;
         Ok(json_value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn indicator(metadata: PineMetadata) -> PineIndicator {
+        PineIndicator {
+            script_id: Ustr::from("STD;Fund_total_revenue_fy"),
+            script_version: Ustr::from("81.0"),
+            script_type: ScriptType::IntervalScript,
+            metadata,
+        }
+    }
+
+    #[test]
+    fn test_script_text_read_from_metainfo_defaults() {
+        let response: TranslateResponse = serde_json::from_value(json!({
+            "success": true,
+            "result": {
+                "metaInfo": {
+                    "defaults": { "inputs": { "text": "bmI9Ks46_encrypted" } },
+                    "inputs": [{ "id": "text", "defval": "", "type": "text" }]
+                }
+            }
+        }))
+        .unwrap();
+
+        let inputs = indicator(response.result).to_study_inputs().unwrap();
+
+        assert_eq!(inputs["text"], json!("bmI9Ks46_encrypted"));
+    }
+
+    #[test]
+    fn test_script_text_prefers_top_level_template() {
+        let response: TranslateResponse = serde_json::from_value(json!({
+            "success": true,
+            "result": {
+                "IL": "il",
+                "ilTemplate": "top_level",
+                "metaInfo": { "defaults": { "inputs": { "text": "nested" } } }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(response.result.script_text(), "top_level");
+    }
+
+    #[test]
+    fn test_script_text_empty_when_absent() {
+        assert_eq!(PineMetadata::default().script_text(), "");
     }
 }
