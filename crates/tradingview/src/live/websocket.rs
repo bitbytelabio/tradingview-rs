@@ -1059,7 +1059,7 @@ impl<T: Handler> WebSocketClient<T> {
         range: Option<Range>,
     ) -> Result<()> {
         // Count mode: 6 args (no range).
-        // Range mode: 7 args with `bar_count = 0` and `range = "r,from:to"`.
+        // Range mode: 7 args with a positive bar count and `range = "r,from:to"`.
         if let Some(r) = range {
             let args = payload!(
                 chart_session,
@@ -1067,8 +1067,8 @@ impl<T: Handler> WebSocketClient<T> {
                 series_id,
                 symbol_series_id,
                 interval.to_string(),
-                0u64,          // bar_count MUST be 0 in range mode
-                r.to_string()  // "r,1626220800:1628640000"
+                bar_count.max(1), // the server rejects 0 in range mode
+                r.to_string()     // "r,1626220800:1628640000"
             );
             self.send("create_series", &args).await?;
         } else {
@@ -1108,7 +1108,7 @@ impl<T: Handler> WebSocketClient<T> {
                 series_id,
                 symbol_series_id,
                 interval.to_string(),
-                0u64,
+                bar_count.max(1),
                 r.to_string()
             );
             self.send("modify_series", &args).await?;
@@ -1949,6 +1949,70 @@ mod tests {
         )
         .await
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_range_series_commands_send_positive_bar_count() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            let (tcp_stream, _) = listener.accept().await.unwrap();
+            let mut ws_stream = tokio_tungstenite::accept_async(tcp_stream).await.unwrap();
+            let _auth = ws_stream.next().await.unwrap().unwrap();
+            let create = ws_stream.next().await.unwrap().unwrap();
+            let modify = ws_stream.next().await.unwrap().unwrap();
+            (create.to_string(), modify.to_string())
+        });
+
+        let client_tcp = tokio::net::TcpStream::connect(server_addr).await.unwrap();
+        let plain = MaybeTlsStream::Plain(client_tcp);
+        let (ws_stream, _) =
+            tokio_tungstenite::client_async(format!("ws://{}", server_addr), plain)
+                .await
+                .unwrap();
+        let (write, read) = ws_stream.split();
+        let client = WebSocketClient::init_with_stream(
+            MockHandler::new(),
+            DataServer::Data,
+            None,
+            1024 * 1024,
+            ErrorRecoveryConfig::default(),
+            write,
+            read,
+        )
+        .await
+        .unwrap();
+
+        let range = crate::chart::options::Range::FromTo(1626220800, 1628640000);
+        client
+            .create_series()
+            .chart_session("cs")
+            .series_identifier("sds_1")
+            .series_id("s1")
+            .symbol_series_id("sym")
+            .interval(Interval::OneDay)
+            .bar_count(500)
+            .range(range)
+            .call()
+            .await
+            .unwrap();
+        client
+            .modify_series()
+            .chart_session("cs")
+            .series_identifier("sds_1")
+            .series_id("s1")
+            .symbol_series_id("sym")
+            .interval(Interval::OneDay)
+            .bar_count(0)
+            .range(range)
+            .call()
+            .await
+            .unwrap();
+
+        let (create, modify) = server_task.await.unwrap();
+        assert!(create.contains("\"1D\",500,\"r,"), "create: {create}");
+        assert!(modify.contains("\"1D\",1,\"r,"), "modify: {modify}");
+        let _ = client.close().await;
     }
 
     #[tokio::test]
