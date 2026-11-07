@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-07
+
+### Fixed
+- Fixed Pine study and fundamental retrieval after TradingView moved the study template out of the `translate` response's top-level `IL` and `ilTemplate` fields; `get_indicator_metadata` no longer fails to decode, and `PineMetadata::script_text()` reads `metaInfo.defaults.inputs.text`.
+- Fixed range requests rejected with `invalid parameters`: `HistoricalClient`, `WebSocketClient::create_series`, and `WebSocketClient::modify_series` now send a positive bar count (#256, thanks @onichandame).
+- Fixed the WebSocket connection and background task leak in `HistoricalClient::retrieve` and `StudyClient::retrieve`, including when the retrieval future is dropped (#259, thanks @onichandame).
+
+### Changed
+- Updated `pyo3` to 0.29.3.
+
+### Credits
+- Thanks to [@onichandame](https://github.com/onichandame) for reporting and fixing the WebSocket leak (#259) and the rejected range requests (#256).
+
 ## [0.4.4] - 2026-09-25
 
 ### Added
