@@ -52,6 +52,8 @@ impl HistoricalClient {
             .handler(handler)
             .build()
             .await?;
+        // Stops background tasks even if this future is dropped mid-retrieval.
+        let _shutdown_guard = ws.shutdown_guard();
 
         let mut reader_task = None;
         let retrieval_result = async {
@@ -68,9 +70,11 @@ impl HistoricalClient {
             let series_identifier = "sds_1".to_string();
             let series_id = "s1".to_string();
 
+            // 1. Create chart session.
             ws.create_chart_session(&chart_session).await?;
             debug!(session = %chart_session, "Chart session created");
 
+            // 2. Resolve symbol within the session.
             let symbol_init_str = symbol_init().instrument(&instrument).call()?;
             ws.send(
                 "resolve_symbol",
@@ -83,6 +87,9 @@ impl HistoricalClient {
             .await?;
             debug!(instrument = %instrument, "Symbol resolution requested");
 
+            // 3. Create data series to start receiving chart data.
+            // In count mode, exactly 6 arguments are sent (no range).
+            // In range mode, exactly 7 arguments are sent with bar_count = 0.
             let create_series_args = build_create_series_args(
                 &chart_session,
                 &series_identifier,
@@ -100,6 +107,7 @@ impl HistoricalClient {
                 "Data series created"
             );
 
+            // Also set up a quote session for supplementary data.
             let qs = format!("qs_{}", crate::utils::gen_id());
             ws.send("quote_create_session", &[Value::from(qs.as_str())])
                 .await?;
@@ -148,11 +156,14 @@ impl HistoricalClient {
         }
         .await;
 
+        // Cleanup problems must not discard data that was already retrieved.
         let close_result = match reader_task {
             Some(reader_task) => ws.close_reader_task(reader_task).await,
-            None => ws.close().await,
+            None => ws.shutdown().await,
         };
-        close_result?;
+        if let Err(error) = close_result {
+            warn!(?error, "Failed to close WebSocket after retrieval");
+        }
         retrieval_result
     }
 

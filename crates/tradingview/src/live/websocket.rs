@@ -281,6 +281,19 @@ pub struct WebSocketClient<T: Handler> {
     circuit_breaker_opened_at: Arc<RwLock<Option<Instant>>>,
 }
 
+/// Stops a [`WebSocketClient`]'s background tasks on drop.
+///
+/// Once the reader and health monitor exit they release their `Arc`s, the
+/// client is dropped, and the writer task ends when its channel closes.
+pub(crate) struct ShutdownGuard<T: Handler>(Arc<WebSocketClient<T>>);
+
+impl<T: Handler> Drop for ShutdownGuard<T> {
+    fn drop(&mut self) {
+        self.0.is_closed.store(true, Ordering::Relaxed);
+        self.0.cancellation.cancel();
+    }
+}
+
 #[bon::bon]
 #[allow(private_interfaces)]
 impl<T: Handler> WebSocketClient<T> {
@@ -396,8 +409,24 @@ impl<T: Handler> WebSocketClient<T> {
         })
     }
 
+    /// Permanently stop a client that will never reconnect.
+    ///
+    /// Unlike [`Self::close`], which leaves the client reusable through
+    /// [`Self::reconnect`], this cancels the token that the reader and health
+    /// monitor tasks observe. The token cannot be reset.
+    pub(crate) async fn shutdown(&self) -> Result<()> {
+        self.cancellation.cancel();
+        self.close().await
+    }
+
+    /// Return a guard that stops background tasks when dropped, so a one-shot
+    /// client is cleaned up even if the owning future is cancelled.
+    pub(crate) fn shutdown_guard(self: &Arc<Self>) -> ShutdownGuard<T> {
+        ShutdownGuard(Arc::clone(self))
+    }
+
     pub(crate) async fn close_reader_task(&self, mut reader: JoinHandle<()>) -> Result<()> {
-        let close_result = self.close().await;
+        let close_result = self.shutdown().await;
 
         match timeout(Duration::from_secs(5), &mut reader).await {
             Ok(Ok(())) => {}
@@ -406,10 +435,10 @@ impl<T: Handler> WebSocketClient<T> {
             Err(_) => {
                 warn!("Reader task did not stop after cancellation; aborting it");
                 reader.abort();
-                if let Err(error) = reader.await {
-                    if !error.is_cancelled() {
-                        warn!("Reader task failed while being aborted: {error}");
-                    }
+                if let Err(error) = reader.await
+                    && !error.is_cancelled()
+                {
+                    warn!("Reader task failed while being aborted: {error}");
                 }
             }
         }
@@ -897,7 +926,6 @@ impl<T: Handler> WebSocketClient<T> {
 
     pub async fn close(&self) -> Result<()> {
         self.is_closed.store(true, Ordering::Relaxed);
-        self.cancellation.cancel();
         // Drop the send half of the channel — this signals the writer task
         // that no more messages are coming, causing `rx.recv()` to return
         // `None` and the writer task to exit.
@@ -1892,6 +1920,69 @@ mod tests {
         }
 
         let _ = client.close().await;
+    }
+
+    async fn local_client() -> Arc<WebSocketClient<MockHandler>> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (tcp_stream, _) = listener.accept().await.unwrap();
+            let mut ws_stream = tokio_tungstenite::accept_async(tcp_stream).await.unwrap();
+            while let Some(Ok(_)) = ws_stream.next().await {}
+        });
+
+        let client_tcp = tokio::net::TcpStream::connect(server_addr).await.unwrap();
+        let plain = MaybeTlsStream::Plain(client_tcp);
+        let (ws_stream, _) =
+            tokio_tungstenite::client_async(format!("ws://{}", server_addr), plain)
+                .await
+                .unwrap();
+        let (write, read) = ws_stream.split();
+        WebSocketClient::init_with_stream(
+            MockHandler::new(),
+            DataServer::Data,
+            None,
+            1024 * 1024,
+            ErrorRecoveryConfig::default(),
+            write,
+            read,
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_close_leaves_client_reconnectable() {
+        let client = local_client().await;
+
+        client.close().await.unwrap();
+
+        assert!(client.is_closed());
+        assert!(
+            !client.cancellation.is_cancelled(),
+            "close() must not cancel: the token is permanent and reconnect() relies on it"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_guard_releases_background_tasks_on_drop() {
+        let client = local_client().await;
+        let guard = client.shutdown_guard();
+        let reader = Arc::clone(&client).spawn_reader_task_with_handle();
+
+        drop(guard);
+
+        timeout(Duration::from_secs(1), reader)
+            .await
+            .expect("reader must stop after the guard is dropped")
+            .unwrap();
+        timeout(Duration::from_secs(1), async {
+            while Arc::strong_count(&client) > 1 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("background tasks must release the client");
     }
 
     #[tokio::test]
