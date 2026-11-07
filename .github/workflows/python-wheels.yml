@@ -111,6 +111,14 @@ jobs:
         with:
           python-version: "3.10"
 
+      # BoringSSL's Windows build assembles its x86_64 code with NASM.
+      - name: Install NASM
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          choco install nasm --yes --no-progress
+          echo "C:\Program Files\NASM" >> "$GITHUB_PATH"
+
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
