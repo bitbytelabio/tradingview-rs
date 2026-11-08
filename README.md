@@ -113,6 +113,8 @@ Install from PyPI:
 pip install tradingview-rs
 ```
 
+Wheels are published for Linux with glibc 2.28 or newer (x86_64, aarch64), macOS 11 or newer (x86_64, arm64), and Windows (x86_64), and support Python 3.10 and newer. On other platforms, `pip` builds from the source distribution, which requires Rust, CMake, Clang or GCC, and Perl.
+
 To enable direct Polars and Pandas DataFrame conversion:
 
 ```bash
@@ -520,7 +522,7 @@ ruff check python tests
 The release workflow `.github/workflows/publish.yml` is triggered automatically on tag creation (`v*`) or via manual dispatch:
 
 - **crates.io**: Authenticates via OIDC Trusted Publishing and publishes `tradingview-rs`.
-- **PyPI**: Builds source distribution and wheels with `maturin build --release`, then uploads via `twine` using your configured credentials (supporting `~/.pypirc` or `PYPI_API_TOKEN` secret).
+- **PyPI**: `.github/workflows/python-wheels.yml` builds the source distribution and `abi3` wheels for Linux (x86_64, aarch64), macOS (x86_64, arm64), and Windows (x86_64), and checks that each one imports. They are uploaded via `twine` with the `PYPI_API_TOKEN` secret only after every build succeeds.
 
 ---
 

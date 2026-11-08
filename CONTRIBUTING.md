@@ -90,10 +90,12 @@ cargo doc --no-deps -D warnings     # strict mode (used in CI)
 2. Update `CHANGELOG.md` with release date and notes.
 3. Run full verification gates: `just checks`.
 4. Dry-run publish check: `cargo publish -p tradingview-rs --dry-run --locked`.
-5. Commit with conventional message: `git commit -S -m "chore(release): bump version to X.Y.Z"`.
-6. Tag with cryptographic signature: `git tag -s vX.Y.Z -m "Release vX.Y.Z"`.
-7. Push branch and tag: `git push origin main vX.Y.Z`.
-8. The GitHub Actions CI/CD pipeline (`publish.yml`) will automatically verify, package, publish to crates.io, build Python binary wheels for PyPI, and create the GitHub Release.
+5. Commit on a release branch with a conventional message: `git switch -c chore/release-X.Y.Z`, then `git commit -S -m "chore(release): bump version to X.Y.Z"`.
+6. Push the branch and open a PR. `main` only accepts changes through pull requests, so merge it with a merge commit once CI is green.
+7. Tag the merged commit with a cryptographic signature: `git switch main && git pull --ff-only`, then `git tag -s vX.Y.Z -m "Release vX.Y.Z"`.
+8. Push the tag: `git push origin vX.Y.Z`.
+9. The GitHub Actions CI/CD pipeline (`publish.yml`) will automatically verify, package, and publish to crates.io, build the Python wheels and source distribution (`python-wheels.yml`) for PyPI, and create the GitHub Release. Nothing reaches PyPI unless every platform builds and imports successfully.
+
 ## Questions?
 
 Open a [discussion](https://github.com/bitbytelabio/tradingview-rs/discussions) or join the [VNQuant community](https://github.com/bitbytelabio).
