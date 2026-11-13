@@ -12,7 +12,7 @@ Thank you for your interest in contributing to `tradingview-rs`!
 ## Getting Started
 
 ```bash
-git clone https://github.com/bitbytelabio/tradingview-rs.git
+git clone https://github.com/vnquants/tradingview-rs.git
 cd tradingview-rs
 cp .env.example .env  # fill in optional credentials for live tests
 
@@ -43,7 +43,7 @@ mypy python/ tests/
 
 ## Development Workflow
 
-1. **Find an issue** — Pick an unclaimed issue from the [current milestone](https://github.com/bitbytelabio/tradingview-rs/milestones). Comment to claim it.
+1. **Find an issue** — Pick an unclaimed issue from the [current milestone](https://github.com/vnquants/tradingview-rs/milestones). Comment to claim it.
 2. **Create a branch** — `git checkout -b feature/your-feature` or `fix/your-bugfix`.
 3. **Write tests** — All new features need tests. Bug fixes need regression tests.
 4. **Document** — Add `///` doc comments to all new public items. Run `cargo doc --no-deps` and fix any warnings.
@@ -98,4 +98,4 @@ cargo doc --no-deps -D warnings     # strict mode (used in CI)
 
 ## Questions?
 
-Open a [discussion](https://github.com/bitbytelabio/tradingview-rs/discussions) or join the [VNQuant community](https://github.com/bitbytelabio).
+Open a [discussion](https://github.com/vnquants/tradingview-rs/discussions) or join the [VN Quants community](https://github.com/vnquants).
